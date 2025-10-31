@@ -1,8 +1,6 @@
 README.md
 pyproject.toml
 setup.py
-examples/__init__.py
-examples/basic_usage.py
 merit_analyzer/__init__.py
 merit_analyzer/cli.py
 merit_analyzer.egg-info/PKG-INFO
@@ -15,11 +13,13 @@ merit_analyzer/analysis/__init__.py
 merit_analyzer/analysis/claude_agent.py
 merit_analyzer/analysis/comparative.py
 merit_analyzer/analysis/root_cause.py
+merit_analyzer/analysis/schema_discovery.py
 merit_analyzer/core/__init__.py
 merit_analyzer/core/analyzer.py
 merit_analyzer/core/config.py
-merit_analyzer/core/pattern_detector.py
+merit_analyzer/core/pattern_merger.py
 merit_analyzer/core/test_parser.py
+merit_analyzer/core/universal_pattern_detector.py
 merit_analyzer/discovery/__init__.py
 merit_analyzer/discovery/code_mapper.py
 merit_analyzer/discovery/framework_detector.py
@@ -33,6 +33,3 @@ merit_analyzer/recommendations/__init__.py
 merit_analyzer/recommendations/formatter.py
 merit_analyzer/recommendations/generator.py
 merit_analyzer/recommendations/prioritizer.py
-tests/__init__.py
-tests/test_core.py
-tests/test_models.py

@@ -43,18 +43,37 @@ class RecommendationGenerator:
         """
         # Recommendations are generated - don't print progress here
         
-        # Generate recommendations using Claude
+        # Primary: Generate recommendations using LLM (most intelligent and specific)
         claude_recommendations = self._generate_claude_recommendations(
             pattern, root_cause, code_context
         )
         
-        # Generate template-based recommendations
-        template_recommendations = self._generate_template_recommendations(
-            pattern, root_cause, code_context
-        )
+        # Only use templates as fallback if LLM didn't generate enough recommendations
+        # Minimum threshold: at least 2 recommendations, or templates as supplement
+        MIN_RECOMMENDATIONS = 2
+        all_recommendations = claude_recommendations.copy()
         
-        # Combine and deduplicate recommendations
-        all_recommendations = claude_recommendations + template_recommendations
+        if len(claude_recommendations) < MIN_RECOMMENDATIONS:
+            # LLM generated too few recommendations - supplement with templates
+            template_recommendations = self._generate_template_recommendations(
+                pattern, root_cause, code_context
+            )
+            # Only add templates that don't duplicate LLM recommendations
+            for template_rec in template_recommendations:
+                # Check if similar to existing recommendations
+                is_duplicate = False
+                for existing_rec in all_recommendations:
+                    # Simple similarity check: title similarity
+                    title_similarity = len(set(template_rec.title.lower().split()) & 
+                                         set(existing_rec.title.lower().split()))
+                    if title_similarity >= 2:  # At least 2 words in common
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    all_recommendations.append(template_rec)
+        
+        # Deduplicate recommendations
         unique_recommendations = self._deduplicate_recommendations(all_recommendations)
         
         # Enhance recommendations with additional context
@@ -68,14 +87,22 @@ class RecommendationGenerator:
                                        pattern: Pattern,
                                        root_cause: str,
                                        code_context: Dict[str, str]) -> List[Recommendation]:
-        """Generate recommendations using Claude."""
+        """
+        Generate recommendations using Claude.
+        
+        NOTE: This is now a fallback. Pattern analysis should return recommendations directly.
+        If this is called, it means pattern analysis failed to provide recommendations.
+        """
         try:
-            claude_recs = self.claude_agent.generate_recommendations(
-                pattern.name, root_cause, code_context, pattern.test_results
-            )
+            # Pattern analysis should provide recommendations directly now
+            # This is just a fallback that returns empty list
+            # Template recommendations will be used instead
+            return []
             
+            # Old code that called non-existent method:
+            # claude_recs = self.claude_agent.generate_recommendations(...)
             recommendations = []
-            for rec_data in claude_recs:
+            for rec_data in []:
                 try:
                     recommendation = Recommendation(
                         priority=self._parse_priority(rec_data.get("priority", "medium")),
@@ -126,119 +153,16 @@ class RecommendationGenerator:
         return recommendations
 
     def _load_template_recommendations(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Load template recommendations for common root causes."""
+        """
+        Load minimal template recommendations as fallback only.
+        
+        These are generic fallbacks used only when LLM generation fails
+        or produces too few recommendations. The LLM should handle most cases.
+        """
+        # Minimal template set - only used as last resort fallback
         return {
-            "validation_error": [
-                {
-                    "title": "Add input validation",
-                    "description": "Add comprehensive input validation to handle edge cases",
-                    "type": "code",
-                    "priority": "high",
-                    "effort_estimate": "30 minutes",
-                    "implementation": "Add validation checks for input parameters",
-                    "expected_impact": "Prevents validation-related failures"
-                },
-                {
-                    "title": "Improve error messages",
-                    "description": "Make validation error messages more descriptive",
-                    "type": "code",
-                    "priority": "medium",
-                    "effort_estimate": "15 minutes",
-                    "implementation": "Update error messages to be more specific",
-                    "expected_impact": "Easier debugging of validation issues"
-                }
-            ],
-            "prompt_issue": [
-                {
-                    "title": "Review prompt template",
-                    "description": "Review and improve the prompt template",
-                    "type": "prompt",
-                    "priority": "high",
-                    "effort_estimate": "1 hour",
-                    "implementation": "Analyze prompt and add examples or clarifications",
-                    "expected_impact": "Improves model response quality"
-                },
-                {
-                    "title": "Add prompt examples",
-                    "description": "Add examples to the prompt template",
-                    "type": "prompt",
-                    "priority": "medium",
-                    "effort_estimate": "30 minutes",
-                    "implementation": "Include input/output examples in the prompt",
-                    "expected_impact": "Helps model understand expected behavior"
-                }
-            ],
-            "api_error": [
-                {
-                    "title": "Add error handling",
-                    "description": "Add proper error handling for API calls",
-                    "type": "code",
-                    "priority": "high",
-                    "effort_estimate": "45 minutes",
-                    "implementation": "Wrap API calls in try-catch blocks",
-                    "expected_impact": "Prevents API errors from crashing the system"
-                },
-                {
-                    "title": "Implement retry logic",
-                    "description": "Add retry logic for failed API calls",
-                    "type": "code",
-                    "priority": "medium",
-                    "effort_estimate": "1 hour",
-                    "implementation": "Add exponential backoff retry mechanism",
-                    "expected_impact": "Handles transient API failures"
-                }
-            ],
-            "timeout": [
-                {
-                    "title": "Increase timeout values",
-                    "description": "Increase timeout values for slow operations",
-                    "type": "configuration",
-                    "priority": "high",
-                    "effort_estimate": "10 minutes",
-                    "implementation": "Update timeout configuration values",
-                    "expected_impact": "Prevents timeout-related failures"
-                },
-                {
-                    "title": "Optimize performance",
-                    "description": "Optimize slow operations to reduce execution time",
-                    "type": "code",
-                    "priority": "medium",
-                    "effort_estimate": "2 hours",
-                    "implementation": "Profile and optimize slow code sections",
-                    "expected_impact": "Reduces execution time and prevents timeouts"
-                }
-            ],
-            "model_config": [
-                {
-                    "title": "Review model configuration",
-                    "description": "Review and fix model configuration settings",
-                    "type": "configuration",
-                    "priority": "high",
-                    "effort_estimate": "30 minutes",
-                    "implementation": "Check model parameters and API settings",
-                    "expected_impact": "Ensures correct model behavior"
-                }
-            ],
-            "logic_error": [
-                {
-                    "title": "Fix business logic",
-                    "description": "Fix the identified business logic error",
-                    "type": "code",
-                    "priority": "high",
-                    "effort_estimate": "1-3 hours",
-                    "implementation": "Debug and fix the logic error",
-                    "expected_impact": "Resolves the core issue causing failures"
-                },
-                {
-                    "title": "Add unit tests",
-                    "description": "Add unit tests for the fixed logic",
-                    "type": "testing",
-                    "priority": "medium",
-                    "effort_estimate": "1 hour",
-                    "implementation": "Write comprehensive unit tests",
-                    "expected_impact": "Prevents regression of the fixed issue"
-                }
-            ]
+            # Keep templates minimal - LLM should handle most cases
+            # Only provide very generic fallbacks for common root causes
         }
 
     def _customize_template(self,

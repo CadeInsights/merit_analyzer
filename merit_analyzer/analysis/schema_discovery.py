@@ -93,7 +93,7 @@ Provide a structured analysis that will help with pattern detection and root cau
 Focus on what matters for understanding and fixing test failures.
 """
 
-        response = self.claude_agent._call_claude(prompt)
+        response = self.claude_agent._call_anthropic_direct(prompt)
         return self._parse_schema_response(response)
 
     def _format_tests_for_schema_analysis(self, tests: List[TestResult]) -> str:

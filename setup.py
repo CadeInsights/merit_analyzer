@@ -53,7 +53,4 @@ setup(
         ],
     },
     include_package_data=True,
-    package_data={
-        "merit_analyzer": ["examples/*.py", "examples/*.json"],
-    },
 )

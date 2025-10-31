@@ -9,9 +9,10 @@ class MeritConfig(BaseModel):
     """Configuration for Merit Analyzer."""
 
     # API Configuration
-    api_key: str = Field(..., description="Anthropic or AWS API key")
-    provider: str = Field(default="anthropic", description="API provider (anthropic/bedrock)")
-    model: str = Field(default="claude-sonnet-4-5", description="Claude model to use")
+    api_key: str = Field(..., description="Anthropic API key (not needed for Bedrock)")
+    provider: str = Field(default="anthropic", description="API provider: 'anthropic' (direct) or 'bedrock' (AWS)")
+    model: str = Field(default="claude-sonnet-4-5-20250929", description="Claude model to use")
+    aws_region: Optional[str] = Field(default=None, description="AWS region for Bedrock (defaults to us-east-1)")
     max_tokens: int = Field(default=4096, description="Maximum tokens per request")
     temperature: float = Field(default=0.1, ge=0.0, le=1.0, description="Temperature for generation")
 
@@ -61,7 +62,7 @@ class MeritConfig(BaseModel):
 
     # Performance Configuration
     parallel_analysis: bool = Field(default=True, description="Enable parallel pattern analysis")
-    max_workers: int = Field(default=4, description="Maximum worker threads for parallel processing")
+    max_workers: int = Field(default=10, description="Maximum worker threads for parallel processing")
     cache_architecture: bool = Field(default=True, description="Cache discovered architecture")
 
     class Config:

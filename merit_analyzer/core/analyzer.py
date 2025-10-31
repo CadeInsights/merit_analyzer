@@ -32,7 +32,7 @@ from ..discovery.project_scanner import ProjectScanner
 from ..discovery.framework_detector import FrameworkDetector
 from ..discovery.code_mapper import CodeMapper
 from ..analysis.claude_agent import MeritClaudeAgent
-from ..analysis.root_cause import RootCauseAnalyzer
+# NOTE: Removed hardcoded RootCauseAnalyzer - using LLM agent for intelligent analysis
 from ..analysis.comparative import ComparativeAnalyzer
 from ..recommendations.generator import RecommendationGenerator
 from ..recommendations.prioritizer import RecommendationPrioritizer
@@ -92,7 +92,7 @@ class MeritAnalyzer:
         self.project_scanner = ProjectScanner(project_path)
         self.framework_detector = FrameworkDetector()
         self.code_mapper = CodeMapper(project_path)
-        self.root_cause_analyzer = RootCauseAnalyzer()
+        # NOTE: No hardcoded root_cause_analyzer - using LLM agent for intelligent analysis
         self.comparative_analyzer = ComparativeAnalyzer()
         self.recommendation_generator = RecommendationGenerator(self.claude_agent)
         self.recommendation_prioritizer = RecommendationPrioritizer()
@@ -130,6 +130,17 @@ class MeritAnalyzer:
             AnalysisReport with patterns, recommendations, and action plan
         """
         start_time = time.time()
+        step_start = start_time
+        
+        def log_step_time(step_name: str):
+            """Helper to log elapsed time for a step."""
+            nonlocal step_start
+            elapsed = time.time() - step_start
+            step_start = time.time()
+            if RICH_AVAILABLE:
+                console.print(f"[dim]   ⏱ {elapsed:.2f}s[/dim]")
+            else:
+                print(f"   ⏱ {elapsed:.2f}s")
         
         if RICH_AVAILABLE:
             console = Console()
@@ -148,6 +159,7 @@ class MeritAnalyzer:
                     parsed_tests = self._parse_test_results(test_results)
                 failures = sum(1 for t in parsed_tests if t.status == 'failed')
                 console.print(f"[green]✓[/green] Found [bold]{len(parsed_tests)}[/bold] tests ([bold]{failures}[/bold] failures)")
+                log_step_time("Parse test results")
             else:
                 print("\n📋 Parsing test results...")
                 parsed_tests = self._parse_test_results(test_results)
@@ -167,6 +179,7 @@ class MeritAnalyzer:
                     console.print(f" • Frameworks: [bold]{', '.join(frameworks)}[/bold]")
                 else:
                     console.print()
+                log_step_time("Project scan")
             else:
                 print("\n🗂️  Scanning project structure...")
                 scan_results = self._get_or_scan_project()
@@ -187,6 +200,7 @@ class MeritAnalyzer:
                     console.print(f"[green]✓[/green] System schema discovered ([bold]{display_type}[/bold])")
                 else:
                     console.print(f"[green]✓[/green] System schema discovered")
+                log_step_time("Schema discovery")
             else:
                 print("\n🧠 Discovering system schema...")
                 schema_info = self.schema_discovery.discover_system_schema(parsed_tests)
@@ -207,6 +221,21 @@ class MeritAnalyzer:
                     raw_patterns = self.pattern_detector.detect_patterns(parsed_tests)
                     if raw_patterns:
                         patterns = self.pattern_merger.merge_similar_patterns(raw_patterns)
+                        # Cap patterns for large datasets to control cost
+                        # Analyze top N patterns by failure count
+                        # Dynamic cap: scale with dataset size (min 20, max 50)
+                        total_failures = sum(len(tests) for tests in patterns.values())
+                        if total_failures > 500:
+                            max_patterns = min(50, max(20, len(patterns) // 2))
+                        else:
+                            max_patterns = 50
+                        
+                        if len(patterns) > max_patterns:
+                            sorted_patterns = sorted(patterns.items(), 
+                                                    key=lambda x: len(x[1]), 
+                                                    reverse=True)
+                            patterns = dict(sorted_patterns[:max_patterns])
+                            console.print(f"[dim]Analyzing top {max_patterns} patterns by failure count ({len(raw_patterns)} total detected) to control costs[/dim]")
                     else:
                         patterns = {}
                 
@@ -221,8 +250,10 @@ class MeritAnalyzer:
                     if len(patterns) > 5:
                         pattern_display += f" [dim]... and {len(patterns) - 5} more[/dim]"
                     console.print(f"   {pattern_display}")
+                    log_step_time("Pattern detection")
                 else:
                     console.print("[yellow]⚠[/yellow] No failure patterns detected")
+                    log_step_time("Pattern detection")
             else:
                 print("\n🔎 Detecting failure patterns...")
                 raw_patterns = self.pattern_detector.detect_patterns(parsed_tests)
@@ -243,9 +274,17 @@ class MeritAnalyzer:
                     console.print("\n[bold yellow]⚠️ No failure patterns detected[/bold yellow]")
                 else:
                     print("   ⚠️  No failure patterns detected")
-                return self._create_empty_report(parsed_tests, scan_results)
+                report = self._create_empty_report(parsed_tests, scan_results)
+                return report
             
-            # Step 5-9: Main analysis with status updates
+            # Step 5-10: Main analysis with status updates
+            
+            # Initialize variables (needed for both Rich and non-Rich paths)
+            all_recommendations = []
+            pattern_summaries = {}
+            passing_tests = [t for t in parsed_tests if t.status == "passed"]
+            pattern_mappings = {}
+            
             if RICH_AVAILABLE:
                 console.print()  # Blank line for spacing
                 console.print("[bold green]🔍 Starting Deep Analysis...[/bold green]")
@@ -253,62 +292,19 @@ class MeritAnalyzer:
                 
                 # Step 5: Discover system architecture
                 with Status("[bold cyan]Analyzing system architecture...", console=console):
-                    architecture = self._get_or_discover_architecture(scan_results)
+                    architecture = self.claude_agent.discover_system_architecture(scan_results)
                 console.print(f"[green]✓[/green] System architecture analyzed")
+                log_step_time("Architecture analysis")
                 
-                # Step 6: Map patterns to code
-                console.print()  # Blank line for spacing
-                pattern_mappings = {}
-                max_workers = min(self.config.max_workers, len(patterns))
-                
-                with Progress(
-                    SpinnerColumn(), 
-                    TextColumn("[progress.description]{task.description}"), 
-                    BarColumn(),
-                    TextColumn("[bold cyan]{task.completed}/{task.total}"),
-                    TextColumn("[dim]patterns mapped[/dim]"),
-                    TimeElapsedColumn(),
-                    console=console,
-                ) as progress:
-                    task = progress.add_task(
-                        "[bold cyan]Mapping patterns to code...",
-                        total=len(patterns)
-                    )
-                    
-                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        # Submit all mapping tasks at once
-                        future_to_pattern = {
-                            executor.submit(
-                                self.claude_agent.map_pattern_to_code,
-                                pattern_name,
-                                failing_tests,
-                                architecture
-                            ): pattern_name
-                            for pattern_name, failing_tests in patterns.items()
-                        }
-                        
-                        # Collect results as they complete
-                        for future in as_completed(future_to_pattern):
-                            pattern_name = future_to_pattern[future]
-                            try:
-                                code_locations = future.result()
-                                pattern_mappings[pattern_name] = code_locations
-                                progress.update(task, advance=1)
-                            except Exception as e:
-                                console.print(f"\n[yellow]⚠[/yellow] Error mapping pattern '[dim]{pattern_name}[/dim]': {e}")
-                                pattern_mappings[pattern_name] = {}
-                                progress.update(task, advance=1)
-                
-                console.print(f"[green]✓[/green] Mapped [bold]{len(pattern_mappings)}[/bold] patterns to code")
-                
-                # Step 7: Analyze patterns
+                # Step 6: Analyze patterns (Claude Agent SDK uses Grep/Glob to find code + analyze)
                 console.print()  # Blank line for spacing
                 all_recommendations = []
                 pattern_summaries = {}
                 passing_tests = [t for t in parsed_tests if t.status == "passed"]
                 
                 # Analyze patterns in parallel for scalability
-                max_workers = min(self.config.max_workers, len(patterns))
+                # API allows 1K requests/min (~16/sec), so we can run many patterns concurrently
+                max_workers = min(self.config.max_workers, len(patterns), 15)  # Cap at 15 for reasonable parallelism
                 
                 with Progress(
                     SpinnerColumn(), 
@@ -323,44 +319,45 @@ class MeritAnalyzer:
                         "[bold cyan]Analyzing patterns...", 
                         total=len(patterns)
                     )
+                
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    # Submit all pattern analyses at once
+                    future_to_pattern = {
+                        executor.submit(
+                            self._analyze_single_pattern,
+                            pattern_name,
+                            failing_tests,
+                            passing_tests,
+                            architecture
+                        ): pattern_name
+                        for pattern_name, failing_tests in patterns.items()
+                    }
                     
-                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        # Submit all pattern analyses at once
-                        future_to_pattern = {
-                            executor.submit(
-                                self._analyze_single_pattern,
-                                pattern_name,
-                                failing_tests,
-                                passing_tests,
-                                pattern_mappings.get(pattern_name, {}),
-                                architecture
-                            ): pattern_name
-                            for pattern_name, failing_tests in patterns.items()
-                        }
-                        
-                        # Collect results as they complete
-                        for future in as_completed(future_to_pattern):
-                            pattern_name = future_to_pattern[future]
-                            try:
-                                result = future.result()
-                                if result:
-                                    pattern, recommendations, summary = result
-                                    all_recommendations.extend(recommendations)
-                                    pattern_summaries[pattern_name] = summary
-                                    progress.update(task, advance=1)
-                                else:
-                                    progress.update(task, advance=1)
-                            except Exception as e:
-                                console.print(f"\n[yellow]⚠[/yellow] Error analyzing pattern '[dim]{pattern_name}[/dim]': {e}")
+                    # Collect results as they complete
+                    for future in as_completed(future_to_pattern):
+                        pattern_name = future_to_pattern[future]
+                        try:
+                            result = future.result()
+                            if result:
+                                pattern, recommendations, summary = result
+                                all_recommendations.extend(recommendations)
+                                pattern_summaries[pattern_name] = summary
                                 progress.update(task, advance=1)
+                            else:
+                                progress.update(task, advance=1)
+                        except Exception as e:
+                            console.print(f"\n[yellow]⚠[/yellow] Error analyzing pattern '[dim]{pattern_name}[/dim]': {e}")
+                            progress.update(task, advance=1)
                 
                 console.print(f"[green]✓[/green] Completed analysis of [bold]{len(pattern_summaries)}/{len(patterns)}[/bold] patterns")
+                log_step_time("Pattern analysis")
                 
                 # Step 8: Early deduplication before prioritization
                 console.print()  # Blank line for spacing
                 with Status("[bold cyan]Deduplicating recommendations...", console=console):
                     all_recommendations = self._early_deduplicate_recommendations(all_recommendations)
                 console.print(f"[green]✓[/green] Deduplicated to [bold]{len(all_recommendations)}[/bold] unique recommendations")
+                log_step_time("Deduplication")
                 
                 # Step 9: Prioritize recommendations
                 console.print()  # Blank line for spacing
@@ -369,6 +366,7 @@ class MeritAnalyzer:
                         all_recommendations, pattern_summaries
                     )
                 console.print(f"[green]✓[/green] Prioritized [bold]{len(prioritized_recommendations)}[/bold] recommendations")
+                log_step_time("Prioritization")
                 
                 # Step 10: Generate report
                 console.print()  # Blank line for spacing
@@ -382,30 +380,31 @@ class MeritAnalyzer:
                         time.time() - start_time
                     )
                 console.print(f"[green]✓[/green] Report generated")
+                log_step_time("Report generation")
+                
+                # Store report for return
+                final_report = report
+                
+                # Show total time
+                total_time = time.time() - start_time
+                console.print()  # Blank line
+                console.print(f"[bold green]✅ Analysis complete![/bold green] Total time: [bold]{total_time:.1f}s[/bold]")
+                
+            # Non-Rich path (fallback)
             else:
                 # Fallback to simple print statements
                 print("\n🏗️  Analyzing system architecture...")
-                architecture = self._get_or_discover_architecture(scan_results)
+                architecture = self.claude_agent.discover_system_architecture(scan_results)
                 print("   Architecture mapped successfully")
                 
-                print("\n🗺️  Mapping patterns to code locations...")
-                pattern_mappings = {}
-                for pattern_name, failing_tests in patterns.items():
-                    code_locations = self.claude_agent.map_pattern_to_code(
-                        pattern_name, 
-                        failing_tests,
-                        architecture
-                    )
-                    pattern_mappings[pattern_name] = code_locations
-                    print(f"   {pattern_name} → {len(code_locations)} relevant files")
-                
-                print("\n🧠 Analyzing patterns and generating recommendations...")
+                print("\n🧠 Analyzing patterns (Claude Agent SDK finds code + analyzes)...")
                 all_recommendations = []
                 pattern_summaries = {}
                 passing_tests = [t for t in parsed_tests if t.status == "passed"]
                 
                 # Analyze patterns in parallel for scalability
-                max_workers = min(self.config.max_workers, len(patterns))
+                # API allows 1K requests/min (~16/sec), so we can run many patterns concurrently
+                max_workers = min(self.config.max_workers, len(patterns), 15)  # Cap at 15 for reasonable parallelism
                 
                 if RICH_AVAILABLE:
                     with Progress(
@@ -423,7 +422,6 @@ class MeritAnalyzer:
                                     pattern_name,
                                     failing_tests,
                                     passing_tests,
-                                    pattern_mappings.get(pattern_name, {}),
                                     architecture
                                 ): pattern_name
                                 for pattern_name, failing_tests in patterns.items()
@@ -451,7 +449,6 @@ class MeritAnalyzer:
                                 pattern_name,
                                 failing_tests,
                                 passing_tests,
-                                pattern_mappings.get(pattern_name, {}),
                                 architecture
                             ): pattern_name
                             for pattern_name, failing_tests in patterns.items()
@@ -485,7 +482,7 @@ class MeritAnalyzer:
                 
                 # Generate report
                 print("\n📊 Generating analysis report...")
-                report = self._generate_report(
+                final_report = self._generate_report(
                     parsed_tests,
                     pattern_summaries,
                     prioritized_recommendations,
@@ -497,12 +494,11 @@ class MeritAnalyzer:
             
             # Display results
             if RICH_AVAILABLE:
-                self._display_rich_results(report, console)
+                self._display_rich_results(final_report, console)
             else:
                 print("\n✅ Analysis complete!")
             
-            return report
-            
+            return final_report
         except Exception as e:
             if RICH_AVAILABLE:
                 console.print(f"\n[red]❌ Analysis failed: {e}[/red]")
@@ -575,10 +571,12 @@ class MeritAnalyzer:
             return str(test.input)
 
     def _analyze_single_pattern(self, pattern_name: str, failing_tests: List[TestResult],
-                                passing_tests: List[TestResult], code_locations: Dict[str, Any],
+                                passing_tests: List[TestResult],
                                 architecture: Dict[str, Any]) -> Optional[tuple]:
         """
         Analyze a single pattern (for parallel execution).
+        
+        Claude Agent SDK uses Grep/Glob to find relevant files, then analyzes them.
         
         Returns:
             Tuple of (Pattern, List[Recommendation], PatternSummary) or None
@@ -595,42 +593,73 @@ class MeritAnalyzer:
                 keywords=self._extract_pattern_keywords(failing_tests)
             )
             
-            # Analyze with Merit's AI engine
+            # Analyze with Claude Agent SDK (uses Grep/Glob to find files, then analyzes)
             analysis = self.claude_agent.analyze_pattern(
                 pattern_name=pattern_name,
                 failing_tests=failing_tests,
-                passing_tests=similar_passing,
-                code_locations=code_locations
+                passing_tests=similar_passing
             )
             
-            # Root cause analysis
-            code_context = self._get_code_context(code_locations)
-            root_cause_analysis = self.root_cause_analyzer.analyze_root_cause(
-                pattern, code_context, architecture
-            )
+            # Use LLM's root cause (not hardcoded heuristics)
+            # The LLM analysis already includes root_cause, pattern_characteristics, and code_issues
+            llm_root_cause = analysis.get("root_cause", "Unable to determine root cause")
             
-            # Generate recommendations (limit per pattern to reduce duplicates)
-            recommendations = self.recommendation_generator.generate_recommendations(
-                pattern=pattern,
-                root_cause=root_cause_analysis["root_cause"],
-                code_context=code_context,
-                architecture=architecture
-            )
+            # COST OPTIMIZATION: Use recommendations from analyze_pattern if available
+            # The analyze_pattern prompt already includes recommendations, saving 1 LLM call per pattern!
+            llm_recommendations = analysis.get("recommendations", [])
             
-            # Limit recommendations per pattern to keep output focused and actionable
-            # With 17 patterns, 3 recs each = ~51 total, which is more reasonable
-            max_recs_per_pattern = 3
-            recommendations = recommendations[:max_recs_per_pattern]
+            if llm_recommendations:
+                # Use recommendations from analyze_pattern (saves ~30-50% cost per pattern)
+                from ..models.recommendation import Recommendation, PriorityLevel, RecommendationType
+                recommendations = []
+                for rec_data in llm_recommendations[:3]:  # Limit to 3 per pattern
+                    try:
+                        # Helper parsing maps
+                        priority_map = {"high": PriorityLevel.HIGH, "medium": PriorityLevel.MEDIUM, "low": PriorityLevel.LOW}
+                        type_map = {"code": RecommendationType.CODE, "prompt": RecommendationType.PROMPT, 
+                                   "architecture": RecommendationType.ARCHITECTURE, "configuration": RecommendationType.CONFIGURATION,
+                                   "testing": RecommendationType.TESTING}
+                        
+                        recommendation = Recommendation(
+                            priority=priority_map.get(rec_data.get("priority", "medium").lower(), PriorityLevel.MEDIUM),
+                            type=type_map.get(rec_data.get("type", "code").lower(), RecommendationType.CODE),
+                            title=rec_data.get("title", "Fix issue"),
+                            description=rec_data.get("description", ""),
+                            location=rec_data.get("location", ""),
+                            implementation=rec_data.get("implementation", rec_data.get("code_diff", "")),
+                            expected_impact=rec_data.get("expected_impact", ""),
+                            effort_estimate=rec_data.get("effort_estimate", rec_data.get("effort", "Unknown")),
+                            rationale=f"Based on code analysis of {pattern_name}",
+                            code_diff=rec_data.get("code_diff"),
+                            tags=[pattern_name]
+                        )
+                        recommendations.append(recommendation)
+                    except Exception:
+                        continue
+            else:
+                # Fallback: Generate recommendations separately (only if analyze_pattern didn't provide them)
+                # Note: Pattern analysis should always provide recommendations now via Claude Agent SDK
+                # This is just a safety fallback
+                code_context = {}  # Claude Agent SDK finds and reads its own files
+                recommendations = self.recommendation_generator.generate_recommendations(
+                    pattern=pattern,
+                    root_cause=llm_root_cause,
+                    code_context=code_context,
+                    architecture=architecture
+                )
+                # Limit to 2 recommendations per pattern for cost efficiency
+                recommendations = recommendations[:2]
             
             # Create pattern summary
+            # Use LLM's analysis results (not hardcoded root cause analyzer)
             summary = PatternSummary(
                 name=pattern_name,
                 failure_count=len(failing_tests),
                 failure_rate=len(failing_tests) / (len(failing_tests) + len(passing_tests)) if passing_tests else 1.0,
                 example_tests=failing_tests[:3],
                 recommendations=recommendations,
-                root_cause=root_cause_analysis["root_cause"],
-                confidence=root_cause_analysis["confidence"],
+                root_cause=llm_root_cause,  # From LLM code analysis, not hardcoded
+                confidence=0.8,  # Default confidence (LLM analysis is reliable)
                 keywords=pattern.keywords
             )
             
@@ -1041,35 +1070,42 @@ Provide only the failure reason, nothing else.
             pattern_name, failing_tests, architecture
         )
         
-        # Analyze pattern with universal approach
+        # Analyze pattern with LLM agent (reads code files, provides intelligent analysis)
         analysis = self.claude_agent.analyze_pattern(
             pattern_name=pattern_name,
             failing_tests=failing_tests,
             passing_tests=passing_tests,
-            code_locations=code_locations
+            code_locations=code_locations  # Claude reads these files
         )
         
-        # Root cause analysis
+        # Use LLM's intelligent analysis (NO hardcoded root cause analyzer)
+        llm_root_cause = analysis.get("root_cause", "Unable to determine root cause")
+        llm_system_type = analysis.get("system_type", architecture.get("system_type", "unknown"))
+        
+        # Update architecture with LLM-discovered system type
+        if llm_system_type != "unknown":
+            architecture["system_type"] = llm_system_type
+        
+        # Get code context for recommendations
         code_context = self._get_code_context(code_locations)
-        root_cause_analysis = self.root_cause_analyzer.analyze_root_cause(
-            pattern, code_context, architecture
+        
+        # Generate recommendations using LLM's root cause
+        recommendations = self.recommendation_generator.generate_recommendations(
+            pattern=pattern,
+            root_cause=llm_root_cause,  # From LLM code analysis, not hardcoded
+            code_context=code_context,
+            architecture=architecture
         )
         
-        # Generate universal recommendations
-        recommendations = self._generate_universal_recommendations(
-            pattern, root_cause_analysis, code_context, 
-            discovered_schema, architecture
-        )
-        
-        # Create pattern summary
+        # Create pattern summary using LLM analysis
         pattern_summary = PatternSummary(
             name=pattern_name,
             failure_count=len(failing_tests),
             failure_rate=len(failing_tests) / len(all_tests),
             example_tests=failing_tests[:3],
             recommendations=recommendations,
-            root_cause=root_cause_analysis["root_cause"],
-            confidence=root_cause_analysis["confidence"],
+            root_cause=llm_root_cause,  # From LLM, not hardcoded
+            confidence=0.8,  # LLM analysis is reliable
             keywords=pattern.keywords
         )
         

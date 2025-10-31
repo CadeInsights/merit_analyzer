@@ -1,23 +1,79 @@
-"""AI analysis engine integration for Merit Analyzer."""
+"""AI analysis engine integration for Merit Analyzer.
+
+Architecture:
+- Standard Anthropic API: schema discovery, architecture inference, pattern mapping (fast, scalable)
+- Claude Agent SDK: pattern analysis ONLY (reads actual code for deep root cause analysis)
+"""
 
 import json
 import re
+import os
+import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
-import anthropic  # type: ignore
-import boto3  # type: ignore
-from botocore.exceptions import ClientError  # type: ignore
+from typing import Dict, List, Optional, Any
+
+# Anthropic API for fast standard LLM calls
+from anthropic import Anthropic  # type: ignore
+
+# Claude Agent SDK - imported lazily to avoid hanging on module import
+# We only need it for pattern analysis, so we'll import it when needed
+ClaudeSDKClient = None
+ClaudeAgentOptions = None
+CLINotFoundError = None
+ProcessError = None
+AssistantMessage = None
 
 from ..models.test_result import TestResult
 from ..core.config import MeritConfig
 
 
+def _lazy_import_claude_sdk():
+    """Lazy import of Claude Agent SDK to avoid hanging on module import."""
+    global ClaudeSDKClient, ClaudeAgentOptions, CLINotFoundError, ProcessError, AssistantMessage
+    if ClaudeSDKClient is None:
+        try:
+            from claude_agent_sdk import (  # type: ignore
+                ClaudeSDKClient as _ClaudeSDKClient,
+                ClaudeAgentOptions as _ClaudeAgentOptions,
+                CLINotFoundError as _CLINotFoundError,
+                ProcessError as _ProcessError,
+                AssistantMessage as _AssistantMessage,
+            )
+            ClaudeSDKClient = _ClaudeSDKClient
+            ClaudeAgentOptions = _ClaudeAgentOptions
+            CLINotFoundError = _CLINotFoundError
+            ProcessError = _ProcessError
+            AssistantMessage = _AssistantMessage
+        except Exception as e:
+            raise RuntimeError(f"Failed to import Claude Agent SDK: {e}")
+
+
+def _run_async(coro):
+    """
+    Run an async coroutine safely, avoiding nested event loop issues.
+    
+    Creates a new event loop to avoid conflicts.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.run_until_complete(asyncio.sleep(0))  # Let pending tasks finish
+        loop.close()
+
+
 class MeritClaudeAgent:
-    """Wrapper around Claude API for Merit Analyzer."""
+    """
+    Merit's AI analysis engine.
+    
+    Uses standard Anthropic API for fast inference tasks (schema, architecture, mapping).
+    Uses Claude Agent SDK ONLY for pattern analysis (reading actual code files).
+    """
 
     def __init__(self, config: MeritConfig):
         """
-        Initialize Claude agent.
+        Initialize Merit AI analysis engine.
 
         Args:
             config: Merit Analyzer configuration
@@ -25,26 +81,75 @@ class MeritClaudeAgent:
         self.config = config
         self.project_path = Path(config.project_path)
         self.api_key = config.api_key
-        self.provider = config.provider
         self.model = config.model
+        self.provider = config.provider
         
-        # Initialize client based on provider
-        if config.provider == "anthropic":
-            self.client = anthropic.Anthropic(api_key=config.api_key)
-        elif config.provider == "bedrock":
-            self.bedrock_client = boto3.client('bedrock-runtime', region_name='us-east-1')
+        # Initialize Anthropic client for standard LLM calls
+        # Used for: schema discovery, architecture discovery, pattern mapping
+        self.anthropic_client = Anthropic(api_key=self.api_key)
+        
+        # Configure environment for Claude Agent SDK (used later for pattern analysis)
+        if self.provider == "bedrock":
+            os.environ["CLAUDE_CODE_USE_BEDROCK"] = "1"
+            aws_region = getattr(config, 'aws_region', None) or os.environ.get("AWS_REGION") or "us-east-1"
+            os.environ["AWS_REGION"] = aws_region
         else:
-            raise ValueError(f"Unsupported provider: {config.provider}")
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                os.environ["ANTHROPIC_API_KEY"] = self.api_key
+        
+        # DON'T create ClaudeAgentOptions here - it hangs!
+        # We'll create it lazily when we actually need pattern analysis
         
         # Cache for responses
         self._response_cache: Dict[str, str] = {}
 
+    def _call_anthropic_direct(self, prompt: str, max_tokens: int = 4096) -> str:
+        """
+        Fast standard Anthropic API call (no agent, no tools).
+        
+        Used for: schema discovery, architecture inference, pattern mapping.
+        These tasks don't need code access - just intelligent analysis.
+        
+        Args:
+            prompt: The prompt to send
+            max_tokens: Maximum tokens in response
+            
+        Returns:
+            LLM response text
+        """
+        try:
+            message = self.anthropic_client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+            
+            # Extract text from response
+            response_text = ""
+            for block in message.content:
+                if hasattr(block, 'text'):
+                    response_text += block.text
+            
+            return response_text
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    # =======================
+    # ARCHITECTURE DISCOVERY (Standard API)
+    # =======================
+    
     def discover_system_architecture(self, scan_results: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Ask Claude to discover and map system architecture.
+        Discover system architecture using standard LLM inference.
+        
+        Analyzes project scan results (files, imports, frameworks) to infer
+        the system architecture WITHOUT reading actual code files.
 
         Args:
-            scan_results: Results from project scanning
+            scan_results: Results from project scanning (file list, imports, entry points)
 
         Returns:
             Dict with agents, prompts, entry points, control flow
@@ -53,9 +158,52 @@ class MeritClaudeAgent:
         if cache_key in self._response_cache:
             return json.loads(self._response_cache[cache_key])
         
-        prompt = self._build_architecture_prompt(scan_results)
-        response = self._call_claude(prompt)
-        
+        # Build prompt for architecture inference
+        prompt = f"""Analyze this AI system's project structure and infer its architecture.
+
+PROJECT SCAN RESULTS:
+{json.dumps(scan_results, indent=2)}
+
+Based on the file structure, imports, and detected frameworks, provide your analysis in JSON format:
+
+{{
+    "system_type": "chatbot|rag|agent|code_generator|multi_modal|custom",
+    "agents": [
+        {{
+            "name": "agent_name",
+            "file": "path/to/file.py",
+            "purpose": "inferred purpose",
+            "key_methods": ["method1", "method2"]
+        }}
+    ],
+    "prompts": [
+        {{
+            "name": "prompt_name",
+            "location": "likely file or location",
+            "purpose": "inferred purpose"
+        }}
+    ],
+    "control_flow": {{
+        "entry_points": ["main.py"],
+        "flow": "description of likely data flow",
+        "decision_points": ["point1", "point2"]
+    }},
+    "configuration": {{
+        "api_keys": ["key1"],
+        "models": ["model1"],
+        "config_files": ["config.py"]
+    }},
+    "dependencies": [
+        {{
+            "name": "dependency",
+            "type": "api|database|library"
+        }}
+    ]
+}}
+
+Return ONLY valid JSON, no explanation."""
+
+        response = self._call_anthropic_direct(prompt)
         architecture = self._parse_architecture_response(response)
         
         # Cache the result
@@ -63,50 +211,25 @@ class MeritClaudeAgent:
         
         return architecture
 
-    def analyze_pattern(self, 
-                       pattern_name: str,
-                       failing_tests: List[TestResult],
-                       passing_tests: List[TestResult],
-                       code_locations: List[str]) -> Dict[str, Any]:
-        """
-        Analyze a specific failure pattern.
-
-        Args:
-            pattern_name: Name of the failure pattern
-            failing_tests: Tests that are failing
-            passing_tests: Similar tests that are passing
-            code_locations: Relevant code file paths
-
-        Returns:
-            Dict with root cause and recommendations
-        """
-        cache_key = f"pattern_{pattern_name}_{len(failing_tests)}_{len(passing_tests)}"
-        if cache_key in self._response_cache:
-            return json.loads(self._response_cache[cache_key])
-        
-        prompt = self._build_pattern_analysis_prompt(
-            pattern_name, failing_tests, passing_tests, code_locations
-        )
-        response = self._call_claude(prompt)
-        
-        analysis = self._parse_pattern_analysis_response(response)
-        
-        # Cache the result
-        self._response_cache[cache_key] = json.dumps(analysis)
-        
-        return analysis
-
+    # =======================
+    # PATTERN MAPPING (Standard API)
+    # =======================
+    
     def map_pattern_to_code(self, 
                            pattern_name: str,
                            test_examples: List[TestResult],
-                           architecture: Dict[str, Any]) -> List[str]:
+                           architecture: Dict[str, Any],
+                           available_files: Optional[List[str]] = None) -> List[str]:
         """
-        Map a failure pattern to relevant code locations.
+        Map a failure pattern to relevant code locations using standard LLM inference.
+        
+        Intelligently selects which ACTUAL files from the codebase are relevant.
 
         Args:
             pattern_name: Name of the failure pattern
             test_examples: Example test cases
             architecture: System architecture information
+            available_files: List of actual files in the project (from scan)
 
         Returns:
             List of file paths that likely relate to this pattern
@@ -115,176 +238,125 @@ class MeritClaudeAgent:
         if cache_key in self._response_cache:
             return json.loads(self._response_cache[cache_key])
         
-        prompt = self._build_code_mapping_prompt(pattern_name, test_examples, architecture)
-        response = self._call_claude(prompt)
+        # If no available files provided, return empty list (can't hallucinate files)
+        if not available_files:
+            return []
         
-        file_paths = self._parse_file_list_response(response)
+        # Build prompt for file mapping with ACTUAL file list
+        examples = self._format_test_examples(test_examples[:2])
+        files_list = "\n".join([f"  - {f}" for f in available_files[:50]])  # Limit to 50 files
+        
+        prompt = f"""Map this failure pattern to relevant code files from the ACTUAL project files.
+
+PATTERN: {pattern_name}
+
+FAILING TEST EXAMPLES:
+{examples}
+
+SYSTEM ARCHITECTURE:
+{json.dumps(architecture, indent=2)}
+
+ACTUAL PROJECT FILES (you MUST choose from this list):
+{files_list}
+
+Based on:
+- The pattern name and failure characteristics
+- The test inputs/outputs
+- The known system architecture
+- The ACTUAL files available in the project
+
+Which 3-5 files from the ACTUAL PROJECT FILES list are most relevant to this failure?
+
+Return ONLY the file paths from the list above, one per line.
+Do NOT make up or hallucinate filenames.
+Limit to 3-5 most relevant files."""
+
+        response = self._call_anthropic_direct(prompt, max_tokens=500)
+        
+        # Parse and validate file paths (must be in available_files)
+        suggested_paths = self._parse_file_list_response(response)
+        valid_paths = [p for p in suggested_paths if p in available_files]
+        
+        # If LLM didn't return valid paths, do simple keyword matching
+        if not valid_paths:
+            valid_paths = self._fallback_file_matching(pattern_name, test_examples, available_files)
         
         # Cache the result
-        self._response_cache[cache_key] = json.dumps(file_paths)
+        self._response_cache[cache_key] = json.dumps(valid_paths[:5])
         
-        return file_paths
+        return valid_paths[:5]
+    
+    def _fallback_file_matching(self, pattern_name: str, test_examples: List[TestResult], available_files: List[str]) -> List[str]:
+        """Fallback: Simple keyword matching between pattern and filenames."""
+        # Extract keywords from pattern name
+        keywords = pattern_name.lower().replace('_', ' ').split()
+        
+        # Score each file based on keyword matches
+        scored_files = []
+        for file_path in available_files:
+            filename = file_path.lower()
+            score = sum(1 for keyword in keywords if keyword in filename)
+            if score > 0:
+                scored_files.append((score, file_path))
+        
+        # Return top scored files
+        scored_files.sort(reverse=True, key=lambda x: x[0])
+        return [f for _, f in scored_files[:5]]
 
-    def generate_recommendations(self,
-                               pattern_name: str,
-                               root_cause: str,
-                               code_context: Dict[str, str],
-                               failing_tests: List[TestResult]) -> List[Dict[str, Any]]:
+    # =======================
+    # PATTERN ANALYSIS (Claude Agent SDK - Code Reading)
+    # =======================
+    
+    def analyze_pattern(self, 
+                       pattern_name: str,
+                       failing_tests: List[TestResult],
+                       passing_tests: List[TestResult],
+                       code_locations: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        Generate specific recommendations for fixing a pattern.
+        Analyze a failure pattern using Claude Agent SDK to READ actual code.
+        
+        This is the ONLY method that uses Claude Agent SDK with code reading.
+        Claude uses Read/Grep/Glob tools to navigate and analyze the codebase.
 
         Args:
             pattern_name: Name of the failure pattern
-            root_cause: Identified root cause
-            code_context: Relevant code snippets
-            failing_tests: Failing test cases
+            failing_tests: Failed test cases
+            passing_tests: Similar tests that are passing
+            code_locations: Relevant code file paths (hints for Claude to explore)
 
         Returns:
-            List of recommendation dictionaries
+            Dict with root cause and recommendations
         """
-        prompt = self._build_recommendation_prompt(
-            pattern_name, root_cause, code_context, failing_tests
-        )
-        response = self._call_claude(prompt)
+        cache_key = f"pattern_{pattern_name}_{len(failing_tests)}_{len(passing_tests)}"
+        if cache_key in self._response_cache:
+            return json.loads(self._response_cache[cache_key])
         
-        recommendations = self._parse_recommendations_response(response)
+        # Use Claude Agent SDK async
+        analysis = _run_async(self._analyze_pattern_async(
+            pattern_name, failing_tests, passing_tests, code_locations
+        ))
         
-        return recommendations
-
-    def _get_bedrock_model_id(self) -> str:
-        """Map config model name to Bedrock model ID."""
-        model_mapping = {
-            "claude-sonnet-4-5": "anthropic.claude-3-5-sonnet-20241022-v1:0",
-            "claude-3-5-sonnet-20241022": "anthropic.claude-3-5-sonnet-20241022-v1:0",
-            "claude-3-5-sonnet": "anthropic.claude-3-5-sonnet-20241022-v1:0",
-            "claude-3-sonnet-20240229": "anthropic.claude-3-sonnet-20240229-v1:0",
-            "claude-3-haiku": "anthropic.claude-3-haiku-20240307-v1:0",
-        }
+        # Cache the result
+        self._response_cache[cache_key] = json.dumps(analysis)
         
-        # Default to 3.5 Sonnet if model not found
-        return model_mapping.get(self.model, "anthropic.claude-3-5-sonnet-20241022-v1:0")
+        return analysis
 
-    def _call_claude(self, prompt: str) -> str:
-        """Call Claude API with the given prompt."""
-        try:
-            if self.provider == "anthropic":
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=self.config.max_tokens,
-                    temperature=self.config.temperature,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                return response.content[0].text
-            elif self.provider == "bedrock":
-                # Bedrock implementation
-                body = json.dumps({
-                    "prompt": prompt,
-                    "max_tokens_to_sample": self.config.max_tokens,
-                    "temperature": self.config.temperature,
-                })
-                
-                # Map config model to Bedrock model ID
-                bedrock_model_id = self._get_bedrock_model_id()
-                response = self.bedrock_client.invoke_model(
-                    modelId=bedrock_model_id,
-                    body=body
-                )
-                
-                response_body = json.loads(response['body'].read())
-                return response_body['completion']
-            else:
-                raise ValueError(f"Unsupported provider: {self.provider}")
-        except Exception as e:
-            print(f"Error calling Claude: {e}")
-            return ""
-
-    def _build_architecture_prompt(self, scan_results: Dict[str, Any]) -> str:
-        """Build prompt for architecture discovery."""
-        return f"""
-I need you to analyze this AI system codebase and discover its architecture.
-
-Project Information:
-- Python files: {len(scan_results.get('python_files', []))}
-- Entry points: {scan_results.get('entry_points', [])}
-- Detected frameworks: {', '.join(scan_results.get('frameworks', {}).keys())}
-- Estimated LOC: {scan_results.get('estimated_loc', 0)}
-
-Please analyze the codebase and provide a structured summary of:
-
-1. **Agents/Components**: Identify all AI agents, components, or main classes
-   - Name and purpose of each component
-   - File location
-   - Key methods/functions
-
-2. **Prompts/Templates**: Find all prompt templates or system messages
-   - Location of prompt files
-   - Purpose of each prompt
-   - Which component uses each prompt
-
-3. **Control Flow**: Map how requests flow through the system
-   - Entry points and their responsibilities
-   - Data flow between components
-   - Key decision points
-
-4. **Configuration**: Identify key configuration files and settings
-   - API keys and endpoints
-   - Model configurations
-   - System parameters
-
-5. **Dependencies**: Key external dependencies and integrations
-   - API services used
-   - Database connections
-   - External libraries
-
-Please provide your analysis in JSON format with the following structure:
-{{
-    "agents": [
-        {{
-            "name": "agent_name",
-            "file": "path/to/file.py",
-            "purpose": "description",
-            "key_methods": ["method1", "method2"]
-        }}
-    ],
-    "prompts": [
-        {{
-            "name": "prompt_name",
-            "file": "path/to/prompt.txt",
-            "purpose": "description",
-            "used_by": "agent_name"
-        }}
-    ],
-    "control_flow": {{
-        "entry_points": ["main.py", "app.py"],
-        "flow": "description of data flow",
-        "decision_points": ["point1", "point2"]
-    }},
-    "configuration": {{
-        "api_keys": ["key1", "key2"],
-        "models": ["model1", "model2"],
-        "settings": ["setting1", "setting2"]
-    }},
-    "dependencies": [
-        {{
-            "name": "dependency_name",
-            "type": "api|database|library",
-            "purpose": "description"
-        }}
-    ]
-}}
-"""
-
-    def _build_pattern_analysis_prompt(self,
+    async def _analyze_pattern_async(self,
                                      pattern_name: str,
                                      failing_tests: List[TestResult],
                                      passing_tests: List[TestResult],
-                                     code_locations: List[str]) -> str:
-        """Build prompt for pattern analysis."""
-        fail_examples = self._format_test_examples(failing_tests[:3])
-        pass_examples = self._format_test_examples(passing_tests[:3]) if passing_tests else "None"
-        
-        return f"""
-I need you to analyze a pattern of test failures in this AI system.
+                                     code_locations: List[str]) -> Dict[str, Any]:
+        """Async pattern analysis using Claude Agent SDK."""
+        try:
+            # Lazy import Claude SDK (only when we need it for code analysis)
+            _lazy_import_claude_sdk()
+            
+            # Format test examples
+            max_examples = 2
+            fail_examples = self._format_test_examples(failing_tests[:max_examples])
+            pass_examples = self._format_test_examples(passing_tests[:max_examples]) if passing_tests else "None"
+            
+            prompt = f"""You are an intelligent code analysis agent with direct access to this codebase via Read, Grep, and Glob tools.
 
 PATTERN: {pattern_name}
 FAILURE COUNT: {len(failing_tests)}
@@ -296,138 +368,97 @@ FAILING TEST EXAMPLES:
 PASSING TEST EXAMPLES:
 {pass_examples}
 
-RELEVANT CODE LOCATIONS:
-{chr(10).join(f"- {loc}" for loc in code_locations)}
+Your task: Find WHY these tests are failing by intelligently navigating the codebase.
 
-Please analyze this pattern and provide:
+**READ-ONLY MODE**: You can ONLY use Read, Grep, and Glob tools.
 
-1. **Root Cause Analysis**: What is causing these failures?
-   - Identify the specific issue
-   - Explain why it's happening
-   - Consider both code and prompt issues
+**STEP 1: Find Relevant Code**
+- Use Grep to search for keywords from the test inputs/outputs (function names, class names, error messages)
+- Use Glob to find files matching patterns (e.g., **/*agent*.py, **/*prompt*.py, **/*config*.py)
+- Identify which files are most relevant to this failure pattern
 
-2. **Pattern Characteristics**: What do these failures have in common?
-   - Common input patterns
-   - Common failure modes
-   - Timing or context issues
+**STEP 2: Analyze Root Cause**
+- Use Read to examine the relevant files you found
+- Trace the failure cascade through the code path
+- Identify the exact code issue causing these failures
 
-3. **Code Review**: Review the relevant code files
-   - Identify problematic code sections
-   - Look for logic errors, edge cases, or missing validations
-   - Check prompt quality and consistency
+**STEP 3: Generate Recommendations**
+Provide 2-3 specific, actionable fixes:
+- Code changes (with exact file locations and line numbers if possible)
+- Prompt changes (with exact text to modify)
+- Configuration changes
+- Design changes (new components/agents if needed)
 
-4. **Recommendations**: Provide 3-5 specific, actionable recommendations
-   - What exactly needs to be changed
-   - Where to make the changes (file and line numbers)
-   - How to implement the fix
-   - Expected impact on test results
-
-Please provide your analysis in JSON format:
+Provide your analysis in JSON format:
 {{
-    "root_cause": "detailed explanation of the root cause",
+    "root_cause": "specific root cause from code analysis",
     "pattern_characteristics": {{
-        "common_inputs": ["pattern1", "pattern2"],
-        "common_failures": ["failure1", "failure2"],
-        "timing_issues": "description if any"
+        "common_inputs": ["input1", "input2"],
+        "common_failures": ["failure1", "failure2"]
     }},
     "code_issues": [
         {{
             "file": "path/to/file.py",
-            "line": 123,
-            "issue": "description of the issue",
-            "severity": "high|medium|low"
+            "issue": "specific issue found in code",
+            "line_number": 123
         }}
     ],
     "recommendations": [
         {{
-            "title": "Fix specific issue",
-            "description": "What to change",
-            "location": "file.py:line_number",
-            "implementation": "Specific code changes",
-            "expected_impact": "Which tests this will fix",
-            "effort": "Time estimate",
-            "priority": "high|medium|low"
+            "type": "code|prompt|config|design",
+            "title": "short title",
+            "description": "detailed description",
+            "file": "path/to/file",
+            "priority": "high|medium|low",
+            "effort": "high|medium|low"
         }}
     ]
 }}
-"""
 
-    def _build_code_mapping_prompt(self,
-                                 pattern_name: str,
-                                 test_examples: List[TestResult],
-                                 architecture: Dict[str, Any]) -> str:
-        """Build prompt for code mapping."""
-        examples = self._format_test_examples(test_examples[:2])
-        
-        return f"""
-Given this failure pattern and system architecture, identify which code files are most likely involved.
+**Important**: Actually use Read/Grep tools to analyze the code. Don't guess."""
+            
+            # Create Claude Agent SDK options (lazily, only when needed)
+            agent_options = ClaudeAgentOptions(
+                cwd=str(self.project_path),
+                allowed_tools=["Read", "Grep", "Glob"],
+                disallowed_tools=["Write", "Edit", "Bash", "Task"],
+                system_prompt=(
+                    "You are an expert code analysis agent. "
+                    "Use Read, Grep, and Glob tools to navigate the codebase and find root causes of test failures. "
+                    "Trace failure cascades through code paths. Provide specific, actionable recommendations. "
+                    "READ-ONLY MODE: Do NOT write, edit, or execute code."
+                ),
+                max_turns=15,
+                model=self.model
+            )
+            
+            # Create Claude Agent SDK client
+            async with ClaudeSDKClient(options=agent_options) as client:
+                await client.query(prompt)
+                
+                # Collect response
+                full_response = ""
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage) and hasattr(message, 'content'):
+                        for block in message.content:
+                            if hasattr(block, 'text'):
+                                full_response += block.text
+                
+                # Parse analysis
+                analysis = self._parse_pattern_analysis_response(full_response)
+                return analysis
+                
+        except Exception as e:
+            return {
+                "root_cause": f"Error analyzing pattern: {str(e)}",
+                "pattern_characteristics": {"common_inputs": [], "common_failures": []},
+                "code_issues": [],
+                "recommendations": []
+            }
 
-PATTERN: {pattern_name}
-
-EXAMPLES:
-{examples}
-
-SYSTEM ARCHITECTURE:
-{json.dumps(architecture, indent=2)}
-
-Please identify the 3-5 most relevant files to investigate for this pattern.
-
-Consider:
-- What part of the system handles these inputs?
-- What prompts or agents are involved?
-- Where might the failure be occurring?
-- Which components are responsible for the expected behavior?
-
-Return just the file paths, one per line, in order of relevance.
-"""
-
-    def _build_recommendation_prompt(self,
-                                   pattern_name: str,
-                                   root_cause: str,
-                                   code_context: Dict[str, str],
-                                   failing_tests: List[TestResult]) -> str:
-        """Build prompt for generating recommendations."""
-        test_examples = self._format_test_examples(failing_tests[:2])
-        
-        return f"""
-Generate specific, actionable recommendations to fix this failure pattern.
-
-PATTERN: {pattern_name}
-ROOT CAUSE: {root_cause}
-
-FAILING TESTS:
-{test_examples}
-
-CODE CONTEXT:
-{json.dumps(code_context, indent=2)}
-
-Please provide 3-5 specific recommendations that will fix this pattern. Each recommendation should include:
-
-1. **Title**: Clear, concise title
-2. **Description**: What needs to be changed
-3. **Location**: Exact file and line numbers
-4. **Implementation**: Specific code or prompt changes
-5. **Expected Impact**: Which tests this will fix
-6. **Effort Estimate**: Time to implement (e.g., "5 minutes", "2 hours")
-7. **Priority**: High, Medium, or Low
-8. **Type**: Code, Prompt, Architecture, or Configuration
-
-Provide your response in JSON format:
-{{
-    "recommendations": [
-        {{
-            "title": "Fix validation logic",
-            "description": "Add input validation for edge cases",
-            "location": "src/validator.py:45",
-            "implementation": "Add if statement to check for None values",
-            "expected_impact": "Fixes 8 tests in validation_error pattern",
-            "effort_estimate": "15 minutes",
-            "priority": "high",
-            "type": "code"
-        }}
-    ]
-}}
-"""
+    # =======================
+    # HELPER METHODS
+    # =======================
 
     def _format_test_examples(self, tests: List[TestResult]) -> str:
         """Format test examples for prompts."""
@@ -443,7 +474,7 @@ Example {i}:
         return "\n".join(formatted)
 
     def _parse_architecture_response(self, response: str) -> Dict[str, Any]:
-        """Parse Claude's architecture analysis into structured format."""
+        """Parse architecture analysis into structured format."""
         try:
             # Try to extract JSON from response
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
@@ -454,15 +485,16 @@ Example {i}:
         
         # Fallback: return basic structure
         return {
+            "system_type": "unknown",
             "agents": [],
             "prompts": [],
             "control_flow": {"entry_points": [], "flow": "", "decision_points": []},
-            "configuration": {"api_keys": [], "models": [], "settings": []},
+            "configuration": {"api_keys": [], "models": [], "config_files": []},
             "dependencies": []
         }
 
     def _parse_pattern_analysis_response(self, response: str) -> Dict[str, Any]:
-        """Parse Claude's pattern analysis into structured format."""
+        """Parse pattern analysis into structured format."""
         try:
             # Try to extract JSON from response
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
@@ -474,42 +506,26 @@ Example {i}:
         # Fallback: return basic structure
         return {
             "root_cause": "Unable to determine root cause",
-            "pattern_characteristics": {"common_inputs": [], "common_failures": [], "timing_issues": ""},
+            "pattern_characteristics": {"common_inputs": [], "common_failures": []},
             "code_issues": [],
             "recommendations": []
         }
 
     def _parse_file_list_response(self, response: str) -> List[str]:
-        """Parse file paths from Claude's response."""
+        """Parse file paths from response."""
         lines = response.strip().split('\n')
         file_paths = []
         
         for line in lines:
             line = line.strip()
-            if line and (line.endswith('.py') or line.endswith('.txt') or line.endswith('.md')):
-                # Convert to absolute path if relative
-                if not Path(line).is_absolute():
-                    file_path = self.project_path / line
-                    if file_path.exists():
-                        file_paths.append(str(file_path))
-                else:
-                    file_paths.append(line)
+            # Look for file paths
+            if line and ('.py' in line or '.txt' in line or '.md' in line or '.yaml' in line or '.json' in line):
+                # Clean up the path
+                path = line.split()[0] if ' ' in line else line
+                path = path.strip('"\'')
+                file_paths.append(path)
         
-        return file_paths[:5]  # Limit to 5 files
-
-    def _parse_recommendations_response(self, response: str) -> List[Dict[str, Any]]:
-        """Parse recommendations from Claude's response."""
-        try:
-            # Try to extract JSON from response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                return data.get('recommendations', [])
-        except Exception:
-            pass
-        
-        # Fallback: return empty list
-        return []
+        return file_paths[:8]  # Limit to 8 files
 
     def clear_cache(self):
         """Clear the response cache."""

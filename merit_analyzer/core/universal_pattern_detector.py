@@ -1,6 +1,7 @@
 """Universal pattern detector for any AI system."""
 
 import json
+import re
 import numpy as np  # type: ignore
 from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore
 from sklearn.cluster import DBSCAN  # type: ignore
@@ -47,14 +48,29 @@ class UniversalPatternDetector:
         if not failures:
             return {}
 
+        # For large datasets, sample before clustering to improve performance
+        # Sample size: max 500 or 30% of failures (whichever is smaller)
+        max_samples = 500
+        if len(failures) > max_samples:
+            # Use intelligent sampling to maintain diversity
+            sampled_failures = self._sample_representative_tests(failures, max_samples)
+        else:
+            sampled_failures = failures
+
         # Step 1: Discover system schema and patterns
-        schema_info = self._discover_system_schema(failures)
+        schema_info = self._discover_system_schema(sampled_failures)
         
-        # Step 2: Hierarchical clustering
-        patterns = self._hierarchical_clustering(failures, schema_info)
+        # Step 2: Hierarchical clustering on sample
+        sample_patterns = self._hierarchical_clustering(sampled_failures, schema_info)
         
-        # Step 3: Generate intelligent pattern names
-        named_patterns = self._generate_pattern_names(patterns, schema_info)
+        # Step 3: Assign all failures (not just sample) to discovered patterns
+        if len(failures) > max_samples:
+            patterns = self._assign_all_failures_to_patterns(failures, sample_patterns, schema_info)
+        else:
+            patterns = sample_patterns
+        
+        # Step 4: Generate intelligent pattern names (use fast heuristic naming)
+        named_patterns = self._generate_pattern_names_fast(patterns, schema_info)
         
         return named_patterns
 
@@ -81,9 +97,12 @@ Analyze these test results to understand the AI system's data schema and pattern
 TEST RESULTS (showing {len(sample_tests)} of {len(failures)} total failures):
 {self._format_tests_for_schema_analysis(sample_tests)}
 
-Please identify:
+As an intelligent agent, analyze the test data to discover:
 
-1. SYSTEM TYPE: What kind of AI system is this? (chatbot, agent, RAG, code generator, etc.)
+1. SYSTEM TYPE: What kind of AI system is this? 
+   - Analyze the input/output patterns, not keywords
+   - Options: chatbot, rag, agent, code_generator, image_analysis, custom, etc.
+   - Be specific based on the actual test data structure
 
 2. DATA SCHEMA: What are the key fields in input/output that matter for this system?
 
@@ -93,11 +112,17 @@ Please identify:
 
 5. IMPORTANT FIELDS: Which fields are most critical for success/failure?
 
-Provide a structured analysis focusing on what matters for pattern detection and root cause analysis.
+Provide your analysis in JSON format (NO hardcoded detection - analyze the actual data):
+{{
+    "system_type": "specific system type based on analysis",
+    "key_fields": ["field1", "field2"],
+    "failure_types": ["type1", "type2"],
+    "validation_patterns": ["pattern1", "pattern2"]
+}}
 """
 
         try:
-            response = self.claude_agent._call_claude(prompt)
+            response = self.claude_agent._call_anthropic_direct(prompt)
             return self._parse_schema_response(response)
         except Exception as e:
             print(f"Warning: Schema discovery failed: {e}")
@@ -178,6 +203,72 @@ Provide a structured analysis focusing on what matters for pattern detection and
         
         return schema_info
 
+    def _assign_all_failures_to_patterns(self, 
+                                       all_failures: List[TestResult],
+                                       sample_patterns: Dict[str, List[TestResult]],
+                                       schema_info: Dict[str, Any]) -> Dict[str, List[TestResult]]:
+        """
+        Assign all failures to patterns discovered from sample.
+        
+        This allows us to cluster on a sample but still map all failures to patterns.
+        """
+        # Extract pattern centroids from sample
+        pattern_centroids = {}
+        for pattern_name, sample_tests in sample_patterns.items():
+            if sample_tests:
+                # Use first test as representative
+                pattern_centroids[pattern_name] = sample_tests[0]
+        
+        # Assign each failure to closest pattern
+        assigned_patterns = defaultdict(list)
+        
+        # Get already-assigned failures from sample
+        sample_failures = set()
+        for tests in sample_patterns.values():
+            sample_failures.update(t.test_id for t in tests)
+        
+        # Assign remaining failures
+        for failure in all_failures:
+            if failure.test_id in sample_failures:
+                # Already assigned in sample patterns
+                continue
+            
+            # Find closest pattern by input similarity
+            best_pattern = None
+            best_similarity = -1
+            
+            failure_input = self._extract_input_features(failure).lower()
+            
+            for pattern_name, centroid_test in pattern_centroids.items():
+                centroid_input = self._extract_input_features(centroid_test).lower()
+                
+                # Simple similarity check
+                failure_words = set(failure_input.split())
+                centroid_words = set(centroid_input.split())
+                
+                if failure_words and centroid_words:
+                    similarity = len(failure_words & centroid_words) / len(failure_words | centroid_words)
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        best_pattern = pattern_name
+            
+            # Assign to best matching pattern if similarity > threshold, else create new
+            if best_pattern and best_similarity > self.similarity_threshold:
+                assigned_patterns[best_pattern].append(failure)
+            else:
+                # Create new pattern for this failure
+                assigned_patterns[f"single_failure_{failure.test_id[:8]}"].append(failure)
+        
+        # Merge with sample patterns
+        result = dict(sample_patterns)
+        for pattern_name, failures in assigned_patterns.items():
+            if pattern_name in result:
+                result[pattern_name].extend(failures)
+            else:
+                result[pattern_name] = failures
+        
+        return result
+
     def _format_tests_for_schema_analysis(self, tests: List[TestResult]) -> str:
         """Format tests for schema analysis."""
         formatted = []
@@ -192,8 +283,11 @@ Test {i} (ID: {test.test_id}):
         return "\n".join(formatted)
 
     def _parse_schema_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response for schema information."""
-        # This is a simplified parser - in production, you'd want more robust parsing
+        """
+        Parse LLM response for schema information intelligently.
+        
+        NO HARDCODED DETECTION - Let the LLM provide structured output.
+        """
         schema_info = {
             "system_type": "unknown",
             "key_fields": [],
@@ -201,15 +295,28 @@ Test {i} (ID: {test.test_id}):
             "validation_patterns": []
         }
         
-        # Extract system type
-        if "chatbot" in response.lower():
-            schema_info["system_type"] = "chatbot"
-        elif "rag" in response.lower():
-            schema_info["system_type"] = "rag"
-        elif "code" in response.lower():
-            schema_info["system_type"] = "code_generator"
-        elif "agent" in response.lower():
-            schema_info["system_type"] = "agent"
+        try:
+            # Try to extract JSON from LLM response (agent should return structured data)
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                schema_info["system_type"] = parsed.get("system_type", "unknown")
+                schema_info["key_fields"] = parsed.get("key_fields", [])
+                schema_info["failure_types"] = parsed.get("failure_types", [])
+                schema_info["validation_patterns"] = parsed.get("validation_patterns", [])
+            else:
+                # Fallback: ask LLM to provide system_type explicitly
+                # Look for explicit system_type declaration in response
+                system_type_match = re.search(r'system[_\s]*type[:\s]+([a-z_]+)', response.lower())
+                if system_type_match:
+                    schema_info["system_type"] = system_type_match.group(1)
+                else:
+                    # No hardcoded detection - use what LLM says
+                    schema_info["system_type"] = "unknown"
+        except Exception as e:
+            # If parsing fails, don't default to hardcoded values
+            # Keep as unknown and let downstream LLM analysis figure it out
+            schema_info["system_type"] = "unknown"
         
         return schema_info
 
@@ -428,17 +535,28 @@ Test {i} (ID: {test.test_id}):
         
         return delta
 
+    def _generate_pattern_names_fast(self, patterns: Dict[str, List[TestResult]], schema_info: Dict[str, Any]) -> Dict[str, List[TestResult]]:
+        """Generate pattern names using fast heuristic approach (no AI calls)."""
+        named_patterns = {}
+        
+        for pattern_name, tests in patterns.items():
+            # Use fast heuristic naming
+            heuristic_name = self._generate_heuristic_pattern_name(tests, pattern_name)
+            named_patterns[heuristic_name] = tests
+        
+        return named_patterns
+    
     def _generate_pattern_names(self, patterns: Dict[str, List[TestResult]], schema_info: Dict[str, Any]) -> Dict[str, List[TestResult]]:
         """Generate intelligent pattern names using LLM or heuristics."""
         named_patterns = {}
         
-        for pattern_name, tests in patterns.items():
+        for idx, (pattern_name, tests) in enumerate(patterns.items(), 1):
             # Always try AI naming if available (works for single tests too)
             if self.claude_agent:
                 try:
                     intelligent_name = self._generate_ai_pattern_name(tests, schema_info)
                     named_patterns[intelligent_name] = tests
-                except Exception:
+                except Exception as e:
                     # Fallback to heuristic if AI fails
                     heuristic_name = self._generate_heuristic_pattern_name(tests, pattern_name)
                     named_patterns[heuristic_name] = tests
@@ -482,7 +600,7 @@ Pattern name:
 """
 
         try:
-            response = self.claude_agent._call_claude(prompt)
+            response = self.claude_agent._call_anthropic_direct(prompt, max_tokens=200)
             # Extract the pattern name from response
             lines = response.strip().split('\n')
             

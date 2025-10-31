@@ -20,6 +20,7 @@ Classifier: Topic :: Software Development :: Testing
 Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
+Requires-Dist: claude-agent-sdk>=0.1.0
 Requires-Dist: anthropic>=0.18.0
 Requires-Dist: boto3>=1.26.0
 Requires-Dist: scikit-learn>=1.3.0
@@ -43,76 +44,191 @@ Dynamic: requires-python
 
 **AI system test failure analysis and recommendation engine**
 
-Merit Analyzer is a Python SDK that analyzes AI system test results to provide specific, actionable recommendations for fixing failures. Built on the Claude Agent SDK, it discovers system architecture, identifies failure patterns, and generates targeted fixes across code, prompts, and agent architecture.
+Merit Analyzer is a universal Python SDK that analyzes **any AI system's** test results to provide specific, actionable recommendations for fixing failures. It automatically discovers your system's architecture, identifies failure patterns, and generates targeted fixes across code, prompts, and agent architecture - whether you're building chatbots, RAG systems, code generators, or any other AI application.
 
 ## 🚀 Key Features
 
-- **Automatic Pattern Detection**: Clusters test failures into meaningful patterns
-- **Architecture Discovery**: Uses Claude Code to understand your AI system structure
-- **Root Cause Analysis**: Identifies the underlying causes of failures
-- **Actionable Recommendations**: Provides specific, prioritized fixes
+- **Universal AI System Support**: Works with chatbots, RAG systems, code generators, agents, and more
+- **Intelligent Schema Discovery**: Automatically understands your system's data patterns and validation rules
+- **Hierarchical Pattern Detection**: Clusters failures using input similarity, output patterns, and delta analysis
+- **AI-Powered Root Cause Analysis**: Uses LLM to discover why failures occur and generate failure context
+- **System-Agnostic Recommendations**: Provides fixes tailored to your specific AI system type
 - **Multiple Output Formats**: JSON, Markdown, HTML reports
-- **Framework Agnostic**: Works with any AI framework (LangChain, LlamaIndex, etc.)
+- **Framework Agnostic**: Works with any AI framework (LangChain, LlamaIndex, Anthropic, OpenAI, etc.)
+
+## 🌐 Universal AI System Support
+
+Merit Analyzer works with **any type of AI system**:
+
+### **Chatbots & Conversational AI**
+- Analyzes conversation flows, response quality, and user intent handling
+- Detects missing greetings, inappropriate responses, or context loss
+- Recommends prompt improvements and conversation logic fixes
+
+### **RAG (Retrieval-Augmented Generation) Systems**
+- Identifies missing citations, low confidence responses, or retrieval failures
+- Analyzes document processing and knowledge base integration
+- Suggests improvements to retrieval strategies and response generation
+
+### **Code Generators & AI Development Tools**
+- Detects code quality issues, missing error handling, or incorrect implementations
+- Analyzes code structure, imports, and best practices
+- Recommends code improvements and development workflow fixes
+
+### **Multi-Modal AI Systems**
+- Handles text, image, audio, and file inputs/outputs
+- Analyzes cross-modal consistency and processing pipelines
+- Identifies issues in data transformation and output formatting
+
+### **Custom AI Applications**
+- Automatically discovers your system's unique patterns and requirements
+- Adapts analysis to your specific data schemas and validation rules
+- Provides recommendations tailored to your architecture and use case
 
 ## 📋 What It Does
 
-1. **Analyzes Test Results**: Takes your test failures and groups them into patterns
-2. **Discovers Architecture**: Maps your AI system's components, prompts, and data flow
-3. **Identifies Root Causes**: Determines why specific patterns are failing
-4. **Generates Fixes**: Provides specific code changes, prompt improvements, and architectural recommendations
-5. **Prioritizes Actions**: Ranks recommendations by impact and effort
+1. **Discovers System Schema**: Automatically understands your AI system's data patterns and validation rules
+2. **Analyzes Test Results**: Takes your test failures and groups them into meaningful patterns
+3. **Maps Architecture**: Uses Claude Agent SDK with Read, Grep, Glob tools to intelligently navigate your codebase and identify system components, data flow, and decision points
+4. **Identifies Root Causes**: Claude Agent SDK reads actual code files, traces failure cascades through code paths, and determines why specific patterns are failing
+5. **Generates Recommendations**: Provides specific, actionable fixes tailored to your system type (READ-ONLY - tells you how to fix, doesn't fix automatically)
+6. **Prioritizes Actions**: Ranks recommendations by impact and effort
 
 ## 🎯 Target Users
 
-- AI/ML engineers building agent systems
-- Teams using LangChain, LlamaIndex, or custom LLM frameworks
-- Companies running test suites on AI applications
-- Developers debugging prompt/agent coordination issues
+- **AI/ML Engineers** building any type of AI system (chatbots, RAG, code generators, etc.)
+- **Development Teams** using any AI framework (LangChain, LlamaIndex, Anthropic, OpenAI, etc.)
+- **QA Engineers** running test suites on AI applications
+- **DevOps Teams** debugging AI system failures in production
+- **Product Teams** improving AI system reliability and user experience
 
 ## 📦 Installation
+
+### Prerequisites
+
+Merit Analyzer uses **Claude Agent SDK** which requires:
+
+1. **Python 3.10+**
+2. **Node.js** (for Claude Code CLI)
+3. **Claude Code CLI**: `npm install -g @anthropic-ai/claude-code`
+
+### Install Merit Analyzer
 
 ```bash
 pip install merit-analyzer
 ```
 
+### Verify Installation
+
+The Claude Code CLI is required for the SDK to navigate your codebase. If you see errors about CLI not found, ensure you've installed it:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude-code --version  # Should display version
+```
+
+### API Provider Options
+
+Merit Analyzer supports two ways to access Claude models:
+
+#### Option 1: Anthropic Direct (Default)
+
+Use your Anthropic API key directly:
+
+```python
+analyzer = MeritAnalyzer(
+    project_path="./my-ai-app",
+    api_key="sk-ant-..."  # Your Anthropic API key
+)
+```
+
+#### Option 2: Amazon Bedrock
+
+Use Claude models via Amazon Bedrock:
+
+```python
+analyzer = MeritAnalyzer(
+    project_path="./my-ai-app",
+    api_key="",  # Not needed - uses AWS credentials
+    provider="bedrock"
+)
+```
+
+**Bedrock Prerequisites:**
+1. **Enable model access** in Amazon Bedrock console
+2. **Configure AWS credentials** via AWS CLI:
+   ```bash
+   aws configure
+   ```
+   Or set environment variables:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your_access_key
+   export AWS_SECRET_ACCESS_KEY=your_secret_key
+   export AWS_REGION=us-east-1  # Or your preferred region
+   ```
+
 ## 🚀 Quick Start
 
-### 1. Basic Usage
+### Universal Analysis (Recommended)
+
+The universal analyzer works with **ANY AI system** - chatbots, RAG systems, code generators, agents, etc. It automatically discovers your system type and adapts its analysis accordingly.
 
 ```python
 from merit_analyzer import MeritAnalyzer, TestResult
 
-# Your test results
+# Create test results for ANY AI system
 test_results = [
+    # Chatbot example
     TestResult(
-        test_id="test_001",
-        input="How much does the pro plan cost?",
-        expected_output="$49/month",
-        actual_output="We have various pricing tiers",
+        test_id="chat_001",
+        input={"message": "Hello, how are you?"},
+        expected_output={"response": "Hello! I'm doing well.", "tone": "friendly"},
+        actual_output={"response": "Hi there!", "tone": "friendly"},
         status="failed",
-        failure_reason="Response too vague"
+        category="greeting"
     ),
-    # ... more tests
+    # Code generator example  
+    TestResult(
+        test_id="code_001",
+        input={"prompt": "Create a sort function", "language": "python"},
+        expected_output={"code": "def sort_list(lst): return sorted(lst)", "runs": True},
+        actual_output={"code": "def sort_list(lst): lst.sort()", "runs": True},
+        status="passed",
+        category="functions"
+    ),
+    # RAG system example
+    TestResult(
+        test_id="rag_001", 
+        input={"question": "What is the refund policy?", "context": "policy_doc.pdf"},
+        expected_output={"answer": "30-day money back guarantee", "has_citation": True},
+        actual_output={"answer": "We offer refunds", "has_citation": False},
+        status="failed",
+        category="policies"
+    )
 ]
 
-# Initialize analyzer
+# Initialize analyzer (Anthropic direct)
 analyzer = MeritAnalyzer(
     project_path="./my-ai-app",
-    api_key="sk-ant-...",  # Your Anthropic API key
-    provider="anthropic"
+    api_key="your-anthropic-api-key"
 )
 
-# Run analysis
+# OR: Initialize with Amazon Bedrock
+analyzer = MeritAnalyzer(
+    project_path="./my-ai-app",
+    api_key="",  # Not needed - uses AWS credentials
+    provider="bedrock",
+    config={"aws_region": "us-west-2"}  # Optional: defaults to us-east-1
+)
+
+# Run analysis (works with ANY AI system)
 report = analyzer.analyze(test_results)
 
-# View results
-report.display()
-
 # Save report
-analyzer.save_report(report, "analysis_report.json")
+analyzer.save_report(report, "universal_analysis_report.json")
 ```
 
-### 2. Command Line Usage
+### 1. Command Line Usage
 
 ```bash
 # Basic analysis
@@ -125,7 +241,7 @@ merit-analyze --project-path ./my-ai-app --test-results results.json --output an
 merit-analyze --test-results results.json --export-recommendations recs.md
 ```
 
-### 3. Load Test Results from File
+### 2. Load Test Results from File
 
 ```python
 from merit_analyzer import MeritAnalyzer
@@ -205,7 +321,7 @@ Create `merit_config.yaml`:
 project_path: "./my-ai-app"
 api_key: "sk-ant-..."
 provider: "anthropic"
-model: "claude-3-5-sonnet-20241022"
+model: "claude-sonnet-4-5"
 max_tokens: 4096
 min_cluster_size: 2
 max_patterns: 10
@@ -280,34 +396,42 @@ Merit Analyzer follows a layered architecture that processes test failures throu
 │  └──────────────────────────────────────────────────────┘  │
 │                           ↓                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ 2. Discovery Layer (Claude Code)                     │  │
+│  │ 2. Discovery Layer (Claude Agent SDK)                │  │
+│  │    - Uses Read, Grep, Glob tools to navigate code    │  │
+│  │    - Shared session: Claude remembers files read     │  │
 │  │    - Project structure analysis                      │  │
 │  │    - Framework detection                             │  │
 │  │    - Entry point identification                      │  │
-│  │    - Agent/prompt discovery                          │  │
+│  │    - Agent/prompt discovery via intelligent search   │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                           ↓                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ 3. Mapping Layer (Hybrid)                            │  │
-│  │    - Pattern → Code mapping                          │  │
-│  │    - Failure clustering                              │  │
+│  │ 3. Mapping Layer (Claude Agent SDK)                  │  │
+│  │    - Leverages shared session context from discovery │  │
+│  │    - Claude remembers architecture already learned   │  │
+│  │    - Uses Grep/Glob to map patterns → Code files     │  │
+│  │    - Sequential execution for context continuity     │  │
 │  │    - Comparative analysis (pass vs fail)             │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                           ↓                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ 4. Analysis Layer (Claude Code)                      │  │
+│  │ 4. Analysis Layer (Claude Agent SDK - READ-ONLY)     │  │
+│  │    - Parallel execution for scalability              │  │
+│  │    - Uses Read tool to examine actual code files     │  │
+│  │    - Traces failure cascades through code paths       │  │
 │  │    - Root cause analysis per pattern                 │  │
-│  │    - Code review of relevant sections                │  │
+│  │    - Code review of relevant sections                 │  │
 │  │    - Prompt quality analysis                         │  │
-│  │    - Architecture evaluation                         │  │
+│  │    - Architecture evaluation from shared context     │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                           ↓                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ 5. Recommendation Engine (Claude Code + SDK)         │  │
-│  │    - Generate specific fixes                         │  │
+│  │ 5. Recommendation Engine (Claude Agent SDK)          │  │
+│  │    - Generate specific fixes (recommendations only)   │  │
 │  │    - Prioritize by impact                            │  │
 │  │    - Estimate effort                                 │  │
 │  │    - Format output                                   │  │
+│  │    - READ-ONLY: Tells you how to fix, doesn't fix    │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                           ↓                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -321,16 +445,18 @@ Merit Analyzer follows a layered architecture that processes test failures throu
          ↑                                    ↑
          │                                    │
     User's API Key                    User's Codebase
-   (Anthropic/Bedrock)               (analyzed by Claude Code)
+   (Anthropic Direct or          (navigated by Claude Agent SDK)
+    Amazon Bedrock)              (Read/Grep/Glob tools - READ-ONLY)
 ```
 
 ### Technical Stack
 
 #### Core Dependencies
-- **Python**: 3.9+
-- **Claude Agent SDK**: Latest version from Anthropic
+- **Python**: 3.10+
+- **Claude Agent SDK**: `claude-agent-sdk` (provides Read, Grep, Glob tools for codebase navigation)
+- **Claude Code CLI**: `npm install -g @anthropic-ai/claude-code` (required by SDK)
 - **Required packages**:
-  - `anthropic` or `boto3` (for API access)
+  - `claude-agent-sdk>=0.1.0` (for agentic codebase analysis with file system access)
   - `scikit-learn` (for pattern clustering)
   - `numpy` (for similarity calculations)
   - `pydantic` (for data validation)
@@ -371,6 +497,69 @@ merit-analyzer/
 └── README.md
 ```
 
+## 📚 API Reference
+
+### TestResult Schema
+
+The `TestResult` model defines the structure for test data input to Merit Analyzer.
+
+#### Required Fields
+- `test_id` (str): Unique identifier for the test
+- `input` (str | dict): Input to the AI system (flexible: string or structured dict)
+- `actual_output` (str | dict): Actual response from system (flexible: string or structured dict)
+- `status` (str): Test result status - **must be one of**: `"passed"`, `"failed"`, `"error"`, `"skipped"`
+
+#### Optional Fields
+- `test_name` (str, optional): Human-readable test name
+- `expected_output` (str | dict, optional): Expected response (flexible: string or structured dict)
+- `failure_reason` (str, optional): Why the test failed ⚠️ **Highly recommended for better pattern detection**
+- `category` (str, optional): Test category (e.g., 'pricing', 'support')
+- `tags` (list[str], optional): Tags for grouping (defaults to empty list)
+- `execution_time_ms` (int, optional): Test execution time in milliseconds
+- `timestamp` (str, optional): ISO timestamp
+- `trace` (dict, optional): Execution trace/logs
+- `metadata` (dict, optional): Additional metadata
+
+> **💡 Tip**: While `failure_reason` is optional, providing it significantly improves pattern detection quality. The system will auto-generate basic failure context when missing, but explicit failure reasons lead to more accurate clustering.
+
+#### Example Usage
+
+```python
+# Minimal test result (only required fields) - String format
+test_result = TestResult(
+    test_id="test_001",
+    input="What is the capital of France?",
+    actual_output="The capital of France is Paris.",
+    status="passed"
+)
+
+# Structured data format (dict) - for complex AI systems
+test_result = TestResult(
+    test_id="test_002",
+    input={"query": "pricing", "user_tier": "enterprise"},
+    expected_output={"price": "$99/mo", "features": ["unlimited", "support"]},
+    actual_output={"price": "$99/mo", "features": ["unlimited"]},
+    status="failed",
+    failure_reason="Missing 'support' feature in response"
+)
+
+# Complete test result with all optional fields
+test_result = TestResult(
+    test_id="test_003",
+    test_name="Greeting Test",
+    input="Generate a greeting",
+    expected_output="Hello! How can I help you today?",
+    actual_output="Hello! How can I help you?",
+    status="failed",
+    failure_reason="Missing sign-off",
+    category="greeting",
+    tags=["user_interaction", "formatting"],
+    execution_time_ms=1500,
+    timestamp="2024-01-15T10:30:00Z",
+    metadata={"environment": "production", "version": "1.2.3"}
+)
+```
+
 ## 🔍 How It Works
 
 ### 1. Input Processing
@@ -378,20 +567,59 @@ merit-analyzer/
 - Detects failure patterns using clustering algorithms
 - Groups similar failures together
 
-### 2. Architecture Discovery
-- Scans your codebase for AI components
+### 2. Architecture Discovery (Agentic Navigation with Shared Session)
+- Uses **Claude Agent SDK** with Read, Grep, Glob tools to navigate your codebase
+- **Shared session**: Starts a persistent session to maintain context across operations
+- **Read tool**: Examines actual code files to understand structure
+- **Grep tool**: Searches for patterns (LLM calls, agents, prompts, etc.)
+- **Glob tool**: Finds relevant files matching patterns
+- Claude remembers files read and architecture discovered for subsequent steps
 - Detects frameworks (LangChain, LlamaIndex, etc.)
 - Maps data flow and component relationships
+- **READ-ONLY**: All navigation is read-only - no code is modified
 
-### 3. Pattern Analysis
-- Uses Claude Code to analyze each failure pattern
+### 3. Pattern Mapping (Sequential with Shared Context)
+- Leverages **shared session context** from architecture discovery
+- Claude remembers the architecture it already learned - no re-discovery needed
+- Maps failure patterns to relevant code files sequentially to maintain context
+- **Grep/Glob tools**: Find files related to each pattern
+- More efficient than starting fresh for each pattern
+
+### 4. Pattern Analysis (Parallel Execution)
+- Uses **Claude Agent SDK** to analyze patterns in parallel for scalability
+- **Read tool**: Reads actual code files to find issues
+- **Grep tool**: Traces call chains and searches for related code
+- **Glob tool**: Discovers all relevant files in failure paths
+- Traces failure cascades through code paths (root causes and cascading issues)
 - Compares failing vs passing tests
-- Identifies root causes and code issues
+- Identifies root causes and code issues with specific file:line locations
+- Each pattern analyzed concurrently with explicit architecture context
 
-### 4. Recommendation Generation
-- Generates specific, actionable fixes
+### 5. Recommendation Generation (READ-ONLY)
+- Generates specific, actionable fixes based on actual code analysis
 - Prioritizes by impact and effort
-- Provides implementation details
+- Provides implementation details and code diffs
+- **READ-ONLY mode**: Tells you how to fix issues but does NOT modify code
+
+## 🧠 Context Management
+
+Merit Analyzer uses **intelligent session management** for optimal performance:
+
+- **Shared session** for sequential operations (architecture discovery → pattern mapping)
+  - Claude maintains a single conversation context
+  - Remembers files read, architecture discovered, and patterns identified
+  - Eliminates redundant file reads and re-discovery
+  - More efficient and provides better analysis quality
+
+- **Parallel execution** for pattern analysis
+  - Multiple patterns analyzed concurrently for scalability
+  - Each analysis gets explicit context (architecture, code locations)
+  - Handles large test suites (1000+ tests) efficiently
+
+- **Automatic cleanup**
+  - Session closed after analysis completes
+  - Ensures no resource leaks
+  - Fresh start for each analysis run
 
 ## 🎯 Use Cases
 
@@ -536,7 +764,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ### Phase 1: MVP ✅
 - [x] Core analysis engine
 - [x] Pattern detection
-- [x] Claude Code integration
+- [x] Claude Agent SDK integration with Read, Grep, Glob tools
+- [x] Agentic codebase navigation (intelligent file system access)
+- [x] READ-ONLY analysis mode (no code modifications)
 - [x] Basic recommendations
 
 ### Phase 2: Enhancement (Q2 2024)
@@ -553,7 +783,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- Built on [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk)
+- Built on [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) - Uses Read, Grep, Glob tools for intelligent codebase navigation
+- Operates in **READ-ONLY mode** - Analyzes code and provides recommendations without modifying files
 - Inspired by the need for better AI system debugging tools
 - Thanks to the open-source community for foundational libraries
 
