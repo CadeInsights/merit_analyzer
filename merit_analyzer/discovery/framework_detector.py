@@ -138,17 +138,19 @@ class FrameworkDetector:
         self.framework_usage: Dict[str, List[str]] = {}
         self.confidence_scores: Dict[str, float] = {}
 
-    def detect(self, python_files: List[Path]) -> Dict[str, bool]:
+    def detect(self, python_files: List[Path], verbose: bool = False) -> Dict[str, bool]:
         """
         Detect which frameworks are in use.
 
         Args:
             python_files: List of Python files to analyze
+            verbose: If True, print verbose progress messages
 
         Returns:
             Dictionary mapping framework names to detection status
         """
-        print("🔍 Detecting AI frameworks...")
+        if verbose:
+            print("🔍 Detecting AI frameworks...")
         
         self.detected_frameworks = {framework: False for framework in self.FRAMEWORK_SIGNATURES}
         self.framework_usage = {framework: [] for framework in self.FRAMEWORK_SIGNATURES}
@@ -161,7 +163,8 @@ class FrameworkDetector:
                 
                 self._analyze_file_content(py_file, content)
             except Exception as e:
-                print(f"    ⚠️  Error reading {py_file}: {e}")
+                if verbose:
+                    print(f"    ⚠️  Error reading {py_file}: {e}")
                 continue
         
         # Calculate confidence scores
@@ -170,10 +173,11 @@ class FrameworkDetector:
         # Only return detected frameworks
         detected = {k: v for k, v in self.detected_frameworks.items() if v}
         
-        if detected:
-            print(f"  ✅ Detected frameworks: {', '.join(detected.keys())}")
-        else:
-            print("  ℹ️  No AI frameworks detected")
+        if verbose:
+            if detected:
+                print(f"  ✅ Detected frameworks: {', '.join(detected.keys())}")
+            else:
+                print("  ℹ️  No AI frameworks detected")
         
         return detected
 

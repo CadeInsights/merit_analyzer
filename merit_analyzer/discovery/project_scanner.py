@@ -27,19 +27,23 @@ class ProjectScanner:
         self.functions: Dict[str, List[str]] = {}
         self.classes: Dict[str, List[str]] = {}
 
-    def scan(self) -> Dict[str, Any]:
+    def scan(self, verbose: bool = False) -> Dict[str, Any]:
         """
         Perform comprehensive project scan.
+
+        Args:
+            verbose: If True, print verbose progress messages
 
         Returns:
             Dictionary with project structure information
         """
-        print("🔍 Scanning project structure...")
+        if verbose:
+            print("🔍 Scanning project structure...")
         
-        self._find_files()
-        self._identify_entry_points()
-        self._analyze_imports()
-        self._analyze_functions_and_classes()
+        self._find_files(verbose)
+        self._identify_entry_points(verbose)
+        self._analyze_imports(verbose)
+        self._analyze_functions_and_classes(verbose)
         
         return {
             "project_path": str(self.project_path),
@@ -55,9 +59,10 @@ class ProjectScanner:
             "project_structure": self._get_project_structure(),
         }
 
-    def _find_files(self):
+    def _find_files(self, verbose: bool = False):
         """Find relevant files in the project."""
-        print("  📁 Finding files...")
+        if verbose:
+            print("  📁 Finding files...")
         
         for root, dirs, files in os.walk(self.project_path):
             # Skip common ignore patterns
@@ -97,9 +102,10 @@ class ProjectScanner:
             'docker-compose.yaml', 'environment.yml', 'conda.yml'
         }
 
-    def _identify_entry_points(self):
+    def _identify_entry_points(self, verbose: bool = False):
         """Identify likely entry points."""
-        print("  🚪 Identifying entry points...")
+        if verbose:
+            print("  🚪 Identifying entry points...")
         
         candidates = []
         
@@ -126,9 +132,10 @@ class ProjectScanner:
         except Exception:
             return False
 
-    def _analyze_imports(self):
+    def _analyze_imports(self, verbose: bool = False):
         """Analyze imports across all Python files."""
-        print("  📦 Analyzing imports...")
+        if verbose:
+            print("  📦 Analyzing imports...")
         
         for py_file in self.python_files:
             try:
@@ -156,9 +163,10 @@ class ProjectScanner:
         
         return imports
 
-    def _analyze_functions_and_classes(self):
+    def _analyze_functions_and_classes(self, verbose: bool = False):
         """Analyze functions and classes in Python files."""
-        print("  🔧 Analyzing functions and classes...")
+        if verbose:
+            print("  🔧 Analyzing functions and classes...")
         
         for py_file in self.python_files:
             try:

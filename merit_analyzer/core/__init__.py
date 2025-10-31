@@ -2,12 +2,12 @@
 
 from .analyzer import MeritAnalyzer
 from .test_parser import TestParser
-from .pattern_detector import PatternDetector
+from .universal_pattern_detector import UniversalPatternDetector
 from .config import MeritConfig
 
 __all__ = [
     "MeritAnalyzer",
     "TestParser", 
-    "PatternDetector",
+    "UniversalPatternDetector",
     "MeritConfig",
 ]

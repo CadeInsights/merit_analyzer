@@ -1,5 +1,6 @@
 """Root cause analysis for test failures."""
 
+import json
 import re
 from typing import List, Dict, Any, Optional, Tuple
 from collections import Counter, defaultdict
@@ -41,10 +42,12 @@ class RootCauseAnalyzer:
         Returns:
             Dictionary with root cause analysis
         """
-        print(f"  🔍 Analyzing root cause for pattern '{pattern.name}'...")
+        # Verbose output suppressed - progress shown via Rich in main analyzer
         
         # Analyze test failures
         failure_analysis = self._analyze_failures(pattern.test_results)
+        # Add pattern name to failure analysis for root cause detection
+        failure_analysis["pattern_name"] = pattern.name.lower()
         
         # Analyze code context
         code_analysis = self._analyze_code_context(code_context)
@@ -129,6 +132,12 @@ class RootCauseAnalyzer:
         # Common words
         all_words = []
         for inp in inputs:
+            # Convert to string if it's a dict
+            if isinstance(inp, dict):
+                inp = json.dumps(inp, sort_keys=True)
+            elif not isinstance(inp, str):
+                inp = str(inp)
+            
             words = re.findall(r'\b[a-z]{3,}\b', inp.lower())
             all_words.extend(words)
         
@@ -333,23 +342,66 @@ class RootCauseAnalyzer:
         # Score different potential causes
         cause_scores = defaultdict(float)
         
-        # Analyze failure patterns
+        # Analyze pattern name for hints (often very descriptive)
+        pattern_name = failure_analysis.get("pattern_name", "").lower()
+        
+        if pattern_name:
+            # Pattern names often contain the root cause
+            if any(term in pattern_name for term in ["hallucinat", "hallucin"]):
+                cause_scores["hallucination"] += 1.0  # High confidence from pattern name
+            if any(term in pattern_name for term in ["missing", "no data", "empty", "insufficient"]):
+                cause_scores["missing_data"] += 1.0
+            if any(term in pattern_name for term in ["truncat", "cut", "incomplete"]):
+                cause_scores["content_truncation"] += 1.0
+            if any(term in pattern_name for term in ["search", "query", "retrieval", "rag"]):
+                cause_scores["search_failure"] += 0.9
+            if any(term in pattern_name for term in ["tone", "format", "style", "quality"]):
+                cause_scores["output_format"] += 0.8
+        
+        # First, analyze actual failure reasons from tests (more specific than generic error types)
+        failure_reasons = failure_analysis.get("common_failure_reasons", [])
+        if failure_reasons:
+            # Look for RAG-specific failure patterns
+            reasons_text = " ".join([r.get("reason", "").lower() for r in failure_reasons[:3]])
+            
+            if any(term in reasons_text for term in ["missing", "not found", "no data", "empty result"]):
+                cause_scores["missing_data"] += 0.9
+            if any(term in reasons_text for term in ["hallucinat", "incorrect", "wrong", "fabricat"]):
+                cause_scores["hallucination"] += 0.9
+            if any(term in reasons_text for term in ["truncat", "cut off", "incomplete"]):
+                cause_scores["content_truncation"] += 0.8
+            if any(term in reasons_text for term in ["search", "query", "retrieval"]):
+                cause_scores["search_failure"] += 0.8
+            if any(term in reasons_text for term in ["tone", "format", "style"]):
+                cause_scores["output_format"] += 0.7
+        
+        # Analyze output patterns for RAG-specific issues
+        output_patterns = failure_analysis.get("output_patterns", [])
+        for pattern in output_patterns:
+            if "missing_fields" in str(pattern).lower():
+                cause_scores["missing_data"] += 0.5
+            if "wrong_values" in str(pattern).lower():
+                cause_scores["hallucination"] += 0.5
+        
+        # Analyze failure patterns (generic error types)
         error_types = failure_analysis.get("error_types", [])
         if "timeout" in error_types:
             cause_scores["timeout"] += 0.8
         if "permission" in error_types:
             cause_scores["permission"] += 0.8
         if "validation" in error_types:
-            cause_scores["validation_error"] += 0.7
+            cause_scores["validation_error"] += 0.4  # Lower weight - too generic
         if "not_found" in error_types:
-            cause_scores["data_format"] += 0.6
+            cause_scores["missing_data"] += 0.6  # More specific than data_format
         
         # Analyze code issues
         for issue in code_analysis.get("potential_issues", []):
             if issue["type"] == "missing_error_handling":
                 cause_scores["api_error"] += 0.6
             elif issue["type"] == "missing_validation":
-                cause_scores["validation_error"] += 0.5
+                # Only add validation_error if we don't have more specific causes
+                if not any(c in cause_scores for c in ["missing_data", "hallucination", "search_failure"]):
+                    cause_scores["validation_error"] += 0.3  # Lower weight
             elif issue["type"] == "hardcoded_value":
                 cause_scores["model_config"] += 0.3
         
@@ -360,9 +412,22 @@ class RootCauseAnalyzer:
             elif issue["type"] == "missing_prompts":
                 cause_scores["prompt_issue"] += 0.6
         
-        # Return the cause with highest score
+        # Return the cause with highest score, preferring specific causes over generic ones
         if cause_scores:
-            return max(cause_scores.items(), key=lambda x: x[1])[0]
+            # Separate specific causes from generic ones
+            specific_causes = ["missing_data", "hallucination", "content_truncation", "search_failure", 
+                             "output_format", "prompt_issue", "timeout", "permission", "api_error"]
+            generic_causes = ["validation_error", "model_config", "logic_error", "data_format", "edge_case"]
+            
+            # Filter out generic causes if we have specific ones
+            specific_scores = {c: s for c, s in cause_scores.items() if c in specific_causes}
+            if specific_scores:
+                # Return the best specific cause
+                return max(specific_scores.items(), key=lambda x: x[1])[0]
+            
+            # Only use generic causes if no specific ones found
+            best_cause, best_score = max(cause_scores.items(), key=lambda x: x[1])
+            return best_cause
         else:
             return "unknown"
 

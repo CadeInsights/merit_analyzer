@@ -41,7 +41,7 @@ class RecommendationGenerator:
         Returns:
             List of recommendations
         """
-        print(f"  💡 Generating recommendations for pattern '{pattern.name}'...")
+        # Recommendations are generated - don't print progress here
         
         # Generate recommendations using Claude
         claude_recommendations = self._generate_claude_recommendations(

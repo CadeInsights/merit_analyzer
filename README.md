@@ -2,31 +2,63 @@
 
 **AI system test failure analysis and recommendation engine**
 
-Merit Analyzer is a Python SDK that analyzes AI system test results to provide specific, actionable recommendations for fixing failures. Built on the Claude Agent SDK, it discovers system architecture, identifies failure patterns, and generates targeted fixes across code, prompts, and agent architecture.
+Merit Analyzer is a universal Python SDK that analyzes **any AI system's** test results to provide specific, actionable recommendations for fixing failures. It automatically discovers your system's architecture, identifies failure patterns, and generates targeted fixes across code, prompts, and agent architecture - whether you're building chatbots, RAG systems, code generators, or any other AI application.
 
 ## 🚀 Key Features
 
-- **Automatic Pattern Detection**: Clusters test failures into meaningful patterns
-- **Architecture Discovery**: Uses Claude Code to understand your AI system structure
-- **Root Cause Analysis**: Identifies the underlying causes of failures
-- **Actionable Recommendations**: Provides specific, prioritized fixes
+- **Universal AI System Support**: Works with chatbots, RAG systems, code generators, agents, and more
+- **Intelligent Schema Discovery**: Automatically understands your system's data patterns and validation rules
+- **Hierarchical Pattern Detection**: Clusters failures using input similarity, output patterns, and delta analysis
+- **AI-Powered Root Cause Analysis**: Uses LLM to discover why failures occur and generate failure context
+- **System-Agnostic Recommendations**: Provides fixes tailored to your specific AI system type
 - **Multiple Output Formats**: JSON, Markdown, HTML reports
-- **Framework Agnostic**: Works with any AI framework (LangChain, LlamaIndex, etc.)
+- **Framework Agnostic**: Works with any AI framework (LangChain, LlamaIndex, Anthropic, OpenAI, etc.)
+
+## 🌐 Universal AI System Support
+
+Merit Analyzer works with **any type of AI system**:
+
+### **Chatbots & Conversational AI**
+- Analyzes conversation flows, response quality, and user intent handling
+- Detects missing greetings, inappropriate responses, or context loss
+- Recommends prompt improvements and conversation logic fixes
+
+### **RAG (Retrieval-Augmented Generation) Systems**
+- Identifies missing citations, low confidence responses, or retrieval failures
+- Analyzes document processing and knowledge base integration
+- Suggests improvements to retrieval strategies and response generation
+
+### **Code Generators & AI Development Tools**
+- Detects code quality issues, missing error handling, or incorrect implementations
+- Analyzes code structure, imports, and best practices
+- Recommends code improvements and development workflow fixes
+
+### **Multi-Modal AI Systems**
+- Handles text, image, audio, and file inputs/outputs
+- Analyzes cross-modal consistency and processing pipelines
+- Identifies issues in data transformation and output formatting
+
+### **Custom AI Applications**
+- Automatically discovers your system's unique patterns and requirements
+- Adapts analysis to your specific data schemas and validation rules
+- Provides recommendations tailored to your architecture and use case
 
 ## 📋 What It Does
 
-1. **Analyzes Test Results**: Takes your test failures and groups them into patterns
-2. **Discovers Architecture**: Maps your AI system's components, prompts, and data flow
-3. **Identifies Root Causes**: Determines why specific patterns are failing
-4. **Generates Fixes**: Provides specific code changes, prompt improvements, and architectural recommendations
-5. **Prioritizes Actions**: Ranks recommendations by impact and effort
+1. **Discovers System Schema**: Automatically understands your AI system's data patterns and validation rules
+2. **Analyzes Test Results**: Takes your test failures and groups them into meaningful patterns
+3. **Maps Architecture**: Identifies system components, data flow, and decision points
+4. **Identifies Root Causes**: Uses AI to determine why specific patterns are failing
+5. **Generates Recommendations**: Provides specific, actionable fixes tailored to your system type
+6. **Prioritizes Actions**: Ranks recommendations by impact and effort
 
 ## 🎯 Target Users
 
-- AI/ML engineers building agent systems
-- Teams using LangChain, LlamaIndex, or custom LLM frameworks
-- Companies running test suites on AI applications
-- Developers debugging prompt/agent coordination issues
+- **AI/ML Engineers** building any type of AI system (chatbots, RAG, code generators, etc.)
+- **Development Teams** using any AI framework (LangChain, LlamaIndex, Anthropic, OpenAI, etc.)
+- **QA Engineers** running test suites on AI applications
+- **DevOps Teams** debugging AI system failures in production
+- **Product Teams** improving AI system reliability and user experience
 
 ## 📦 Installation
 
@@ -36,42 +68,58 @@ pip install merit-analyzer
 
 ## 🚀 Quick Start
 
-### 1. Basic Usage
+### Universal Analysis (Recommended)
+
+The universal analyzer works with **ANY AI system** - chatbots, RAG systems, code generators, agents, etc. It automatically discovers your system type and adapts its analysis accordingly.
 
 ```python
 from merit_analyzer import MeritAnalyzer, TestResult
 
-# Your test results
+# Create test results for ANY AI system
 test_results = [
+    # Chatbot example
     TestResult(
-        test_id="test_001",
-        input="How much does the pro plan cost?",
-        expected_output="$49/month",
-        actual_output="We have various pricing tiers",
+        test_id="chat_001",
+        input={"message": "Hello, how are you?"},
+        expected_output={"response": "Hello! I'm doing well.", "tone": "friendly"},
+        actual_output={"response": "Hi there!", "tone": "friendly"},
         status="failed",
-        failure_reason="Response too vague"
+        category="greeting"
     ),
-    # ... more tests
+    # Code generator example  
+    TestResult(
+        test_id="code_001",
+        input={"prompt": "Create a sort function", "language": "python"},
+        expected_output={"code": "def sort_list(lst): return sorted(lst)", "runs": True},
+        actual_output={"code": "def sort_list(lst): lst.sort()", "runs": True},
+        status="passed",
+        category="functions"
+    ),
+    # RAG system example
+    TestResult(
+        test_id="rag_001", 
+        input={"question": "What is the refund policy?", "context": "policy_doc.pdf"},
+        expected_output={"answer": "30-day money back guarantee", "has_citation": True},
+        actual_output={"answer": "We offer refunds", "has_citation": False},
+        status="failed",
+        category="policies"
+    )
 ]
 
 # Initialize analyzer
 analyzer = MeritAnalyzer(
     project_path="./my-ai-app",
-    api_key="sk-ant-...",  # Your Anthropic API key
-    provider="anthropic"
+    api_key="your-anthropic-api-key"
 )
 
-# Run analysis
+# Run analysis (works with ANY AI system)
 report = analyzer.analyze(test_results)
 
-# View results
-report.display()
-
 # Save report
-analyzer.save_report(report, "analysis_report.json")
+analyzer.save_report(report, "universal_analysis_report.json")
 ```
 
-### 2. Command Line Usage
+### 1. Command Line Usage
 
 ```bash
 # Basic analysis
@@ -84,7 +132,7 @@ merit-analyze --project-path ./my-ai-app --test-results results.json --output an
 merit-analyze --test-results results.json --export-recommendations recs.md
 ```
 
-### 3. Load Test Results from File
+### 2. Load Test Results from File
 
 ```python
 from merit_analyzer import MeritAnalyzer
