@@ -318,15 +318,14 @@ class MeritAnalyzer:
                 console.print(f"[green]✓[/green] System architecture analyzed")
                 log_step_time("Architecture analysis")
                 
-                # Step 6: Analyze patterns (Claude Agent SDK uses Grep/Glob to find code + analyze)
+                # Step 6: Analyze patterns (PARALLEL with OPTIMIZED prompts)
                 console.print()  # Blank line for spacing
                 all_recommendations = []
                 pattern_summaries = {}
                 passing_tests = [t for t in parsed_tests if t.status == "passed"]
                 
-                # Analyze patterns in parallel for scalability
-                # API allows 1K requests/min (~16/sec), so we can run many patterns concurrently
-                max_workers = min(self.config.max_workers, len(patterns), 15)  # Cap at 15 for reasonable parallelism
+                # Parallel execution with 60s timeout per pattern
+                max_workers = min(self.config.max_workers, len(patterns), 15)
                 
                 with Progress(
                     SpinnerColumn(), 
@@ -342,9 +341,8 @@ class MeritAnalyzer:
                         total=len(patterns)
                     )
                     
-                    # ThreadPoolExecutor INSIDE Progress context so updates work
+                    # ThreadPoolExecutor INSIDE Progress context
                     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        # Submit all pattern analyses at once
                         future_to_pattern = {
                             executor.submit(
                                 self._analyze_single_pattern,
@@ -356,11 +354,10 @@ class MeritAnalyzer:
                             for pattern_name, failing_tests in patterns.items()
                         }
                         
-                        # Collect results as they complete
                         for future in as_completed(future_to_pattern):
                             pattern_name = future_to_pattern[future]
                             try:
-                                result = future.result()
+                                result = future.result(timeout=60)  # 60s timeout
                                 if result:
                                     pattern, recommendations, summary = result
                                     all_recommendations.extend(recommendations)
@@ -368,8 +365,11 @@ class MeritAnalyzer:
                                     progress.update(task, advance=1)
                                 else:
                                     progress.update(task, advance=1)
+                            except TimeoutError:
+                                console.print(f"\n[yellow]⏱[/yellow] Timeout analyzing '[dim]{pattern_name}[/dim]'")
+                                progress.update(task, advance=1)
                             except Exception as e:
-                                console.print(f"\n[yellow]⚠[/yellow] Error analyzing pattern '[dim]{pattern_name}[/dim]': {e}")
+                                console.print(f"\n[yellow]⚠[/yellow] Error analyzing '[dim]{pattern_name}[/dim]': {e}")
                                 progress.update(task, advance=1)
                 
                 console.print(f"[green]✓[/green] Completed analysis of [bold]{len(pattern_summaries)}/{len(patterns)}[/bold] patterns")
@@ -441,71 +441,41 @@ class MeritAnalyzer:
                 pattern_summaries = {}
                 passing_tests = [t for t in parsed_tests if t.status == "passed"]
                 
-                # Analyze patterns in parallel for scalability
-                # API allows 1K requests/min (~16/sec), so we can run many patterns concurrently
-                max_workers = min(self.config.max_workers, len(patterns), 15)  # Cap at 15 for reasonable parallelism
+                # Analyze patterns in PARALLEL with optimized prompts (COST EFFICIENT + FAST)
+                print(f"Analyzing {len(patterns)} patterns...")
                 
-                if RICH_AVAILABLE:
-                    with Progress(
-                        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), 
-                        BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                        console=console,
-                    ) as progress:
-                        task = progress.add_task("Analyzing patterns...", total=len(patterns))
-                        
-                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                            # Submit all pattern analyses
-                            future_to_pattern = {
-                                executor.submit(
-                                    self._analyze_single_pattern,
-                                    pattern_name,
-                                    failing_tests,
-                                    passing_tests,
-                                    architecture
-                                ): pattern_name
-                                for pattern_name, failing_tests in patterns.items()
-                            }
-                            
-                            # Collect results as they complete
-                            for future in as_completed(future_to_pattern):
-                                pattern_name = future_to_pattern[future]
-                                try:
-                                    result = future.result()
-                                    if result:
-                                        pattern, recommendations, summary = result
-                                        all_recommendations.extend(recommendations)
-                                        pattern_summaries[pattern_name] = summary
-                                        progress.update(task, advance=1)
-                                except Exception as e:
-                                    print(f"\n   ⚠️  Error analyzing pattern '{pattern_name}': {e}")
-                                    progress.update(task, advance=1)
-                else:
-                    # Non-Rich parallel execution
-                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        future_to_pattern = {
-                            executor.submit(
-                                self._analyze_single_pattern,
-                                pattern_name,
-                                failing_tests,
-                                passing_tests,
-                                architecture
-                            ): pattern_name
-                            for pattern_name, failing_tests in patterns.items()
-                        }
-                        
-                        for i, future in enumerate(as_completed(future_to_pattern), 1):
-                            pattern_name = future_to_pattern[future]
-                            try:
-                                result = future.result()
-                                if result:
-                                    pattern, recommendations, summary = result
-                                    all_recommendations.extend(recommendations)
-                                    pattern_summaries[pattern_name] = summary
-                                    print(f"   ✅ Analyzed {i}/{len(patterns)}: {pattern_name}")
-                                else:
-                                    print(f"   ⚠️  No results for {pattern_name}")
-                            except Exception as e:
-                                print(f"   ⚠️  Error analyzing pattern '{pattern_name}': {e}")
+                max_workers = min(self.config.max_workers, len(patterns), 15)
+                
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_pattern = {
+                        executor.submit(
+                            self._analyze_single_pattern,
+                            pattern_name,
+                            failing_tests,
+                            passing_tests,
+                            architecture
+                        ): pattern_name
+                        for pattern_name, failing_tests in patterns.items()
+                    }
+                    
+                    for i, future in enumerate(as_completed(future_to_pattern), 1):
+                        pattern_name = future_to_pattern[future]
+                        try:
+                            # Add 60s timeout per pattern to prevent hanging
+                            result = future.result(timeout=60)
+                            if result:
+                                pattern, recommendations, summary = result
+                                all_recommendations.extend(recommendations)
+                                pattern_summaries[pattern_name] = summary
+                                print(f"   ✅ Analyzed {i}/{len(patterns)}: {pattern_name}")
+                            else:
+                                print(f"   ⚠️  No results for {pattern_name}")
+                        except TimeoutError:
+                            print(f"   ⏱️  Timeout (60s) analyzing '{pattern_name}' - skipping")
+                        except Exception as e:
+                            print(f"   ⚠️  Error analyzing pattern '{pattern_name}': {e}")
+                
+                print(f"   ✅ Analyzed {len(pattern_summaries)}/{len(patterns)} patterns")
                 
                 # Early deduplication before prioritization
                 print(f"\n🔄 Deduplicating {len(all_recommendations)} recommendations...")
@@ -669,12 +639,28 @@ class MeritAnalyzer:
             # Get source files to analyze (exclude test files)
             source_files = self._get_source_files_to_analyze()
             
-            # Analyze using standard API (reads files, no agent overhead)
+            # For small codebases, read files upfront (saves Agent SDK overhead)
+            code_content = None
+            if len(source_files) < 3:
+                try:
+                    code_parts = []
+                    for file_path in source_files:
+                        full_path = self.project_path / file_path
+                        if full_path.exists():
+                            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                code_parts.append(f"=== {file_path} ===\n{content}\n")
+                    code_content = "\n\n".join(code_parts)
+                except Exception as e:
+                    print(f"   ⚠️  Error reading files: {e}")
+            
+            # Analyze pattern
             analysis = self.claude_agent.analyze_pattern(
                 pattern_name=pattern_name,
                 failing_tests=failing_tests,
                 passing_tests=similar_passing,
-                source_files=source_files  # Files to read and analyze
+                source_files=source_files,
+                code_content=code_content  # Pre-read code for small codebases
             )
             
             # Track costs

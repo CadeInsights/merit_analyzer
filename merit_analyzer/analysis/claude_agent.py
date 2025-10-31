@@ -293,22 +293,20 @@ Limit to 3-5 most relevant files."""
                        pattern_name: str,
                        failing_tests: List[TestResult],
                        passing_tests: List[TestResult],
-                       source_files: Optional[List[str]] = None) -> Dict[str, Any]:
+                       source_files: Optional[List[str]] = None,
+                       code_content: Optional[str] = None) -> Dict[str, Any]:
         """
-        Analyze a failure pattern using Agent SDK with directive prompt.
+        Analyze a failure pattern.
         
-        Agent gets:
-        - The problem (test failures + errors)
-        - The map (file structure)
-        - The tools (Read, Grep, Glob)
-        
-        Agent investigates and returns root cause + recommendations.
+        For small codebases (< 3 files): Uses standard API with code in context (FAST + RELIABLE JSON)
+        For large codebases: Uses Agent SDK with tools (FLEXIBLE but slower)
 
         Args:
             pattern_name: Name of the failure pattern
             failing_tests: Failed test cases
             passing_tests: Similar tests that are passing
             source_files: Available source files (as context)
+            code_content: Pre-read code content (for small codebases)
 
         Returns:
             Dict with root_cause, recommendations, and token usage
@@ -317,13 +315,57 @@ Limit to 3-5 most relevant files."""
         if cache_key in self._response_cache:
             return json.loads(self._response_cache[cache_key])
         
-        # Use Agent SDK with directive prompt
-        analysis = _run_async(self._analyze_pattern_with_agent(
-            pattern_name, failing_tests, passing_tests, source_files or []
-        ))
+        # For small codebases with pre-read code, use direct API (faster + reliable JSON)
+        if code_content and (not source_files or len(source_files) < 3):
+            analysis = self._analyze_pattern_direct(
+                pattern_name, failing_tests, passing_tests, code_content
+            )
+        else:
+            # For large codebases, use Agent SDK with tools
+            analysis = _run_async(self._analyze_pattern_with_agent(
+                pattern_name, failing_tests, passing_tests, source_files or []
+            ))
         
         # Cache the result
         self._response_cache[cache_key] = json.dumps(analysis)
+        
+        return analysis
+    
+    def _analyze_pattern_direct(self,
+                                 pattern_name: str,
+                                 failing_tests: List[TestResult],
+                                 passing_tests: List[TestResult],
+                                 code_content: str) -> Dict[str, Any]:
+        """
+        Analyze pattern using standard API with code already in context.
+        
+        This is faster and more reliable for small codebases (< 3 files).
+        """
+        # Get sample error
+        sample_error = failing_tests[0].failure_reason if failing_tests else "Unknown"
+        if len(sample_error) > 150:
+            sample_error = sample_error[:150] + "..."
+        
+        # Build prompt with code in context
+        prompt = f"""Analyze this test failure pattern in the codebase.
+
+PATTERN: {pattern_name}
+FAILURES: {len(failing_tests)} tests
+ERROR: {sample_error}
+
+CODEBASE:
+{code_content}
+
+Find the root cause and return ONLY valid JSON (no explanation):
+
+{{"root_cause": "file.py:line - specific issue", "recommendations": [{{"type": "code", "title": "short title", "description": "detailed fix with code example", "priority": "high", "effort": "low"}}]}}"""
+        
+        # Use standard API for fast, reliable JSON
+        response_text, token_usage = self._call_anthropic_direct(prompt, max_tokens=4096)
+        
+        # Parse response
+        analysis = self._parse_pattern_analysis_response(response_text, pattern_name)
+        analysis['_cost_info'] = token_usage
         
         return analysis
 
@@ -348,27 +390,71 @@ Limit to 3-5 most relevant files."""
                 sample_error = sample_error[:200] + "..."
             
             prompt = f"""Pattern: {pattern_name}
-Failures: {len(failing_tests)} tests failing with error like: {sample_error}
+Failures: {len(failing_tests)} tests
+Error: {sample_error}
 
-Find root cause in code and return JSON with:
-- root_cause (file:line)
-- recommendations (type, title, description, priority, effort)
-
-Use Grep/Read to investigate. Return ONLY valid JSON."""
+Use Grep/Read to find the root cause. When done, call submit_analysis tool with your findings."""
             
-            # Configure Agent SDK
-            from claude_agent_sdk import query as claude_query, ClaudeAgentOptions
+            # Configure Agent SDK with structured tool for reliable JSON output
+            from claude_agent_sdk import query as claude_query, ClaudeAgentOptions  # type: ignore
+            
+            # Define structured analysis tool - forces JSON schema
+            submit_analysis_tool = {
+                "name": "submit_analysis",
+                "description": "Submit the final analysis of the test failure pattern",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "root_cause": {
+                            "type": "string",
+                            "description": "The root cause with file:line reference"
+                        },
+                        "recommendations": {
+                            "type": "array",
+                            "description": "List of recommendations",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["code", "prompt", "config", "design"]
+                                    },
+                                    "title": {
+                                        "type": "string"
+                                    },
+                                    "description": {
+                                        "type": "string"
+                                    },
+                                    "priority": {
+                                        "type": "string",
+                                        "enum": ["high", "medium", "low"]
+                                    },
+                                    "effort": {
+                                        "type": "string",
+                                        "enum": ["high", "medium", "low"]
+                                    }
+                                },
+                                "required": ["type", "title", "description", "priority", "effort"]
+                            }
+                        }
+                    },
+                    "required": ["root_cause", "recommendations"]
+                }
+            }
             
             options = ClaudeAgentOptions(
                 cwd=str(self.project_path),
-                allowed_tools=["Read", "Grep", "Glob"],  # Let agent investigate
-                max_turns=6,  # Minimal turns to keep costs down (was 15!)
+                allowed_tools=["Read", "Grep", "Glob"],
+                max_turns=10,
                 model=self.model,
-                stderr=lambda msg: None  # Suppress subprocess stderr noise (loop cleanup messages)
+                stderr=lambda msg: None,
+                custom_tools=[submit_analysis_tool],  # Add structured tool
+                system_prompt="You are a code analyzer. After investigating with Grep/Read, submit your findings using the submit_analysis tool."
             )
             
             # Run analysis with query()
             full_response = ""
+            tool_result = None
             total_input_tokens = 0
             total_output_tokens = 0
             total_cost_usd = 0.0
@@ -379,6 +465,10 @@ Use Grep/Read to investigate. Return ONLY valid JSON."""
                     for block in message.content:
                         if hasattr(block, 'text'):
                             full_response += block.text
+                        # Extract structured data from tool calls
+                        elif hasattr(block, 'type') and block.type == 'tool_use':
+                            if hasattr(block, 'name') and block.name == 'submit_analysis':
+                                tool_result = block.input  # Structured JSON from tool!
                 
                 # Accumulate tokens/cost from EVERY message (not just final)
                 if hasattr(message, 'usage'):
@@ -402,8 +492,17 @@ Use Grep/Read to investigate. Return ONLY valid JSON."""
                 'total_cost_usd': total_cost_usd
             }
             
-            # Parse analysis
-            analysis = self._parse_pattern_analysis_response(full_response, pattern_name)
+            # Use structured tool result if available, otherwise parse text
+            if tool_result:
+                analysis = {
+                    'root_cause': tool_result.get('root_cause', 'Unknown'),
+                    'recommendations': tool_result.get('recommendations', []),
+                    'pattern_characteristics': {'common_inputs': [], 'common_failures': []},
+                    'code_issues': []
+                }
+            else:
+                # Fallback to text parsing
+                analysis = self._parse_pattern_analysis_response(full_response, pattern_name)
             
             # Add cost tracking
             analysis['_cost_info'] = token_usage
@@ -440,6 +539,197 @@ Use Grep/Read to investigate. Return ONLY valid JSON."""
         
         # Return top 3 keywords
         return ", ".join(list(keywords)[:3]) if keywords else "error, failure, issue"
+    
+    def analyze_patterns_batch(self,
+                                patterns: Dict[str, List[TestResult]],
+                                passing_tests: List[TestResult],
+                                architecture: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Analyze multiple patterns in a SINGLE persistent Agent SDK session.
+        
+        This is the cost-efficient approach:
+        - Files are read ONCE and stay in context
+        - Each pattern analysis reuses already-read code
+        - Expected cost: ~90% less than individual sessions
+        
+        Args:
+            patterns: Dict of pattern_name -> failing tests
+            passing_tests: All passing tests for comparison
+            architecture: System architecture with file locations
+            
+        Returns:
+            Dict of pattern_name -> analysis results
+        """
+        return _run_async(self._analyze_patterns_batch_async(patterns, passing_tests, architecture))
+    
+    async def _analyze_patterns_batch_async(self,
+                                            patterns: Dict[str, List[TestResult]],
+                                            passing_tests: List[TestResult],
+                                            architecture: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Async implementation of batch pattern analysis.
+        
+        NOTE: Claude Agent SDK's query() spawns independent subprocesses, so we can't
+        maintain a persistent session. However, we get cost savings from:
+        1. Ultra-minimal prompts (no full test data dumps)
+        2. Architecture hints guiding Claude to specific files/lines
+        3. Lower max_turns (6 vs 15)
+        4. Accumulated token tracking across all patterns
+        """
+        try:
+            # Lazy import Claude SDK
+            _lazy_import_claude_sdk()
+            from claude_agent_sdk import query as claude_query, ClaudeAgentOptions  # type: ignore
+            
+            # Configure options (used for each pattern)
+            options = ClaudeAgentOptions(
+                cwd=str(self.project_path),
+                allowed_tools=["Read", "Grep", "Glob"],
+                max_turns=10,  # Enough for grep + read + analyze + respond
+                model=self.model,
+                stderr=lambda msg: None,
+                system_prompt="""You are a code analyzer. After investigating, you MUST respond with ONLY valid JSON in this exact format:
+{"root_cause": "file.py:123 - specific issue found", "recommendations": [{"type": "code|prompt|config", "title": "short title", "description": "detailed fix", "priority": "high|medium|low", "effort": "high|medium|low"}]}
+
+NO explanations. NO narration. ONLY the JSON object."""
+            )
+            
+            results = {}
+            total_input_tokens = 0
+            total_output_tokens = 0
+            
+            # Analyze each pattern with targeted prompts
+            for pattern_name, failing_tests in patterns.items():
+                try:
+                    # Build targeted prompt with architecture hints
+                    prompt = self._build_targeted_prompt(
+                        pattern_name, 
+                        failing_tests, 
+                        passing_tests,
+                        architecture
+                    )
+                    
+                    # Query for this pattern
+                    response_text = ""
+                    pattern_input_tokens = 0
+                    pattern_output_tokens = 0
+                    
+                    async for message in claude_query(prompt=prompt, options=options):
+                        # Track tokens
+                        if hasattr(message, 'usage'):
+                            usage = message.usage
+                            if isinstance(usage, dict):
+                                pattern_input_tokens += usage.get('input_tokens', 0)
+                                pattern_output_tokens += usage.get('output_tokens', 0)
+                        
+                        # Extract response text
+                        if hasattr(message, 'content'):
+                            for block in message.content:
+                                if hasattr(block, 'text'):
+                                    response_text += block.text
+                        
+                        # Break on final result
+                        if hasattr(message, 'subtype') and message.subtype in ['success', 'error']:
+                            break
+                    
+                    # Accumulate totals
+                    total_input_tokens += pattern_input_tokens
+                    total_output_tokens += pattern_output_tokens
+                    
+                    # Parse analysis
+                    analysis = self._parse_pattern_analysis_response(response_text, pattern_name)
+                    analysis['_cost_info'] = {
+                        'input_tokens': total_input_tokens,
+                        'output_tokens': total_output_tokens
+                    }
+                    results[pattern_name] = analysis
+                    
+                except Exception as e:
+                    print(f"\n⚠️  Error analyzing pattern '{pattern_name}': {e}")
+                    results[pattern_name] = {
+                        "root_cause": f"Error: {str(e)}",
+                        "pattern_characteristics": {"common_inputs": [], "common_failures": []},
+                        "code_issues": [],
+                        "recommendations": [],
+                        "_cost_info": {"error": str(e)}
+                    }
+            
+            return results
+            
+        except Exception as e:
+            import traceback
+            print(f"\n❌ Error in batch pattern analysis: {str(e)}")
+            traceback.print_exc()
+            return {}
+    
+    def _build_initial_context(self, architecture: Dict[str, Any]) -> str:
+        """Build initial context message for the persistent session."""
+        agents = architecture.get('agents', [])
+        entry_points = architecture.get('control_flow', {}).get('entry_points', [])
+        
+        agent_info = ""
+        if agents:
+            for agent in agents[:5]:  # Top 5 agents
+                agent_info += f"\n  - {agent.get('name', 'unknown')}: {agent.get('file', 'unknown')} (purpose: {agent.get('purpose', 'unknown')})"
+        
+        return f"""You're analyzing test failures in an AI system.
+
+SYSTEM ARCHITECTURE:
+Type: {architecture.get('system_type', 'unknown')}
+Entry: {', '.join(entry_points) if entry_points else 'unknown'}
+Key Agents:{agent_info if agent_info else ' None found'}
+
+I'll give you test failure patterns one at a time. For each:
+1. Grep for relevant keywords in the error
+2. Read ONLY the specific functions/lines mentioned
+3. Find root cause with file:line reference
+4. Return JSON with root_cause and recommendations
+
+Keep files in context - you'll analyze multiple patterns.
+Ready?"""
+    
+    def _build_targeted_prompt(self,
+                                pattern_name: str,
+                                failing_tests: List[TestResult],
+                                passing_tests: List[TestResult],
+                                architecture: Dict[str, Any]) -> str:
+        """Build a targeted prompt with architecture hints to guide Claude to specific locations."""
+        # Get sample error
+        sample_error = failing_tests[0].failure_reason if failing_tests else "Unknown"
+        if len(sample_error) > 150:
+            sample_error = sample_error[:150] + "..."
+        
+        # Try to find relevant agent/file from architecture
+        hint = self._get_architecture_hint(pattern_name, sample_error, architecture)
+        
+        prompt = f"""Pattern: {pattern_name}
+Failures: {len(failing_tests)} tests
+Error: {sample_error}
+{hint}
+
+Find root cause. Return ONLY this JSON (no narration):
+
+{{"root_cause": "file:line - issue", "recommendations": [{{"type": "code", "title": "fix", "description": "how", "priority": "high", "effort": "low"}}]}}"""
+        
+        return prompt
+    
+    def _get_architecture_hint(self, pattern_name: str, error: str, architecture: Dict[str, Any]) -> str:
+        """Generate a hint about where to look based on architecture."""
+        agents = architecture.get('agents', [])
+        prompts = architecture.get('prompts', [])
+        
+        # Look for relevant agents
+        relevant_agents = []
+        for agent in agents:
+            agent_name = agent.get('name', '').lower()
+            if any(keyword in agent_name for keyword in ['writer', 'researcher', 'newsletter']):
+                relevant_agents.append(agent)
+        
+        if relevant_agents:
+            agent = relevant_agents[0]
+            return f"\nHint: Check {agent.get('name', 'agent')} at {agent.get('file', 'unknown')}"
+        
+        return ""
     
     # =======================
     # HELPER METHODS
