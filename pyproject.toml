@@ -1,98 +1,30 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "merit-analyzer"
-version = "1.0.0"
-description = "AI system test failure analysis and recommendation engine"
+name = "error-analysis"
+version = "0.1.0"
+description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.9"
-license = {text = "MIT"}
 authors = [
-    {name = "Merit Analyzer Team", email = "team@merit-analyzer.com"},
+    { name = "RealNickSheero", email = "nick@tensorsense.com" }
 ]
-keywords = ["ai", "testing", "analysis", "claude", "llm", "debugging"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Software Development :: Testing",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
-
+requires-python = ">=3.12"
 dependencies = [
-    "claude-agent-sdk>=0.1.0",
-    "anthropic>=0.18.0",
-    "boto3>=1.26.0",
-    "scikit-learn>=1.3.0",
-    "numpy>=1.24.0",
-    "pydantic>=2.0.0",
-    "rich>=13.0.0",
-    "click>=8.1.0",
-    "GitPython>=3.1.0",
+    "openai>=2.6.1",
+    "pydantic>=2.12.3",
+    "python-dotenv>=1.2.1",
+    "rich>=14.2.0",
+    "scikit-learn>=1.7.2",
+    "hdbscan>=0.8.38",
 ]
 
-[project.optional-dependencies]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
-    "mypy>=1.0.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
 ]
-
-[project.scripts]
-merit-analyze = "merit_analyzer.cli:main"
-
-[tool.black]
-line-length = 88
-target-version = ['py39']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
-
-[tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --cov=merit_analyzer --cov-report=term-missing --cov-report=html"
+asyncio_mode = "auto"
