@@ -29,8 +29,8 @@ class Recommendation(BaseModel):
     title: str = Field(..., description="Short title for the recommendation")
     description: str = Field(..., description="Detailed description of what to change")
     location: str = Field(..., description="File path and line numbers")
-    implementation: str = Field(..., description="Specific changes to make")
-    expected_impact: str = Field(..., description="Which tests this should fix")
+    implementation: Optional[str] = Field(None, description="Specific changes to make")
+    expected_impact: Optional[str] = Field(None, description="Which tests this should fix")
     effort_estimate: str = Field(..., description="Time estimate (e.g., '5 minutes', '2 hours')")
     rationale: Optional[str] = Field(None, description="Why this will help")
     code_diff: Optional[str] = Field(None, description="Proposed code changes")
@@ -63,7 +63,9 @@ class Recommendation(BaseModel):
         if self.rationale:
             md += f"### Rationale\n\n{self.rationale}\n\n"
         
-        md += f"### Implementation\n\n{self.implementation}\n\n"
+        # Only show Implementation section if there's content
+        if self.implementation:
+            md += f"### Implementation\n\n{self.implementation}\n\n"
         
         if self.code_diff:
             md += f"### Code Changes\n\n```diff\n{self.code_diff}\n```\n\n"
@@ -73,7 +75,9 @@ class Recommendation(BaseModel):
             for key, value in self.before_after_examples.items():
                 md += f"**{key}:**\n```\n{value}\n```\n\n"
         
-        md += f"### Expected Impact\n\n{self.expected_impact}\n\n"
+        # Only show Expected Impact section if there's content
+        if self.expected_impact:
+            md += f"### Expected Impact\n\n{self.expected_impact}\n\n"
         
         if self.dependencies:
             md += f"### Dependencies\n\n- {chr(10).join(self.dependencies)}\n\n"

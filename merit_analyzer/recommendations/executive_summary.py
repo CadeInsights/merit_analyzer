@@ -57,7 +57,11 @@ class ExecutiveSummaryGenerator:
         
         return {
             'overview': {
+                'total_tests': summary_stats.get('total_tests', 0),
+                'passed': summary_stats.get('passed', 0),
                 'total_failures': summary_stats.get('failed', 0),
+                'pass_rate': f"{summary_stats.get('passed', 0) / summary_stats.get('total_tests', 1) * 100:.1f}%",
+                'analysis_time': f"{summary_stats.get('analysis_duration_seconds', 0):.1f}s",
                 'patterns_identified': total_patterns,
                 'total_recommendations': len(consolidated_recs),
                 'top_fixes_coverage': f"{coverage_pct:.0f}%",
@@ -171,6 +175,18 @@ class ExecutiveSummaryGenerator:
             md += f"**Effort:** {fix['effort_estimate']} | "
             md += f"**Impact:** Fixes {fix['impact_score']} patterns\n\n"
             
+            # Show locations where changes are needed
+            if fix.get('locations') and len(fix['locations']) > 0:
+                if len(fix['locations']) == 1:
+                    md += f"**Location:** `{fix['locations'][0]}`\n\n"
+                else:
+                    md += f"**Locations:** (changes needed in {len(fix['locations'])} places)\n"
+                    for loc in fix['locations'][:5]:  # Show up to 5 locations
+                        md += f"  - `{loc}`\n"
+                    if len(fix['locations']) > 5:
+                        md += f"  - ...and {len(fix['locations']) - 5} more\n"
+                    md += "\n"
+            
             if fix.get('patterns_fixed'):
                 md += f"**Patterns Fixed:** {', '.join(fix['patterns_fixed'][:3])}"
                 if len(fix['patterns_fixed']) > 3:
@@ -231,17 +247,32 @@ class ExecutiveSummaryGenerator:
         console = Console()
         output = []
         
-        # Overview panel
+        # Overview panel with full analysis stats
         overview = summary['overview']
-        overview_text = (
-            f"[bold cyan]Total Failures:[/bold cyan] {overview['total_failures']} tests\n"
-            f"[bold cyan]Patterns Identified:[/bold cyan] {overview['patterns_identified']}\n"
-            f"[bold cyan]Recommendations:[/bold cyan] {overview['total_recommendations']} (consolidated)\n\n"
-            f"[bold green]Top {len(summary['top_fixes'])} fixes address {overview['top_fixes_coverage']} of patterns[/bold green]"
-        )
+        
+        # Create stats table for left side
+        stats_lines = [
+            f"[cyan]Total Tests:[/cyan]     {overview.get('total_tests', 0)}",
+            f"[cyan]Passed:[/cyan]         [green]{overview.get('passed', 0)}[/green]",
+            f"[cyan]Failed:[/cyan]         [red]{overview['total_failures']}[/red]",
+            f"[cyan]Pass Rate:[/cyan]      {overview.get('pass_rate', '0')}",
+            "",
+            f"[cyan]Patterns:[/cyan]       {overview['patterns_identified']}",
+            f"[cyan]Consolidated:[/cyan]   {overview['total_recommendations']} fixes",
+            f"[cyan]Analysis Time:[/cyan]  {overview.get('analysis_time', '0s')}",
+        ]
+        
+        # Create summary for right side
+        summary_lines = [
+            f"[bold green]✓ Top {len(summary['top_fixes'])} fixes address {overview['top_fixes_coverage']} of patterns[/bold green]",
+            "",
+        ]
         
         if overview['quick_wins_available'] > 0:
-            overview_text += f"\n[bold yellow]⚡ {overview['quick_wins_available']} quick wins available![/bold yellow]"
+            summary_lines.append(f"[bold yellow]⚡ {overview['quick_wins_available']} quick wins available![/bold yellow]")
+        
+        # Combine into two columns
+        overview_text = "\n".join(stats_lines) + "\n\n" + "\n".join(summary_lines)
         
         output.append(Panel(overview_text, title="📊 Executive Summary", border_style="cyan"))
         

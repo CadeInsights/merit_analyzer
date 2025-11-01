@@ -398,7 +398,7 @@ Use Grep/Read to find the root cause. When done, call submit_analysis tool with 
             # Configure Agent SDK with structured tool for reliable JSON output
             from claude_agent_sdk import query as claude_query, ClaudeAgentOptions  # type: ignore
             
-            # Define structured analysis tool - forces JSON schema
+            # Define structured analysis tool - simplified for better Claude compliance
             submit_analysis_tool = {
                 "name": "submit_analysis",
                 "description": "Submit the final analysis of the test failure pattern",
@@ -407,34 +407,45 @@ Use Grep/Read to find the root cause. When done, call submit_analysis tool with 
                     "properties": {
                         "root_cause": {
                             "type": "string",
-                            "description": "The root cause with file:line reference"
+                            "description": "The root cause with file:line reference (e.g., 'company_researcher.py:35-40 - Content truncation causes data loss')"
                         },
                         "recommendations": {
                             "type": "array",
-                            "description": "List of recommendations",
+                            "description": "List of 1-3 actionable recommendations with implementation details in description",
+                            "minItems": 1,
+                            "maxItems": 3,
                             "items": {
                                 "type": "object",
                                 "properties": {
                                     "type": {
                                         "type": "string",
-                                        "enum": ["code", "prompt", "config", "design"]
+                                        "enum": ["code", "prompt", "config", "design"],
+                                        "description": "Type of fix"
                                     },
                                     "title": {
-                                        "type": "string"
+                                        "type": "string",
+                                        "description": "Short, action-oriented title (e.g., 'Increase character limit')"
                                     },
                                     "description": {
-                                        "type": "string"
+                                        "type": "string",
+                                        "description": "Complete fix description including: what to change, where (line numbers), how (with code examples), and why. Example: 'Change line 32 from `text[:1000]` to `text[:3000]` to prevent founder name truncation. Current 1000-char limit cuts off mid-sentence.'"
+                                    },
+                                    "location": {
+                                        "type": "string",
+                                        "description": "File path with line number(s): 'filename.py:35' or 'filename.py:35-40'"
                                     },
                                     "priority": {
                                         "type": "string",
-                                        "enum": ["high", "medium", "low"]
+                                        "enum": ["high", "medium", "low"],
+                                        "description": "Urgency level"
                                     },
                                     "effort": {
                                         "type": "string",
-                                        "enum": ["high", "medium", "low"]
+                                        "enum": ["high", "medium", "low"],
+                                        "description": "Implementation effort"
                                     }
                                 },
-                                "required": ["type", "title", "description", "priority", "effort"]
+                                "required": ["type", "title", "description", "location", "priority", "effort"]
                             }
                         }
                     },
@@ -449,7 +460,28 @@ Use Grep/Read to find the root cause. When done, call submit_analysis tool with 
                 model=self.model,
                 stderr=lambda msg: None,
                 custom_tools=[submit_analysis_tool],  # Add structured tool
-                system_prompt="You are a code analyzer. After investigating with Grep/Read, submit your findings using the submit_analysis tool."
+                system_prompt="""You are a code analyzer. After investigating with Grep/Read, submit your analysis using the submit_analysis tool.
+
+REQUIREMENTS:
+1. Root cause: Include file:line reference (e.g., 'company_researcher.py:35 - brief explanation')
+2. Recommendations: Each must have complete description with:
+   - What to change (with code examples)
+   - Where (line numbers)
+   - How (before/after code if applicable)
+   - Why (what problem it solves)
+3. Location: File path with line number(s) (e.g., 'agent.py:45' or 'agent.py:45-50')
+
+EXAMPLE:
+{
+  "type": "code",
+  "title": "Increase character limit",
+  "description": "Change line 33 from `text[:1000]` to `text[:5000]` to prevent data truncation. Current limit cuts off founder names mid-sentence, causing incomplete information in newsletter.",
+  "location": "company_researcher.py:33",
+  "priority": "high",
+  "effort": "low"
+}
+
+Keep descriptions developer-friendly and actionable."""
             )
             
             # Run analysis with query()

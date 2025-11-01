@@ -690,6 +690,16 @@ class MeritAnalyzer:
             if llm_recommendations:
                 # Use recommendations from analyze_pattern (saves ~30-50% cost per pattern)
                 from ..models.recommendation import Recommendation, PriorityLevel, RecommendationType
+                import re
+                
+                # Extract location from root_cause if available (e.g., "file.py:123" or "file.py:123-456")
+                location_from_root_cause = ""
+                if llm_root_cause:
+                    # Try to extract file:line pattern from root cause
+                    match = re.search(r'([a-zA-Z0-9_/\-\.]+\.py:\d+(?:-\d+)?)', llm_root_cause)
+                    if match:
+                        location_from_root_cause = match.group(1)
+                
                 recommendations = []
                 for rec_data in llm_recommendations[:3]:  # Limit to 3 per pattern
                     try:
@@ -699,14 +709,19 @@ class MeritAnalyzer:
                                    "architecture": RecommendationType.ARCHITECTURE, "configuration": RecommendationType.CONFIGURATION,
                                    "testing": RecommendationType.TESTING}
                         
+                        # Use location from recommendation, fallback to root_cause location
+                        rec_location = rec_data.get("location", "")
+                        if not rec_location:
+                            rec_location = location_from_root_cause
+                        
                         recommendation = Recommendation(
                             priority=priority_map.get(rec_data.get("priority", "medium").lower(), PriorityLevel.MEDIUM),
                             type=type_map.get(rec_data.get("type", "code").lower(), RecommendationType.CODE),
                             title=rec_data.get("title", "Fix issue"),
                             description=rec_data.get("description", ""),
-                            location=rec_data.get("location", ""),
-                            implementation=rec_data.get("implementation", rec_data.get("code_diff", "")),
-                            expected_impact=rec_data.get("expected_impact", ""),
+                            location=rec_location,
+                            implementation=rec_data.get("implementation") or rec_data.get("code_diff") or None,
+                            expected_impact=rec_data.get("expected_impact") or None,
                             effort_estimate=rec_data.get("effort_estimate", rec_data.get("effort", "Unknown")),
                             rationale=f"Based on code analysis of {pattern_name}",
                             code_diff=rec_data.get("code_diff"),
@@ -849,7 +864,8 @@ class MeritAnalyzer:
             'passed': passed,
             'failed': failed,
             'error': error,
-            'skipped': skipped
+            'skipped': skipped,
+            'analysis_duration_seconds': duration
         }
         executive_summary = self.executive_summary_generator.generate_summary(
             consolidated_recs,
@@ -992,16 +1008,31 @@ class MeritAnalyzer:
         """Save report to file."""
         # Create output directory if it doesn't exist
         from pathlib import Path
+        
         output_dir = Path(output_path).parent
         output_dir.mkdir(exist_ok=True)
         
         report.save(output_path, "json")
-        print(f"📄 Report saved to {output_path}")
         
         # Also save markdown version
         md_path = output_path.replace('.json', '.md')
         report.save(md_path, "markdown")
-        print(f"📄 Markdown report saved to {md_path}")
+        
+        # Display highlighted report paths
+        if RICH_AVAILABLE:
+            from rich.console import Console  # type: ignore
+            from rich.panel import Panel  # type: ignore
+            console = Console()
+            report_text = (
+                f"[bold cyan]📄 Full recommendations available:[/bold cyan]\n\n"
+                f"  • JSON: [bold green]{output_path}[/bold green]\n"
+                f"  • Markdown: [bold green]{md_path}[/bold green]"
+            )
+            console.print("\n")
+            console.print(Panel(report_text, border_style="green", title="📊 Reports Generated"))
+        else:
+            print(f"\n📄 Report saved to {output_path}")
+            print(f"📄 Markdown report saved to {md_path}")
 
     def export_recommendations(self, 
                              report: AnalysisReport,
@@ -1050,70 +1081,6 @@ class MeritAnalyzer:
             for panel in exec_summary_panels:
                 console.print(panel)
                 console.print("")
-        
-        # Summary table
-        table = Table(title="📊 Analysis Summary", box=box.ROUNDED)
-        table.add_column("Metric", style="cyan", no_wrap=True)
-        table.add_column("Value", style="bold")
-        
-        table.add_row("Total Tests", str(report.summary.total_tests))
-        table.add_row("Passed", f"[green]{report.summary.passed}[/green]")
-        table.add_row("Failed", f"[red]{report.summary.failed}[/red]")
-        table.add_row("Error", f"[yellow]{report.summary.error}[/yellow]")
-        table.add_row("Pass Rate", f"{report.summary.passed/report.summary.total_tests*100:.1f}%")
-        table.add_row("Patterns Found", str(report.summary.patterns_found))
-        table.add_row("Recommendations", str(len(report.recommendations)))
-        table.add_row("Analysis Time", f"{report.summary.analysis_duration_seconds:.1f}s")
-        
-        console.print("\n")
-        console.print(table)
-        
-        # Recommendations table
-        if report.recommendations:
-            rec_table = Table(title="🎯 Top Recommendations", box=box.ROUNDED)
-            rec_table.add_column("Priority", style="bold", no_wrap=True)
-            rec_table.add_column("Title", style="cyan")
-            rec_table.add_column("Effort", style="yellow")
-            rec_table.add_column("Impact", style="green")
-            
-            for rec in report.recommendations[:5]:  # Top 5
-                priority_color = {
-                    "HIGH": "red",
-                    "MEDIUM": "yellow", 
-                    "LOW": "green"
-                }.get(rec.priority, "white")
-                
-                rec_table.add_row(
-                    f"[{priority_color}]{rec.priority}[/{priority_color}]",
-                    rec.title[:50] + "..." if len(rec.title) > 50 else rec.title,
-                    rec.effort_estimate,
-                    rec.expected_impact
-                )
-            
-            console.print("\n")
-            console.print(rec_table)
-        
-        # Patterns
-        if report.patterns:
-            console.print("\n[bold cyan]🔍 Detected Failure Patterns:[/bold cyan]")
-            for i, (pattern_name, pattern) in enumerate(report.patterns.items(), 1):
-                # Convert snake_case to readable format
-                display_name = pattern_name.replace('_', ' ').title()
-                
-                console.print(f"  [bold]{i}.[/bold] [yellow]{display_name}[/yellow]")
-                console.print(f"     Failures: [red]{pattern.failure_count}[/red] ({pattern.failure_rate*100:.1f}%)")
-                if hasattr(pattern, 'root_cause') and pattern.root_cause:
-                    console.print(f"     Root Cause: [dim]{pattern.root_cause}[/dim]")
-                console.print()
-        
-        # Final success message
-        console.print(Panel.fit(
-            f"[bold green]✅ Analysis Complete![/bold green]\n\n"
-            f"[cyan]Total recommendations:[/cyan] [bold]{len(report.recommendations)}[/bold]\n"
-            f"[cyan]Patterns detected:[/cyan] [bold]{len(report.patterns)}[/bold]\n"
-            f"[cyan]Analysis time:[/cyan] [bold]{report.summary.analysis_duration_seconds:.1f}s[/bold]",
-            border_style="green"
-        ))
 
     def _generate_failure_contexts(self, patterns: Dict[str, List[TestResult]], discovered_schema: Dict[str, Any]):
         """Generate AI-powered failure contexts for patterns without failure reasons."""

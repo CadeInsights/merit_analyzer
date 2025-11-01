@@ -156,6 +156,10 @@ class RecommendationPrioritizer:
         """Calculate impact score based on expected test fixes."""
         score = 0.0
         
+        # Handle None expected_impact (now optional field)
+        if not recommendation.expected_impact:
+            return 0.0
+        
         # Base score from expected impact text
         expected_impact = recommendation.expected_impact.lower()
         

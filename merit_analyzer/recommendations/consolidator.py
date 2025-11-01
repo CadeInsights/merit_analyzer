@@ -37,13 +37,18 @@ class RecommendationConsolidator:
             # Create consolidated recommendation
             primary = group_recs[0]  # Use first as template
             
+            # Get all unique locations
+            all_locations = self._get_all_locations(group_recs)
+            primary_location = self._consolidate_locations(group_recs)
+            
             consolidated_rec = {
                 'id': f'consolidated_{group_id}',
                 'title': self._consolidate_titles(group_recs),
                 'description': self._consolidate_descriptions(group_recs),
                 'priority': self._get_highest_priority(group_recs),
                 'type': primary.type.value,
-                'location': self._consolidate_locations(group_recs),
+                'location': primary_location,  # Primary location for backward compatibility
+                'locations': all_locations,  # All locations where changes are needed
                 'effort_estimate': self._consolidate_effort(group_recs),
                 'expected_impact': f"Fixes {len(affected_patterns)} patterns ({len(group_recs)} related issues)",
                 'impact_score': len(affected_patterns),  # Number of patterns fixed
@@ -56,6 +61,9 @@ class RecommendationConsolidator:
             
             consolidated.append(consolidated_rec)
             impact_map[group_id] = affected_patterns
+        
+        # Merge any consolidated recs with identical titles (post-processing)
+        consolidated = self._merge_duplicate_titles(consolidated)
         
         # Sort by impact score (descending)
         consolidated.sort(key=lambda x: (x['impact_score'], x['priority']), reverse=True)
@@ -191,18 +199,34 @@ class RecommendationConsolidator:
         
         return summary.strip()
     
-    def _consolidate_locations(self, recommendations: List[Recommendation]) -> str:
-        """Consolidate file locations."""
+    def _get_all_locations(self, recommendations: List[Recommendation]) -> List[str]:
+        """Get all unique locations from recommendations."""
         locations = [rec.location for rec in recommendations if rec.location]
-        unique_locations = list(set(locations))
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_locations = []
+        for loc in locations:
+            if loc not in seen:
+                seen.add(loc)
+                unique_locations.append(loc)
+        return unique_locations
+    
+    def _consolidate_locations(self, recommendations: List[Recommendation]) -> str:
+        """
+        Consolidate file locations into a single string for backward compatibility.
+        Returns the most common location or a summary if multiple.
+        """
+        locations = [rec.location for rec in recommendations if rec.location]
         
-        if not unique_locations:
+        if not locations:
             return ""
+        
+        unique_locations = list(set(locations))
         
         if len(unique_locations) == 1:
             return unique_locations[0]
         
-        # Group by file
+        # If multiple locations, show summary with count
         files = set()
         for loc in unique_locations:
             if ':' in loc:
@@ -211,7 +235,8 @@ class RecommendationConsolidator:
                 files.add(loc)
         
         if len(files) == 1:
-            return list(files)[0]
+            # Multiple locations in same file
+            return f"{list(files)[0]} (multiple locations)"
         
         return f"Multiple files: {', '.join(sorted(files)[:3])}" + (" ..." if len(files) > 3 else "")
     
@@ -249,7 +274,7 @@ class RecommendationConsolidator:
     def _merge_implementations(self, recommendations: List[Recommendation]) -> str:
         """Merge implementation steps."""
         if len(recommendations) == 1:
-            return recommendations[0].implementation
+            return recommendations[0].implementation or ""
         
         impl = "**Consolidated implementation steps:**\n\n"
         
@@ -258,6 +283,8 @@ class RecommendationConsolidator:
         step_num = 1
         
         for rec in recommendations[:5]:  # Limit to top 5
+            if not rec.implementation:
+                continue
             impl_clean = rec.implementation.strip()
             if impl_clean and impl_clean not in seen:
                 impl += f"{step_num}. {impl_clean.split(chr(10))[0]}\n"
@@ -290,6 +317,119 @@ class RecommendationConsolidator:
             return f"Addresses failures in: {', '.join(sorted(patterns)[:5])}"
         
         return f"Consolidates {len(recommendations)} similar recommendations"
+    
+    def _merge_duplicate_titles(self, consolidated: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Merge consolidated recommendations that have identical titles."""
+        title_groups = defaultdict(list)
+        
+        # Group by exact title match
+        for rec in consolidated:
+            title_groups[rec['title']].append(rec)
+        
+        # Merge groups with same title
+        merged = []
+        for title, recs in title_groups.items():
+            if len(recs) == 1:
+                merged.append(recs[0])
+            else:
+                # Merge multiple recommendations with same title
+                primary = recs[0]
+                
+                # Combine patterns_fixed (remove duplicates)
+                all_patterns = set()
+                for rec in recs:
+                    all_patterns.update(rec['patterns_fixed'])
+                
+                # Combine implementation and rationale (filter out empty ones)
+                implementations = [r['implementation'] for r in recs if r.get('implementation')]
+                rationales = [r['rationale'] for r in recs if r.get('rationale')]
+                
+                # Merge all locations from all recommendations
+                all_merged_locations = []
+                for rec in recs:
+                    if rec.get('locations'):
+                        all_merged_locations.extend(rec['locations'])
+                # Remove duplicates while preserving order
+                seen_locs = set()
+                unique_merged_locations = []
+                for loc in all_merged_locations:
+                    if loc and loc not in seen_locs:
+                        seen_locs.add(loc)
+                        unique_merged_locations.append(loc)
+                
+                merged_rec = {
+                    'id': primary['id'],
+                    'title': title,
+                    'description': self._merge_descriptions(recs),
+                    'priority': self._get_highest_priority_from_dicts(recs),
+                    'type': primary['type'],
+                    'location': self._merge_locations(recs),
+                    'locations': unique_merged_locations,  # All unique locations
+                    'effort_estimate': primary['effort_estimate'],
+                    'expected_impact': f"Fixes {len(all_patterns)} patterns ({sum(r['original_count'] for r in recs)} related issues)",
+                    'impact_score': len(all_patterns),
+                    'patterns_fixed': sorted(list(all_patterns)),
+                    'implementation': '\n\n'.join(implementations) if implementations else '',
+                    'rationale': ' | '.join(rationales) if rationales else '',
+                    'original_count': sum(r['original_count'] for r in recs),
+                    'category': primary['category']
+                }
+                merged.append(merged_rec)
+        
+        return merged
+    
+    def _merge_descriptions(self, recs: List[Dict[str, Any]]) -> str:
+        """Merge descriptions from multiple consolidated recommendations."""
+        # Combine unique description points
+        combined = f"This fix addresses {sum(r['original_count'] for r in recs)} related issues:\n\n"
+        
+        seen_points = set()
+        for rec in recs:
+            # Extract key points from description
+            lines = rec['description'].split('\n')
+            for line in lines:
+                line_clean = line.strip()
+                if line_clean and line_clean not in seen_points and not line_clean.startswith('This fix'):
+                    combined += f"{line_clean}\n"
+                    seen_points.add(line_clean)
+        
+        return combined.strip()
+    
+    def _merge_locations(self, recs: List[Dict[str, Any]]) -> str:
+        """Merge locations from multiple consolidated recommendations."""
+        all_locations = []
+        for rec in recs:
+            if rec['location']:
+                all_locations.append(rec['location'])
+        
+        if not all_locations:
+            return ""
+        
+        # Extract unique files
+        files = set()
+        for loc in all_locations:
+            if 'Multiple files:' in loc:
+                # Already a multi-file location
+                parts = loc.replace('Multiple files:', '').strip().split(',')
+                files.update(p.strip() for p in parts if p.strip() and p.strip() != '...')
+            elif loc:
+                files.add(loc.split(':')[0] if ':' in loc else loc)
+        
+        if len(files) == 1:
+            return list(files)[0]
+        
+        return f"Multiple files: {', '.join(sorted(files)[:3])}" + (" ..." if len(files) > 3 else "")
+    
+    def _get_highest_priority_from_dicts(self, recs: List[Dict[str, Any]]) -> str:
+        """Get the highest priority from consolidated recommendation dicts."""
+        priorities = [rec['priority'] for rec in recs]
+        
+        if "high" in priorities:
+            return "high"
+        elif "medium" in priorities:
+            return "medium"
+        else:
+            return "low"
     
     def _categorize_recommendation(self, rec: Recommendation) -> str:
         """Categorize the recommendation for grouping."""

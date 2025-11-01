@@ -240,7 +240,7 @@ class AnalysisReport(BaseModel):
     def to_json(self) -> str:
         """Export report as JSON."""
         import json
-        return json.dumps(self.model_dump(), indent=2, default=str)
+        return json.dumps(self.model_dump(exclude_none=True), indent=2, default=str)
 
     def save(self, filepath: str, format: str = "json") -> None:
         """Save report to file."""
