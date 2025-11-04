@@ -182,14 +182,19 @@ class CodeAnalyzer:
                         try:
                             import json
                             recs = json.loads(recs)
-                        except:
+                            print(f"✅ Parsed {len(recs)} recommendations from JSON")
+                        except Exception as e:
+                            print(f"⚠️ Failed to parse recommendations: {e}")
                             recs = []
+                    elif isinstance(recs, list):
+                        print(f"✅ Received {len(recs)} recommendations as list")
                     
                     analysis_data = {
                         'root_cause': tool_result.get('root_cause', 'Unknown'),
                         'problematic_code': tool_result.get('problematic_code', 'Not found'),
                         'recommendations': recs
                     }
+                    print(f"📦 Final analysis_data has {len(analysis_data['recommendations'])} recommendations")
                 else:
                     # Fallback to text parsing
                     analysis_data = self._parse_response(response_text)
