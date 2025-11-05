@@ -3,10 +3,60 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Literal
 from dataclasses import dataclass
+from pydantic import BaseModel, Field
+
+from claude_agent_sdk import (  # type: ignore
+    ClaudeSDKClient,
+    ClaudeAgentOptions,
+    create_sdk_mcp_server,
+    tool,
+)
 
 from ..types import AssertionStateGroup
+
+class Recommendation(BaseModel):
+    type: Literal["code", "prompt", "config", "design"] = Field(
+        description="Type of fix"
+        )
+    title: str = Field(
+        description="Short action-oriented title (e.g., 'Add zero division check')"
+        )
+    description: str = Field(
+        description="Complete explanation of the fix and why it's needed"
+        )
+    file: str = Field(
+        description="File path where the fix should be applied"
+        )
+    line_number: str = Field(
+        description="Line number(s) to modify (e.g., '6' or '6-8')"
+        )
+    current_code: str = Field(
+        description="The current buggy code snippet"
+        )
+    fixed_code: str = Field(
+        description="The corrected code that fixes the issue"
+        )
+    priority: Literal["high", "medium", "low"] = Field(
+        description="Priority level"
+        )
+    effort: Literal["high", "medium", "low"] = Field(
+        description="Implementation effort"
+        )
+
+class Diagnosis(BaseModel):
+    root_cause: str = Field(
+        description="The root cause with file:line reference (e.g., 'calculator.py:35 - Missing zero check causes ZeroDivisionError')"
+        )
+    problematic_code: str = Field(
+        description="The exact code snippet that is causing the problem"
+        )
+    recommendations: List[Recommendation] = Field(
+        min_length=1, 
+        max_length=3, 
+        description="List of 1-3 actionable recommendations with actual code fixes"
+        )
 
 
 @dataclass
@@ -42,26 +92,6 @@ class CodeAnalyzer:
         self.project_path = Path(project_path)
         self.api_key = api_key
         self.model = model
-        
-        # Lazy import Claude SDK components
-        self._ClaudeSDKClient = None
-        self._ClaudeAgentOptions = None
-        self._tool = None
-        self._create_sdk_mcp_server = None
-
-    def _lazy_import_sdk(self):
-        """Lazy import Claude Agent SDK to avoid hanging on module import."""
-        if self._ClaudeSDKClient is None:
-            from claude_agent_sdk import (  # type: ignore
-                ClaudeSDKClient,
-                ClaudeAgentOptions,
-                tool,
-                create_sdk_mcp_server
-            )
-            self._ClaudeSDKClient = ClaudeSDKClient
-            self._ClaudeAgentOptions = ClaudeAgentOptions
-            self._tool = tool
-            self._create_sdk_mcp_server = create_sdk_mcp_server
 
     def _parse_response(self, response_text: str) -> Dict[str, Any]:
         """Parse Claude's response to extract JSON."""
@@ -95,78 +125,13 @@ class CodeAnalyzer:
         Returns:
             List of analysis results
         """
-        self._lazy_import_sdk()
-        
         # Define custom tool ONCE using @tool decorator (outside loop)
         # Use FULL JSON Schema for better Claude understanding
-        @self._tool(
+        schema = Diagnosis.model_json_schema()
+        @tool(
             "submit_analysis",
             "REQUIRED: You MUST call this tool when you have completed your investigation and are ready to submit your final analysis of the test failure. This is the ONLY way to complete the task.",
-            {
-                "type": "object",
-                "properties": {
-                    "root_cause": {
-                        "type": "string",
-                        "description": "The root cause with file:line reference (e.g., 'calculator.py:35 - Missing zero check causes ZeroDivisionError')"
-                    },
-                    "problematic_code": {
-                        "type": "string",
-                        "description": "The exact code snippet that is causing the problem"
-                    },
-                    "recommendations": {
-                        "type": "array",
-                        "description": "List of 1-3 actionable recommendations with actual code fixes",
-                        "minItems": 1,
-                        "maxItems": 3,
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "type": {
-                                    "type": "string",
-                                    "enum": ["code", "prompt", "config", "design"],
-                                    "description": "Type of fix"
-                                },
-                                "title": {
-                                    "type": "string",
-                                    "description": "Short action-oriented title (e.g., 'Add zero division check')"
-                                },
-                                "description": {
-                                    "type": "string",
-                                    "description": "Complete explanation of the fix and why it's needed"
-                                },
-                                "file": {
-                                    "type": "string",
-                                    "description": "File path where the fix should be applied"
-                                },
-                                "line_number": {
-                                    "type": "string",
-                                    "description": "Line number(s) to modify (e.g., '6' or '6-8')"
-                                },
-                                "current_code": {
-                                    "type": "string",
-                                    "description": "The current buggy code snippet"
-                                },
-                                "fixed_code": {
-                                    "type": "string",
-                                    "description": "The corrected code that fixes the issue"
-                                },
-                                "priority": {
-                                    "type": "string",
-                                    "enum": ["high", "medium", "low"],
-                                    "description": "Priority level"
-                                },
-                                "effort": {
-                                    "type": "string",
-                                    "enum": ["high", "medium", "low"],
-                                    "description": "Implementation effort"
-                                }
-                            },
-                            "required": ["type", "title", "description", "file", "line_number", "current_code", "fixed_code", "priority", "effort"]
-                        }
-                    }
-                },
-                "required": ["root_cause", "problematic_code", "recommendations"]
-            }
+            schema
         )
         async def submit_analysis_handler(args):
             """Handler for submit_analysis tool - returns confirmation."""
@@ -178,16 +143,13 @@ class CodeAnalyzer:
             }
         
         # Create SDK MCP server with the custom tool (once)
-        analyzer_server = self._create_sdk_mcp_server(
+        analyzer_server = create_sdk_mcp_server(
             name="analyzer",
             version="1.0.0",
             tools=[submit_analysis_handler]
         )
         
-        
         results = []
-        total_input_tokens = 0
-        total_output_tokens = 0
         
         # Define hook to remind Claude before stopping
         async def ensure_tool_call_hook(input_data, tool_use_id, context):
@@ -197,7 +159,7 @@ class CodeAnalyzer:
             }
         
         # Configure options with MCP server (ONCE for all clusters)
-        options = self._ClaudeAgentOptions(
+        options = ClaudeAgentOptions(
             cwd=str(self.project_path),
             mcp_servers={"analyzer": analyzer_server},
             allowed_tools=["Read", "Grep", "Glob", "mcp__analyzer__submit_analysis"],
@@ -223,15 +185,13 @@ YOU MUST call mcp__analyzer__submit_analysis before the conversation ends. This 
         )
         
         # Create ONE ClaudeSDKClient for all clusters to maintain context
-        async with self._ClaudeSDKClient(options=options) as client:
+        async with ClaudeSDKClient(options=options) as client:
             # Analyze each group with shared context
             for group in groups:
                 try:
                     # Build minimal prompt
                     prompt = self._build_minimal_prompt(group)
-                    
-                    print(f"\n🔍 Analyzing group: {group.metadata.name}")
-                    
+
                     # Use the same client - maintains context!
                     response_text = ""
                     tool_result = None
@@ -239,18 +199,6 @@ YOU MUST call mcp__analyzer__submit_analysis before the conversation ends. This 
                     await client.query(prompt)
                     
                     async for message in client.receive_response():
-                        # Get usage from ResultMessage (only message with usage info)
-                        if type(message).__name__ == 'ResultMessage' and hasattr(message, 'usage'):
-                            usage = message.usage
-                            if isinstance(usage, dict):
-                                # Sum ALL input token types (regular + cache creation + cache read)
-                                total_input_tokens = (
-                                    usage.get('input_tokens', 0) +
-                                    usage.get('cache_creation_input_tokens', 0) +
-                                    usage.get('cache_read_input_tokens', 0)
-                                )
-                                total_output_tokens = usage.get('output_tokens', 0)
-                        
                         # Extract tool calls and text
                         if hasattr(message, 'content'):
                             for block in message.content:
@@ -265,21 +213,9 @@ YOU MUST call mcp__analyzer__submit_analysis before the conversation ends. This 
                     
                     # Safety net: Retry if tool wasn't called on first attempt
                     if not tool_was_called:
-                        print(f"   ⚠️  Tool not called, retrying with explicit request...")
                         await client.query("Please call the mcp__analyzer__submit_analysis tool NOW with your findings.")
                         
                         async for message in client.receive_response():
-                            # Update token counts from retry
-                            if type(message).__name__ == 'ResultMessage' and hasattr(message, 'usage'):
-                                usage = message.usage
-                                if isinstance(usage, dict):
-                                    total_input_tokens += (
-                                        usage.get('input_tokens', 0) +
-                                        usage.get('cache_creation_input_tokens', 0) +
-                                        usage.get('cache_read_input_tokens', 0)
-                                    )
-                                    total_output_tokens += usage.get('output_tokens', 0)
-                            
                             if hasattr(message, 'content'):
                                 for block in message.content:
                                     if hasattr(block, 'text'):
@@ -289,9 +225,6 @@ YOU MUST call mcp__analyzer__submit_analysis before the conversation ends. This 
                                             tool_was_called = True
                                             tool_result = block.input
                         
-                        if tool_was_called:
-                            print(f"   ✅ Tool called successfully on retry")
-                
                     # Use tool result if available, otherwise parse text
                     if tool_result:
                         # With new schema, recommendations should already be an array
@@ -331,9 +264,6 @@ YOU MUST call mcp__analyzer__submit_analysis before the conversation ends. This 
                     ))
                     
                 except Exception as e:
-                    import traceback
-                    print(f"\n⚠️  Error analyzing group '{group.metadata.name}': {e}")
-                    traceback.print_exc()
                     results.append(AnalysisResult(
                         group_name=group.metadata.name,
                         group_description=group.metadata.description,
@@ -342,26 +272,6 @@ YOU MUST call mcp__analyzer__submit_analysis before the conversation ends. This 
                         recommendations=[],
                         relevant_tests=[]
                     ))
-        
-        # Calculate cost with proper cache pricing
-        # Note: total_input_tokens already includes all input types summed
-        # Claude Sonnet 4 pricing:
-        # - Regular input: $3/M
-        # - Cache write: $3.75/M  
-        # - Cache read: $0.30/M (10x cheaper!)
-        # - Output: $15/M
-        # 
-        # For simplicity, we use blended rate since we don't track each type separately in results
-        # Total input cost ≈ $0.30-3.00/M depending on cache hits
-        input_cost = (total_input_tokens / 1_000_000) * 3.0  # Conservative estimate
-        output_cost = (total_output_tokens / 1_000_000) * 15.0
-        total_cost = input_cost + output_cost
-        
-        print(f"\n📊 Token Usage:")
-        print(f"   Input:  {total_input_tokens:,} tokens (${input_cost:.4f})")
-        print(f"   Output: {total_output_tokens:,} tokens (${output_cost:.4f})")
-        print(f"   Total:  ${total_cost:.4f}")
-        print(f"   Note: Actual cost may be lower due to prompt caching")
         
         return results
     
@@ -435,4 +345,3 @@ def analyze_groups(
         return loop.run_until_complete(analyzer.analyze_multiple_groups(groups))
     finally:
         loop.close()
-
