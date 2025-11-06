@@ -18,13 +18,14 @@ class LLMAbstractHandler(ABC):
     compiled_agents: Dict[AGENT, Any]
     default_small_model: str
     default_big_model: str
+    default_embedding_model: str
 
     @abstractmethod
-    async def generate_embeddings(self, input_values: List[str], model: str | None) -> List[List[float]]:
+    async def generate_embeddings(self, input_values: List[str], model: str | None = None) -> List[List[float]]:
         pass
 
     @abstractmethod
-    async def create_object(self, prompt: str, schema: Type[T], model: str) -> T:
+    async def create_object(self, prompt: str, schema: Type[T], model: str | None = None) -> T:
         pass
 
     @abstractmethod
@@ -32,11 +33,11 @@ class LLMAbstractHandler(ABC):
         self,
         agent_name: AGENT,
         system_prompt: str | None,
-        model: str | None,
-        file_access: FILE_ACCESS_POLICY,
-        standard_tools: List[TOOL],
-        extra_tools: List[Callable],
-        output_type: type[U]):
+        model: str | None = None,
+        file_access: FILE_ACCESS_POLICY = FILE_ACCESS_POLICY.READ_ONLY,
+        standard_tools: List[TOOL] = [],
+        extra_tools: List[Callable] = [],
+        output_type: type[U] = str):
         pass
 
     @abstractmethod

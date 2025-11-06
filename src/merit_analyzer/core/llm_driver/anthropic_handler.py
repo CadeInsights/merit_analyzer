@@ -21,6 +21,7 @@ load_dotenv()
 class LLMClaude(LLMAbstractHandler):
     default_small_model = "claude-haiku-4-5"
     default_big_model = "claude-sonnet-4-5"
+    default_embedding_model = ""
     standard_tools_map = {
         TOOL.READ: "Read",
         TOOL.WRITE: "Write",

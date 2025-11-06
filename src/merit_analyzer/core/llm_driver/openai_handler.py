@@ -71,8 +71,8 @@ class LLMOpenAI(LLMAbstractHandler):
         self,
         agent_name: AGENT,
         system_prompt: str | None,
-        model: str | None,
-        file_access: FILE_ACCESS_POLICY,
+        model: str | None = None,
+        file_access: FILE_ACCESS_POLICY = FILE_ACCESS_POLICY.READ_ONLY,
         standard_tools: List[TOOL] = [],
         extra_tools: List[Callable] = [],
         output_type: type[U] = str

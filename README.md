@@ -22,15 +22,11 @@ Error analysis for AI projects.
 **Key stateful engines:**
 - src/merit_analyzer/engines
 
+**Core layer:**
+- src/merit_analyzer/core
+
 **Tests:**
 - tests/unit
-
-## Branches
-
-Active development is happening on feature branches:
-
-- **`mark/end-to-end`** - End-to-end implementation and testing
-- **`nick/clustering`** - Pattern clustering improvements
 
 ## TODO
 
