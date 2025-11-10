@@ -1,13 +1,10 @@
 from collections import defaultdict
 
-from dotenv import load_dotenv
 from hdbscan import HDBSCAN
 from typing import List
 
-from ..engines import llm_client
+from ..core import get_llm_client
 from ..types import TestCase, TestCaseGroup, GroupMetadata
-
-load_dotenv()
 
 CLUSTERING_PROMPT = """
 <task>
@@ -76,6 +73,8 @@ CLUSTERING_PROMPT = """
 
 async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGroup]:
     """Cluster failed test cases for further error analysis"""
+
+    llm_client = await get_llm_client()
 
     embeddings = await llm_client.generate_embeddings(
         model="text-embedding-3-small",

@@ -1,8 +1,9 @@
 from typing import Any, Callable, Dict, List, Type, TypeVar, get_type_hints, cast
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, ValidationError
 from anthropic import Anthropic, AnthropicBedrock, AnthropicVertex
+from anthropic.types import ToolParam, MessageParam, ToolUseBlock
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -16,12 +17,14 @@ from .abstract_provider_handler import LLMAbstractHandler, U, T
 from .local_tools import read, write, edit, grep, glob, ls, todo
 from .policies import AGENT, TOOL, FILE_ACCESS_POLICY
 
+from ..local_models import local_embeddings_engine, MODEL_ID
+
 load_dotenv()
 
 class LLMClaude(LLMAbstractHandler):
     default_small_model = "claude-haiku-4-5"
     default_big_model = "claude-sonnet-4-5"
-    default_embedding_model = ""
+    default_embedding_model = MODEL_ID
     standard_tools_map = {
         TOOL.READ: "Read",
         TOOL.WRITE: "Write",
@@ -56,9 +59,11 @@ class LLMClaude(LLMAbstractHandler):
             input_values: List[str], 
             model: str | None = None
             ) -> List[List[float]]:
-        model = model or self.default_big_model 
-      
-        raise ValueError("Not implemented yet")
+        model = model or self.default_embedding_model
+        return await local_embeddings_engine.generate_embeddings(
+            input_values=input_values,
+            model=model,
+        )
 
     async def create_object(
             self, 
@@ -66,9 +71,27 @@ class LLMClaude(LLMAbstractHandler):
             schema: Type[T], 
             model: str | None = None
             ) -> T:
-        model = model or self.default_big_model 
-
-        raise ValueError("Not implemented yet")
+        model = model or self.default_big_model
+        client = self.client
+        tools = [{
+            "name": "emit_structured_result",
+            "description": "Return the result strictly as JSON matching input_schema. No external effects.",
+            "input_schema": schema.model_json_schema(),
+        }]
+        msg = client.messages.create(
+            model=model,
+            temperature=0,
+            max_tokens=32024,
+            messages=[{"role": "user", "content": prompt}],
+            tools=tools, #type: ignore
+            tool_choice={"type": "tool", "name": "emit_structured_result"}
+        )
+        tool_call = next(b for b in msg.content if isinstance(b, ToolUseBlock))
+        try:
+            #TODO: retry with same args if err (max 2 times)
+            return schema.model_validate(tool_call.input)
+        except ValidationError as e:
+            raise
 
     def compile_agent(
         self,

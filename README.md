@@ -28,6 +28,10 @@ Error analysis for AI projects.
 **Tests:**
 - tests/unit
 
+## Design patterns
+
+1. Keep all LLM-related callables async. 
+
 ## TODO
 
 1. Build the csv-to-data_objects parser

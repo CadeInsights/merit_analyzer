@@ -1,0 +1,220 @@
+---
+license: apache-2.0
+language:
+- en
+pipeline_tag: sentence-similarity
+library_name: sentence-transformers
+tags:
+- granite
+- embeddings
+- transformers
+- mteb
+- feature-extraction
+---
+# Granite-Embedding-Small-English-R2
+
+<!-- Provide a quick summary of what the model is/does. -->
+
+**Model Summary:** Granite-embedding-small-english-r2 is a 47M parameter dense biencoder embedding model from the Granite Embeddings collection that can be used to generate high quality text embeddings. This model produces embedding vectors of size 384 based on context length of upto 8192 tokens. Compared to most other open-source models, this model was only trained using open-source relevance-pair datasets with permissive, enterprise-friendly license, plus IBM collected and generated datasets. 
+
+The r2 models show strong performance across standard and IBM-built information retrieval benchmarks (BEIR, ClapNQ), 
+code retrieval (COIR), long-document search benchmarks (MLDR, LongEmbed), conversational multi-turn (MTRAG), 
+table retrieval (NQTables, OTT-QA, AIT-QA, MultiHierTT, OpenWikiTables), and on many enterprise use cases.
+
+These models use a bi-encoder architecture to generate high-quality embeddings from text inputs such as queries, passages, and documents, enabling seamless comparison through cosine similarity. Built using retrieval oriented pretraining, contrastive finetuning, knowledge distillation, and model merging, granite-embedding-small-english-r2 is optimized to ensure strong alignment between query and passage embeddings.
+
+The latest granite embedding r2 release introduces two English embedding models, both based on the ModernBERT architecture:
+- _granite-embedding-english-r2_ (**149M** parameters): with an output embedding size of _768_, replacing _granite-embedding-125m-english_. 
+- **_granite-embedding-small-english-r2_** (**47M** parameters): A _first-of-its-kind_ reduced-size model, with 8192 context length support, fewer layers and a smaller output embedding size (_384_), replacing _granite-embedding-30m-english_. 
+
+## Model Details
+
+- **Developed by:** Granite Embedding Team, IBM
+- **Repository:** [ibm-granite/granite-embedding-models](https://github.com/ibm-granite/granite-embedding-models)
+- **Paper:** [Granite Embedding R2 Models](https://arxiv.org/abs/2508.21085)
+- **Language(s):** English
+- **Release Date**: Aug 15, 2025
+- **License:** [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+
+## Usage
+
+**Intended Use:** The model is designed to produce fixed length vector representations for a given text, which can be used for text similarity, retrieval, and search applications.
+
+For efficient decoding, these models use Flash Attention 2. Installing it is optional, but can lead to faster inference.
+
+```shell
+pip install flash_attn==2.6.1
+```
+
+<!-- Address questions around how the model is intended to be used, including the foreseeable users of the model and those affected by the model. -->
+
+**Usage with Sentence Transformers:** 
+
+The model is compatible with SentenceTransformer library and is very easy to use:
+
+First, install the sentence transformers library
+```shell
+pip install sentence_transformers
+```
+
+The model can then be used to encode pairs of text and find the similarity between their representations
+
+```python
+from sentence_transformers import SentenceTransformer, util
+
+model_path = "ibm-granite/granite-embedding-small-english-r2"
+# Load the Sentence Transformer model
+model = SentenceTransformer(model_path)
+
+input_queries = [
+    ' Who made the song My achy breaky heart? ',
+    'summit define'
+    ]
+
+input_passages = [
+    "Achy Breaky Heart is a country song written by Don Von Tress. Originally titled Don't Tell My Heart and performed by The Marcy Brothers in 1991. ",
+    "Definition of summit for English Language Learners. : 1 the highest point of a mountain : the top of a mountain. : 2 the highest level. : 3 a meeting or series of meetings between the leaders of two or more governments."
+    ]
+
+# encode queries and passages. The model produces unnormalized vectors. If your task requires normalized embeddings pass normalize_embeddings=True to encode as below.
+query_embeddings = model.encode(input_queries)
+passage_embeddings = model.encode(input_passages)
+
+# calculate cosine similarity
+print(util.cos_sim(query_embeddings, passage_embeddings))
+```
+
+**Usage with Huggingface Transformers:** 
+
+This is a simple example of how to use the granite-embedding-small-english-r2 model with the Transformers library and PyTorch.
+
+First, install the required libraries
+```shell
+pip install transformers torch
+```
+
+The model can then be used to encode pairs of text
+
+```python
+import torch
+from transformers import AutoModel, AutoTokenizer
+
+model_path = "ibm-granite/granite-embedding-small-english-r2"
+
+# Load the model and tokenizer
+model = AutoModel.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model.eval()
+
+input_queries = [
+    ' Who made the song My achy breaky heart? ',
+    'summit define'
+    ]
+
+# tokenize inputs
+tokenized_queries = tokenizer(input_queries, padding=True, truncation=True, return_tensors='pt')
+
+# encode queries
+with torch.no_grad():
+    # Queries
+    model_output = model(**tokenized_queries)
+    # Perform pooling. granite-embedding-278m-multilingual uses CLS Pooling
+    query_embeddings = model_output[0][:, 0]
+
+# normalize the embeddings
+query_embeddings = torch.nn.functional.normalize(query_embeddings, dim=1)
+
+```
+
+## Evaluation Results
+Granite embedding r2 models show a strong performance across tasks diverse tasks. 
+
+Performance of the granite models on MTEB Retrieval (i.e., BEIR), MTEB-v2, code retrieval (CoIR), long-document search benchmarks (MLDR, LongEmbed), conversational multi-turn (MTRAG), 
+table retrieval (NQTables, OTT-QA, AIT-QA, MultiHierTT, OpenWikiTables),  benchmarks is reported in the below tables. 
+
+The average speed to encode documents on a single H100 GPU using a sliding window with 512 context length chunks is also reported. 
+Nearing encoding speed of 200 documents per second granite-embedding-small-english-r2 demonstrates speed and efficiency, while mainintaining competitive performance.
+
+| Model                              | Parameters (M) | Embedding Size | BEIR Retrieval (15) | MTEB-v2 (41)| CoIR (10) | MLDR (En) | MTRAG (4) |  Encoding Speed (dosc/sec) |
+|------------------------------------|:--------------:|:--------------:|:-------------------:|:-----------:|:---------:|:---------:|:---------:|:-------------------------------:|
+| granite-embedding-125m-english     |      125       |      768       |        52.3         |     62.1   |   50.3    |   35.0    |   49.4   |               149             |
+| granite-embedding-30m-english      |       30       |      384       |        49.1         |     60.2   |   47.0    |   32.6    |   48.6   |               198             |
+| granite-embedding-english-r2       |      149       |      768       |        53.1         |     62.8   |   55.3    |   40.7    |   56.7   |               144             |
+| granite-embedding-small-english-r2 |       47       |      384       |        50.9         |     61.1   |   53.8    |   39.8    |   48.1   |               199             |
+
+
+
+|Model                              | Parameters (M)| Embedding Size|**AVERAGE**|MTEB-v2 Retrieval (10)| CoIR (10)| MLDR (En)| LongEmbed (6)| Table IR (5)| MTRAG (4) | Encoding Speed (docs/sec)|
+|-----------------------------------|:-------------:|:-------------:|:---------:|:--------------------:|:--------:|:--------:|:------------:|:-----------:|:--------:|-----------:|
+|e5-small-v2                        |33|384|45.39|48.5|47.1|29.9|40.7|72.31|33.8| 138|
+|bge-small-en-v1.5                  |33|384|45.22|53.9|45.8|31.4|32.1|69.91|38.2| 138|
+|||||||||||
+|granite-embedding-english-r2       |149|768|59.5|56.4|54.8|41.6|67.8|78.53|57.6| 144|
+|granite-embedding-small-english-r2 | 47|384|55.6|53.9|53.4|40.1|61.9|75.51|48.9| 199|
+
+
+### Model Architecture and Key Features
+
+The latest granite embedding r2 release introduces two English embedding models, both based on the ModernBERT architecture:
+- _granite-embedding-english-r2_ (**149M** parameters): with an output embedding size of _768_, replacing _granite-embedding-125m-english_. 
+- _granite-embedding-small-english-r2_ (**47M** parameters): A _first-of-its-kind_ reduced-size model, with fewer layers and a smaller output embedding size (_384_), replacing _granite-embedding-30m-english_. 
+
+The following table shows the structure of the two models:
+
+| Model                     | **granite-embedding-small-english-r2** | granite-embedding-english-r2   |
+| :---------                | :-------:|:--------:| 
+| Embedding size            | **384**      | 768      | 
+| Number of layers          | **12**       | 22       | 
+| Number of attention heads | **12**       | 12       | 
+| Intermediate size         | **1536**     | 1152     | 
+| Activation Function       | **GeGLU**    | GeGLU    | 
+| Vocabulary Size           | **50368**    | 50368    | 
+| Max. Sequence Length      | **8192**     | 8192     | 
+| # Parameters              | **47M**      | 149M     | 
+
+
+### Training and Optimization
+
+The granite embedding r2 models incorporate key enhancements from the ModernBERT architecture, including: 
+- Alternating attention lengths to accelerate processing 
+- Rotary position embeddings for extended sequence length 
+- A newly trained tokenizer optimized with code and text data 
+- Flash Attention 2.0 for improved efficiency 
+- Streamlined parameters, eliminating unnecessary bias terms
+
+
+## Data Collection
+Granite embedding r2 models are trained using data from four key sources: 
+1. Unsupervised title-body paired data scraped from the web
+2. Publicly available paired with permissive, enterprise-friendly license
+3. IBM-internal paired data targetting specific technical domains
+4. IBM-generated synthetic data
+
+Notably, we _do not use_ the popular MS-MARCO retrieval dataset in our training corpus due to its non-commercial license (many open-source models use this dataset due to its high quality). 
+
+The underlying encoder models using GneissWeb, an IBM-curated dataset composed exclusively of open, commercial-friendly sources.
+
+For governance, all our data undergoes a data clearance process subject to technical, business, and governance review. This comprehensive process captures critical information about the data, including but not limited to their content description ownership, intended use, data classification, licensing information, usage restrictions, how the data will be acquired, as well as an assessment of sensitive information (i.e, personal information). 
+
+## Infrastructure
+We trained the granite embedding english r2 models using IBM's computing cluster, BlueVela Cluster, which is outfitted with NVIDIA H100 80GB GPUs. This cluster provides a scalable and efficient infrastructure for training our models over multiple GPUs.
+
+## Ethical Considerations and Limitations
+Granite-embedding-small-english-r2 leverages both permissively licensed open-source and select proprietary data for enhanced performance. The training data for the base language model was filtered to remove text containing hate, abuse, and profanity. Granite-embedding-small-english-r2 is trained only for English texts, and has a context length of 8192 tokens (longer texts will be truncated to this size).
+
+- ⭐️ Learn about the latest updates with Granite: https://www.ibm.com/granite
+- 📄 Get started with tutorials, best practices, and prompt engineering advice: https://www.ibm.com/granite/docs/
+- 💡 Learn about the latest Granite learning resources: https://ibm.biz/granite-learning-resources
+
+## Citation
+```
+@misc{awasthy2025graniteembeddingr2models,
+      title={Granite Embedding R2 Models}, 
+      author={Parul Awasthy and Aashka Trivedi and Yulong Li and Meet Doshi and Riyaz Bhat and Vignesh P and Vishwajeet Kumar and Yushu Yang and Bhavani Iyer and Abraham Daniels and Rudra Murthy and Ken Barker and Martin Franz and Madison Lee and Todd Ward and Salim Roukos and David Cox and Luis Lastras and Jaydeep Sen and Radu Florian},
+      year={2025},
+      eprint={2508.21085},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2508.21085}, 
+}
+```

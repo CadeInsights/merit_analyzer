@@ -20,6 +20,7 @@ dependencies = [
     "claude-agent-sdk>=0.1.6",
     "boto3>=1.40.67",
     "botocore>=1.40.67",
+    "sentence-transformers>=5.1.2",
 ]
 
 [dependency-groups]
