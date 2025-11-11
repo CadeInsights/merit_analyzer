@@ -78,8 +78,11 @@ async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGr
 
     embeddings = await llm_client.generate_embeddings(
         model="text-embedding-3-small",
-        input_values=[str(test_case.test_case_result.errors) for test_case in failed_test_cases], #type: ignore
-    ) #TODO: if test_case.test_case_result.errors have multiple errors - cluster them separately 
+        input_values=[
+            "\n".join(test_case.assertions_result.errors if test_case.assertions_result else [])
+            for test_case in failed_test_cases
+        ],
+    ) #TODO: if test_case.test_case_result.errors have multiple errors - cluster them separately
 
     labels = HDBSCAN(
         min_cluster_size=2, 
@@ -94,7 +97,10 @@ async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGr
 
     for label in sorted(aggregated):
         states = aggregated[label]
-        cluster_errors = "\n".join(str(test_case.test_case_result.errors) for test_case in states)
+        cluster_errors = "\n".join(
+            "\n".join(test_case.assertions_result.errors if test_case.assertions_result else [])
+            for test_case in states
+        )
 
         if label == -1:
             metadata = GroupMetadata(
@@ -110,7 +116,6 @@ async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGr
         
         groups.append(TestCaseGroup(
             metadata=metadata, #type: ignore
-            test_cases=states,
-            grouped_by="failed"))
+            test_cases=states))
 
     return groups
