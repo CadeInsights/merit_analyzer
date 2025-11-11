@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict, List, Type, TypeVar, get_type_hints, cast
+from pathlib import Path
 
 from agents import Agent, Runner, function_tool
 from openai import OpenAI
@@ -75,6 +76,7 @@ class LLMOpenAI(LLMAbstractHandler):
         file_access: FILE_ACCESS_POLICY = FILE_ACCESS_POLICY.READ_ONLY,
         standard_tools: List[TOOL] = [],
         extra_tools: List[Callable] = [],
+        cwd: str | Path | None = None,
         output_type: type[ModelT] | type[str] = str
         ):
         model = model or self.default_big_model 

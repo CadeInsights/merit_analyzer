@@ -35,18 +35,19 @@ Flags are optional; omit the vendor overrides to rely on existing environment va
 **Core layer:**
 - src/merit_analyzer/core
 
+**Interfaces:**
+- src/merit_analyzer/interface
+
 **Tests:**
 - tests/unit
+- tests/integrations
 
 ## Design patterns
 
 1. Keep all LLM-related callables async. 
 
 ## TODO
-
-1. Build the csv-to-data_objects parser
-2. Build the error-to-code mapping
-3. Build the output processor
+1. Test end-to-end with Bedrock
 
 ## License
 

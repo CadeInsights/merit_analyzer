@@ -70,16 +70,17 @@ class TestCase:
     assertions_result: AssertionsResult | None
 
     async def generate_error_data(self) -> None:
-        llm_client = await get_llm_client()
         error_data = {
             "test_input_value": self.case_data.case_input,
             "expected_value": self.case_data.reference_value,
             "actual_value": self.output_for_assertions
         }
-        error_message = await llm_client.create_object(
-            model="gpt-5-2025-08-07", 
+        
+        client = await get_llm_client()
+        error_message = await client.create_object(
             prompt=GENERATE_ERROR_DATA.format(error_data=error_data), 
-            schema=ErrorDescription
+            schema=ErrorDescription,
+            model=None
             )
         if not self.assertions_result:
             self.assertions_result = AssertionsResult(False, [])

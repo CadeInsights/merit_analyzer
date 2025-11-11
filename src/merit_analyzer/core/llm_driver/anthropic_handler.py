@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict, List, Type, TypeVar, get_type_hints, cast
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model, ValidationError
@@ -49,10 +50,10 @@ class LLMClaude(LLMAbstractHandler):
         FILE_ACCESS_POLICY.FULL_ACCESS: "bypassPermissions",
         FILE_ACCESS_POLICY.READ_AND_PLAN: "plan",
     }
-    compiled_agents: Dict[AGENT, ClaudeAgentOptions] = {}
 
     def __init__(self, client: Anthropic | AnthropicBedrock | AnthropicVertex):
         self.client = client
+        self.compiled_agents: Dict[AGENT, ClaudeAgentOptions] = {}  # Instance variable, not class variable
 
     async def generate_embeddings(
             self, 
@@ -81,7 +82,7 @@ class LLMClaude(LLMAbstractHandler):
         msg = client.messages.create(
             model=model,
             temperature=0,
-            max_tokens=32024,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
             tools=tools, #type: ignore
             tool_choice={"type": "tool", "name": "emit_structured_result"}
@@ -101,7 +102,8 @@ class LLMClaude(LLMAbstractHandler):
         file_access: FILE_ACCESS_POLICY = FILE_ACCESS_POLICY.READ_ONLY,
         standard_tools: List[TOOL] = [],
         extra_tools: List[Callable] = [],
-        output_type: type[ModelT] | type[str] = str):
+        output_type: type[ModelT] | type[str] = str,
+        cwd: str | Path | None = None):
 
         model = model or self.default_big_model 
         
@@ -132,6 +134,7 @@ class LLMClaude(LLMAbstractHandler):
             mcp_servers=mcp_servers, #type: ignore
             permission_mode=file_access_policy, #type: ignore
             system_prompt=system_prompt,
+            cwd=cwd,
         )
         return
     
