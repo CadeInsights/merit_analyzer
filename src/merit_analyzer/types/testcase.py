@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 from dataclasses import dataclass, asdict
 from typing import Any, List, Literal, Tuple
 
-from ..engines import llm_client
+# Legacy import - deprecated
+# from ..engines import llm_client
 
 # Relevant prompts
 
@@ -67,16 +68,21 @@ class TestCase:
     test_case_result: TestFailed | TestPassed | None
 
     async def generate_error_data(self) -> None:
+        # Updated to use new llm_driver architecture
+        from ..core.llm_driver import get_llm_client
+        
         error_data = {
             "test_input_value": self.test_case_values.case_input,
             "expected_value": self.test_case_values.reference_value,
             "actual_value": self.output_for_assertions
         }
-        error_message = await llm_client.create_object(
-            model="gpt-5-2025-08-07", 
+        
+        client = await get_llm_client()
+        error_message = await client.create_object(
             prompt=GENERATE_ERROR_DATA.format(error_data=error_data), 
-            schema=TestFailed
-            )
+            schema=TestFailed,
+            model=None  # Use client's default model
+        )
         self.test_case_result = error_message
 
 @dataclass

@@ -81,7 +81,7 @@ class LLMClaude(LLMAbstractHandler):
         msg = client.messages.create(
             model=model,
             temperature=0,
-            max_tokens=32024,
+            max_tokens=4096,  # Reduced from 32024 to avoid streaming requirement
             messages=[{"role": "user", "content": prompt}],
             tools=tools, #type: ignore
             tool_choice={"type": "tool", "name": "emit_structured_result"}

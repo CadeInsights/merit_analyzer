@@ -44,13 +44,19 @@ async def build_llm_client(model_vendor: str, inference_vendor: str) -> LLMAbstr
             os.environ["CLAUDE_CODE_USE_BEDROCK"] = "1"
             from anthropic import AnthropicBedrock
             client = LLMClaude(AnthropicBedrock())
-            client.default_big_model = "anthropic.claude-sonnet-4-5-20250929-v1:0"
-            client.default_small_model = "anthropic.claude-haiku-4-5-20251001-v1:0"
+            # Use cross-region inference profiles (required for Bedrock)
+            client.default_big_model = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+            client.default_small_model = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
         case "anthropic", "gcp":
             os.environ["CLAUDE_CODE_USE_VERTEX"] = "1"
             from anthropic import AnthropicVertex
-            client = LLMClaude(AnthropicVertex())
+            # Get region and project from environment
+            region = os.getenv("CLOUD_ML_REGION", "us-east5")
+            project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("ANTHROPIC_VERTEX_PROJECT_ID")
+            if not project_id:
+                raise ValueError("GOOGLE_CLOUD_PROJECT or ANTHROPIC_VERTEX_PROJECT_ID must be set for Vertex AI")
+            client = LLMClaude(AnthropicVertex(region=region, project_id=project_id))
             client.default_big_model = "claude-sonnet-4-5@20250929"
             client.default_small_model = "claude-haiku-4-5@20251001"
 
