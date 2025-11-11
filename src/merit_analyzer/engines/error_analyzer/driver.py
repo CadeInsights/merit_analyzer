@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from .prompts import SYSTEM, TASK
 
@@ -28,7 +29,8 @@ class ErrorAnalyzer:
                 file_access=self.file_access,
                 output_type=self.output_type,
                 standard_tools=self.standard_tools,
-                system_prompt=self.system_prompt
+                system_prompt=self.system_prompt,
+                cwd=Path.cwd(),
             )
 
         schema = json.dumps(ErrorAnalysis.model_json_schema(), indent=2)
