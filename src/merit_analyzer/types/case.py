@@ -90,7 +90,7 @@ class TestCase:
 class TestCaseGroup:
     metadata: GroupMetadata
     test_cases: List[TestCase]
-    error_analysis: ErrorAnalysis | None
+    error_analysis: ErrorAnalysis | None = None
 
 @dataclass
 class TestCaseValues:

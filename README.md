@@ -11,6 +11,16 @@ Error analysis for AI projects.
 - backend predicts what code contributes to each group of errors the most, and provide ideas on fixing them.
 - the tool returns a Markdown file with the following structure: error group name > problematic behavior > problematic code > relevant test results
 
+## CLI
+
+Run the full pipeline from any project directory:
+
+```bash
+uv run merit-analyzer analyze path/to/tests.csv --report reports/analysis.md --model-vendor openai --inference-vendor openai
+```
+
+Flags are optional; omit the vendor overrides to rely on existing environment variables.
+
 ## Structure
 
 **Key data abstractions:**
