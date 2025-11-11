@@ -275,6 +275,10 @@ class TestAgentFileOperations:
         """Setup client."""
         os.environ["MODEL_VENDOR"] = "anthropic"
         os.environ["INFERENCE_VENDOR"] = "anthropic"
+        # Clear cache to ensure fresh client
+        import merit_analyzer.core.llm_driver as llm_driver
+        llm_driver.cached_client = None
+        llm_driver.cached_key = None
         self.client = await get_llm_client()
     
     async def test_agent_read_multiple_files(self, temp_workspace):
