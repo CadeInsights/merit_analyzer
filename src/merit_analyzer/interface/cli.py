@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from rich.console import Console
+from rich.progress import track
 
 from ..engines.error_analyzer.driver import ErrorAnalyzer
 from ..processors.clustering import cluster_failures
@@ -86,7 +87,11 @@ class AnalyzeCommand:
             return
 
         self.console.print("Generating missing error descriptions...", style="bold cyan")
-        for case in failed_cases:
+        for case in track(
+            failed_cases,
+            description="Generating error descriptions",
+            console=self.console,
+        ):
             needs_errors = not case.assertions_result or not case.assertions_result.errors
             if needs_errors:
                 await case.generate_error_data()
@@ -95,7 +100,11 @@ class AnalyzeCommand:
         groups = await cluster_failures(failed_cases)
 
         self.console.print("Running deep analysis per cluster...", style="bold cyan")
-        for group in groups:
+        for group in track(
+            groups,
+            description="Running deep analysis",
+            console=self.console,
+        ):
             group.error_analysis = await self.analyzer.run(group)
 
         format_analysis_results(groups, str(self.report_path))
