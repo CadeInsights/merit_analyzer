@@ -13,7 +13,9 @@ Error analysis for AI projects.
 
 ## Environment Variables
 
-Merit Analyzer requires environment variables to configure the LLM provider. You can set these in a `.env` file in your project root or export them in your shell.
+Merit Analyzer requires environment variables to configure the LLM provider. The tool automatically loads variables from a `.env` file in the current working directory, so you can simply create a `.env` file and it will be detected. Alternatively, you can export variables in your shell.
+
+**Note:** The `.env` file is automatically loaded when you run the CLI tool, regardless of whether you use `uvx`, `uv run`, or direct execution. No manual sourcing or loading is required.
 
 ### Required Variables
 
