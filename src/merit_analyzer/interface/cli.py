@@ -84,10 +84,11 @@ class AnalyzeCommand:
             BarColumn(),
             TaskProgressColumn(),
             console=self.console,
+            transient=True,
         ) as progress:
             task1 = progress.add_task("[cyan]Parsing test cases...", total=None)
             test_cases = parse_test_cases_from_csv(str(self.csv_path))
-            progress.update(task1, completed=True)
+            progress.remove_task(task1)
             
             failed_cases = [
                 case for case in test_cases if not case.assertions_result or not case.assertions_result.passed
@@ -103,17 +104,17 @@ class AnalyzeCommand:
                 if needs_errors:
                     await case.generate_error_data()
                 progress.advance(task2)
-            progress.update(task2, completed=True)
+            progress.remove_task(task2)
 
             task3 = progress.add_task("[cyan]Clustering failures...", total=None)
             groups = await cluster_failures(failed_cases)
-            progress.update(task3, completed=True)
+            progress.remove_task(task3)
 
             task4 = progress.add_task("[cyan]Running deep analysis...", total=len(groups))
             for group in groups:
                 group.error_analysis = await self.analyzer.run(group)
                 progress.advance(task4)
-            progress.update(task4, completed=True)
+            progress.remove_task(task4)
 
         format_analysis_results(groups, str(self.report_path))
         self.console.print(f"Report saved to {self.report_path}", style="bold green")
