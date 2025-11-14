@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Sequence
 
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import track
 
@@ -52,6 +53,7 @@ class CLIApplication:
         )
 
     def run(self, argv: Sequence[str] | None = None) -> int:
+        load_dotenv()
         args = self.parser.parse_args(argv)
         AnalyzeCommand(self.console, args).run()
         return 0
