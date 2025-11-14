@@ -78,43 +78,41 @@ class AnalyzeCommand:
         asyncio.run(self.execute())
 
     async def execute(self) -> None:
+        self.console.print("[cyan]Parsing test cases...", end="")
+        test_cases = parse_test_cases_from_csv(str(self.csv_path))
+        self.console.print(" [green]✓[/green]")
+        
+        failed_cases = [
+            case for case in test_cases if not case.assertions_result or not case.assertions_result.passed
+        ]
+        if not failed_cases:
+            format_analysis_results([], str(self.report_path))
+            self.console.print("No failing tests found. Blank report generated.", style="bold green")
+            return
+
+        self.console.print("[cyan]Generating error descriptions...", end="")
+        for case in failed_cases:
+            needs_errors = not case.assertions_result or not case.assertions_result.errors
+            if needs_errors:
+                await case.generate_error_data()
+        self.console.print(" [green]✓[/green]")
+
+        self.console.print("[cyan]Clustering failures...", end="")
+        groups = await cluster_failures(failed_cases)
+        self.console.print(" [green]✓[/green]")
+
+        self.console.print("[cyan]Running deep analysis per cluster...", style="bold")
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
             console=self.console,
-            transient=True,
         ) as progress:
-            task1 = progress.add_task("[cyan]Parsing test cases...", total=None)
-            test_cases = parse_test_cases_from_csv(str(self.csv_path))
-            progress.remove_task(task1)
-            
-            failed_cases = [
-                case for case in test_cases if not case.assertions_result or not case.assertions_result.passed
-            ]
-            if not failed_cases:
-                format_analysis_results([], str(self.report_path))
-                self.console.print("No failing tests found. Blank report generated.", style="bold green")
-                return
-
-            task2 = progress.add_task("[cyan]Generating error descriptions...", total=len(failed_cases))
-            for case in failed_cases:
-                needs_errors = not case.assertions_result or not case.assertions_result.errors
-                if needs_errors:
-                    await case.generate_error_data()
-                progress.advance(task2)
-            progress.remove_task(task2)
-
-            task3 = progress.add_task("[cyan]Clustering failures...", total=None)
-            groups = await cluster_failures(failed_cases)
-            progress.remove_task(task3)
-
-            task4 = progress.add_task("[cyan]Running deep analysis...", total=len(groups))
+            task = progress.add_task("[cyan]Analyzing clusters...", total=len(groups))
             for group in groups:
                 group.error_analysis = await self.analyzer.run(group)
-                progress.advance(task4)
-            progress.remove_task(task4)
+                progress.advance(task)
 
         format_analysis_results(groups, str(self.report_path))
         self.console.print(f"Report saved to {self.report_path}", style="bold green")
