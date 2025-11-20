@@ -24,7 +24,8 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [ 
+dev = [
+    "pre-commit>=4.4.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
 ]
@@ -63,7 +64,9 @@ ignore = [
     "D",
     "S", 
     "PLR2004",
-    "ANN401"
+    "ANN", # TODO: Relax type annotations in tests
+    "T201", # Allow print statements in tests
+    "INP001", # __init__ not required in tests
 ]
 
 [tool.ruff.format]
