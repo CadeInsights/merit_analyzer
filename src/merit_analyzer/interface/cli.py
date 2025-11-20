@@ -87,7 +87,8 @@ class AnalyzeCommand:
         ]
         if not failed_cases:
             format_analysis_results_html([], str(self.report_path), str(self.csv_path))
-            self.console.print("No failing tests found. Blank report generated.", style="bold green")
+            report_url = self.report_path.resolve().as_uri()
+            self.console.print(f"No failing tests found. Blank report generated at [link={report_url}]{report_url}[/link]", style="bold green")
             return
 
         self.console.print("[cyan]Generating error descriptions...", end="")
@@ -115,4 +116,5 @@ class AnalyzeCommand:
                 progress.advance(task)
 
         format_analysis_results_html(groups, str(self.report_path), str(self.csv_path))
-        self.console.print(f"Report saved to {self.report_path}", style="bold green")
+        report_url = self.report_path.resolve().as_uri()
+        self.console.print(f"Report saved to [link={report_url}]{report_url}[/link]", style="bold green")

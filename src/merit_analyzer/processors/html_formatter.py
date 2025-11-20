@@ -29,10 +29,18 @@ def format_analysis_results_html(results: List[TestCaseGroup], path: str, source
     report_data = _convert_to_json_format(results, source_csv)
     json_str = json.dumps(report_data, indent=2)
     
-    pattern = r'<script type="application/json" id="report-data">.*?</script>'
-    replacement = f'<script type="application/json" id="report-data">\n{json_str}\n</script>'
+    # Replace the JSON data in the script tag
+    # Use a function-based replacement to avoid regex escape issues with JSON content
+    def replace_json(match):
+        return f'<script type="application/json" id="report-data">\n{json_str}\n</script>'
     
-    html_content = re.sub(pattern, replacement, template, flags=re.DOTALL)
+    pattern = r'<script type="application/json" id="report-data">.*?</script>'
+    html_content = re.sub(pattern, replace_json, template, flags=re.DOTALL)
+    
+    # Replace hardcoded source file name (always replace to remove template data)
+    source_file_pattern = r'<span id="sourceFile">.*?</span>'
+    source_file_replacement = f'<span id="sourceFile">{source_csv or "N/A"}</span>'
+    html_content = re.sub(source_file_pattern, source_file_replacement, html_content)
     
     with open(path, 'w', encoding='utf-8') as f:
         f.write(html_content)
