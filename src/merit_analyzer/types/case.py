@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
-from dataclasses import dataclass, asdict
-from typing import Any, List, Literal, Tuple, TypedDict
+from dataclasses import dataclass
+from typing import Any
 
-from .assertion import AssertionsResult
-from .error import ErrorDescription, ErrorAnalysis
+from pydantic import BaseModel, Field
 
 from ..core import get_llm_client
+from .assertion import AssertionsResult
+from .error import ErrorAnalysis, ErrorDescription
+
 
 # Relevant prompts
 
@@ -63,6 +64,7 @@ GENERATE_ERROR_DATA = """
 
 # Core objects
 
+
 @dataclass
 class TestCase:
     case_data: TestCaseValues
@@ -73,32 +75,37 @@ class TestCase:
         error_data = {
             "test_input_value": self.case_data.case_input,
             "expected_value": self.case_data.reference_value,
-            "actual_value": self.output_for_assertions
+            "actual_value": self.output_for_assertions,
         }
-        
+
         client = await get_llm_client()
         error_message = await client.create_object(
-            prompt=GENERATE_ERROR_DATA.format(error_data=error_data), 
-            schema=ErrorDescription
-            )
+            prompt=GENERATE_ERROR_DATA.format(error_data=error_data), schema=ErrorDescription
+        )
         if not self.assertions_result:
             self.assertions_result = AssertionsResult(False, [])
 
         self.assertions_result.errors = error_message.errors
 
+
 @dataclass
 class TestCaseGroup:
     metadata: GroupMetadata
-    test_cases: List[TestCase]
+    test_cases: list[TestCase]
     error_analysis: ErrorAnalysis | None = None
+
 
 @dataclass
 class TestCaseValues:
     case_input: str
     reference_value: str
 
+
 # Schemas and secondary objects
 
+
 class GroupMetadata(BaseModel):
-    name: str = Field(description="name for the cluster formatted in screaming snake case (e.g, INCORRECT_PRICE_PARSING)")
+    name: str = Field(
+        description="name for the cluster formatted in screaming snake case (e.g, INCORRECT_PRICE_PARSING)"
+    )
     description: str = Field(description="What happens in which circumstances.")

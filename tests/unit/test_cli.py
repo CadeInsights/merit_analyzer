@@ -3,17 +3,17 @@ import argparse
 import pytest
 from rich.console import Console
 
-from merit_analyzer.interface.cli import CLIApplication, AnalyzeCommand
+from merit_analyzer.interface.cli import AnalyzeCommand, CLIApplication
 from merit_analyzer.types import (
     AssertionsResult,
+    ErrorAnalysis,
+    GroupMetadata,
     TestCase,
     TestCaseGroup,
     TestCaseValues,
-    GroupMetadata,
-    ErrorAnalysis,
 )
-from merit_analyzer.types.error import FrameInfo, ErrorSolution
 from merit_analyzer.types.code import CodeComponent, ComponentType
+from merit_analyzer.types.error import ErrorSolution, FrameInfo
 
 
 def test_cli_routes_to_analyze(monkeypatch):
@@ -27,7 +27,7 @@ def test_cli_routes_to_analyze(monkeypatch):
         def run(self):
             captured["ran"] = True
 
-    import merit_analyzer.interface.cli as cli
+    from merit_analyzer.interface import cli
 
     monkeypatch.setattr(cli, "AnalyzeCommand", FakeAnalyze)
 
@@ -41,7 +41,7 @@ def test_cli_routes_to_analyze(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_analyze_command_executes_pipeline(monkeypatch):
-    import merit_analyzer.interface.cli as cli
+    from merit_analyzer.interface import cli
 
     case = TestCase(
         case_data=TestCaseValues(case_input="input", reference_value="expected"),
@@ -70,9 +70,7 @@ async def test_analyze_command_executes_pipeline(monkeypatch):
         ]
 
     analysis = ErrorAnalysis(
-        involved_code_components=[
-            CodeComponent(name="component", path="src/app.py", type=ComponentType.FILE)
-        ],
+        involved_code_components=[CodeComponent(name="component", path="src/app.py", type=ComponentType.FILE)],
         traceback=[FrameInfo(index=0, summary="Frame summary")],
         recommendations=[
             ErrorSolution(
@@ -120,4 +118,4 @@ async def test_analyze_command_executes_pipeline(monkeypatch):
     assert fake_analyzer.calls == 1
     assert recorded["groups"][0].error_analysis == analysis
     assert recorded["report_path"] == "report.md"
-    assert case.assertions_result.errors == ["enriched"] #type: ignore
+    assert case.assertions_result.errors == ["enriched"]  # type: ignore

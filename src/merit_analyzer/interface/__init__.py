@@ -1,3 +1,4 @@
-from .cli import CLIApplication, AnalyzeCommand
+from .cli import AnalyzeCommand, CLIApplication
 
-__all__ = ["CLIApplication", "AnalyzeCommand"]
+
+__all__ = ["AnalyzeCommand", "CLIApplication"]

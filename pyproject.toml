@@ -25,8 +25,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.4.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+]
+lint = [
+    "mypy==1.18.2",
+    "ruff==0.14.5",
 ]
 
 [project.scripts]
@@ -38,3 +43,47 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL",]
+ignore = [
+    "COM812", # conflicts with fomatters
+    "RUF012", # Doesn't play well with Pydantic
+    "TC001",  # Doesn't play well with Pydantic
+    "TC002",  # Doesn't play well with Pydantic
+    "TC003",  # Doesn't play well with Pydantic
+    "D107",   # Missing docstring in __init__
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "D",
+    "S", 
+    "PLR2004",
+    "ANN", # TODO: Relax type annotations in tests
+    "T201", # Allow print statements in tests
+    "INP001", # __init__ not required in tests
+]
+
+[tool.ruff.format]
+quote-style = "double" # Like Black, use double quotes for strings
+indent-style = "space" # Like Black, use spaces for indentation
+docstring-code-format = true
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+lines-after-imports = 2
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+strict = true
+enable_error_code = "deprecated"

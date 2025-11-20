@@ -1,6 +1,6 @@
+from .embeddings import MODEL_ID, LocalEmbeddingsEngine
 
-from .embeddings import LocalEmbeddingsEngine, LocalEmbeddingsEngine, MODEL_ID
 
 local_embeddings_engine = LocalEmbeddingsEngine()
 
-__all__ = ["LocalEmbeddingsEngine", "MODEL_ID", "local_embeddings_engine"]
+__all__ = ["MODEL_ID", "LocalEmbeddingsEngine", "local_embeddings_engine"]

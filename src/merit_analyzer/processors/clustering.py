@@ -1,10 +1,10 @@
 from collections import defaultdict
 
 from hdbscan import HDBSCAN
-from typing import List
 
 from ..core import get_llm_client
-from ..types import TestCase, TestCaseGroup, GroupMetadata
+from ..types import GroupMetadata, TestCase, TestCaseGroup
+
 
 CLUSTERING_PROMPT = """
 <task>
@@ -71,9 +71,9 @@ CLUSTERING_PROMPT = """
 ===== ANALYZE ERRORS AND FOLLOW GIVEN INSTRUCTIONS =====
 """
 
-async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGroup]:
-    """Cluster failed test cases for further error analysis"""
 
+async def cluster_failures(failed_test_cases: list[TestCase]) -> list[TestCaseGroup]:
+    """Cluster failed test cases for further error analysis"""
     llm_client = await get_llm_client()
 
     embeddings = await llm_client.generate_embeddings(
@@ -81,12 +81,9 @@ async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGr
             "\n".join(test_case.assertions_result.errors if test_case.assertions_result else [])
             for test_case in failed_test_cases
         ],
-    ) #TODO: if test_case.test_case_result.errors have multiple errors - cluster them separately
+    )  # TODO: if test_case.test_case_result.errors have multiple errors - cluster them separately
 
-    labels = HDBSCAN(
-        min_cluster_size=2, 
-        min_samples=1
-        ).fit_predict(embeddings) #type: ignore
+    labels = HDBSCAN(min_cluster_size=2, min_samples=1).fit_predict(embeddings)  # type: ignore
 
     aggregated = defaultdict(list)
     groups = []
@@ -97,8 +94,7 @@ async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGr
     for label in sorted(aggregated):
         states = aggregated[label]
         cluster_errors = "\n".join(
-            "\n".join(test_case.assertions_result.errors if test_case.assertions_result else [])
-            for test_case in states
+            "\n".join(test_case.assertions_result.errors if test_case.assertions_result else []) for test_case in states
         )
 
         if label == -1:
@@ -108,12 +104,14 @@ async def cluster_failures(failed_test_cases: List[TestCase]) -> List[TestCaseGr
             )
         else:
             metadata = await llm_client.create_object(
-                prompt=CLUSTERING_PROMPT.format(errors=cluster_errors),
-                schema=GroupMetadata
+                prompt=CLUSTERING_PROMPT.format(errors=cluster_errors), schema=GroupMetadata
             )
-        
-        groups.append(TestCaseGroup(
-            metadata=metadata, #type: ignore
-            test_cases=states))
+
+        groups.append(
+            TestCaseGroup(
+                metadata=metadata,  # type: ignore
+                test_cases=states,
+            )
+        )
 
     return groups

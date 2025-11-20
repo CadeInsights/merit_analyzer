@@ -5,11 +5,9 @@
 # with files.
 
 import re
-
-from typing import List, Any, Dict
 from pathlib import Path
+from typing import Any
 
-from .policies import AGENT, TOOL, FILE_ACCESS_POLICY
 
 def read(file_path: str, offset: int | None = None, limit: int | None = None) -> dict[str, Any]:
     """Return numbered file contents with optional slicing."""
@@ -20,10 +18,12 @@ def read(file_path: str, offset: int | None = None, limit: int | None = None) ->
     content = "\n".join(f"{index}:{text}" for index, text in enumerate(view, start=start + 1))
     return {"content": content, "total_lines": len(lines), "lines_returned": len(view)}
 
+
 def write(file_path: str, content: str) -> dict[str, Any]:
     """Overwrite a file and report bytes written."""
     written = Path(file_path).write_text(content)
     return {"message": "file updated", "bytes_written": written, "file_path": file_path}
+
 
 def edit(file_path: str, old_string: str, new_string: str, replace_all: bool | None = None) -> dict[str, Any]:
     """Replace occurrences of a string within a file."""
@@ -38,11 +38,13 @@ def edit(file_path: str, old_string: str, new_string: str, replace_all: bool | N
     replacements = total if replace_all else 1
     return {"message": "text replaced", "replacements": replacements, "file_path": file_path}
 
+
 def glob(pattern: str, path: str | None = None) -> dict[str, Any]:
     """Return paths that match a glob pattern."""
-    base = Path(path) if path else Path(".")
+    base = Path(path) if path else Path()
     matches = sorted(str(match) for match in base.glob(pattern))
     return {"matches": matches, "count": len(matches), "search_path": str(base)}
+
 
 def grep(
     pattern: str,
@@ -53,15 +55,15 @@ def grep(
     head_limit: int | None = None,
 ) -> dict[str, Any]:
     """Search files for lines matching a pattern."""
-    base = Path(path) if path else Path(".")
+    base = Path(path) if path else Path()
     flags = re.MULTILINE | (re.IGNORECASE if ignore_case else 0)
     matcher = re.compile(pattern, flags)
     candidates = [base] if base.is_file() else [p for p in base.rglob(glob or "*") if p.is_file()]
-    results: List[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     for candidate in candidates:
         for index, line in enumerate(candidate.read_text().splitlines(), start=1):
             if matcher.search(line):
-                record: Dict[str, Any] = {"file": str(candidate), "line": line}
+                record: dict[str, Any] = {"file": str(candidate), "line": line}
                 if show_line_numbers:
                     record["line_number"] = index
                 results.append(record)
@@ -69,13 +71,15 @@ def grep(
                     return {"matches": results, "total_matches": len(results)}
     return {"matches": results, "total_matches": len(results)}
 
+
 def ls(path: str | None = None) -> dict[str, Any]:
     """List directory entries."""
-    target = Path(path) if path else Path(".")
+    target = Path(path) if path else Path()
     entries = sorted(str(entry) for entry in target.iterdir())
     return {"path": str(target), "entries": entries, "count": len(entries)}
 
-def todo(todos: List[Dict[str, Any]]) -> dict[str, Any]:
+
+def todo(todos: list[dict[str, Any]]) -> dict[str, Any]:
     """Summarize todo items by status."""
     totals = {"pending": 0, "in_progress": 0, "completed": 0}
     for todo in todos:

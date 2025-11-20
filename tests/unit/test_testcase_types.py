@@ -1,7 +1,7 @@
 import asyncio
 import re
 
-from merit_analyzer.types.case import TestCase, TestCaseValues, ErrorDescription
+from merit_analyzer.types.case import TestCase, TestCaseValues
 
 
 def test_generate_error_data_integration():
@@ -22,17 +22,17 @@ def test_generate_error_data_integration():
         "interior='Parchment', exterior='Nebula Gray', vin='JTJHY7AX0J1234567'."
     )
     expected_record = {
-        "make":"Lexus",
-        "model":"RX 350L",
-        "trim":"Luxury AWD",
-        "odometer":20000,
-        "price":28000,
-        "vin":"JTJHY7AX0J1234567",
-        "interior_color":"Parchment",
-        "exterior_color":"Nebula Gray",
-        "package_notes":"Mark Levinson audio, HUD, ceramic coat",
-        "service_events":["timing belt 2023-08","brake pads 2024-04"]
-        }
+        "make": "Lexus",
+        "model": "RX 350L",
+        "trim": "Luxury AWD",
+        "odometer": 20000,
+        "price": 28000,
+        "vin": "JTJHY7AX0J1234567",
+        "interior_color": "Parchment",
+        "exterior_color": "Nebula Gray",
+        "package_notes": "Mark Levinson audio, HUD, ceramic coat",
+        "service_events": ["timing belt 2023-08", "brake pads 2024-04"],
+    }
     actual_record = {
         "make": "Lexus",
         "model": "RX",

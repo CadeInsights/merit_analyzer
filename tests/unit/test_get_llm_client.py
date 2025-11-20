@@ -9,7 +9,7 @@ from merit_analyzer.core.llm_driver import get_llm_client
 
 def test_get_llm_client_is_exposed():
     assert inspect.iscoroutinefunction(get_llm_client)
-    assert getattr(llm_driver, "get_llm_client") is get_llm_client
+    assert llm_driver.get_llm_client is get_llm_client
 
 
 @pytest.mark.asyncio

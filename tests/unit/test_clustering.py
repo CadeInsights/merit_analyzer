@@ -1,5 +1,6 @@
 from merit_analyzer.processors.clustering import cluster_failures
-from merit_analyzer.types import TestCase, TestCaseGroup, TestCaseValues, ErrorDescription, AssertionsResult
+from merit_analyzer.types import AssertionsResult, TestCase, TestCaseValues
+
 
 async def test_cluster_failures_integration() -> None:
     analyses = [

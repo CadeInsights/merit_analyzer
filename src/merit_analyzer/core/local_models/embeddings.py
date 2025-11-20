@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
 
 from sentence_transformers import SentenceTransformer
 
@@ -19,15 +18,15 @@ MODEL_SNAPSHOT = (
 class LocalEmbeddingsEngine:
     """Load and run local embedding checkpoints via SentenceTransformers."""
 
-    def __init__(self, model_paths: Dict[str, Path] | None = None):
+    def __init__(self, model_paths: dict[str, Path] | None = None):
         self.model_paths = model_paths or {MODEL_ID: MODEL_SNAPSHOT}
-        self._models: Dict[str, SentenceTransformer] = {}
+        self._models: dict[str, SentenceTransformer] = {}
 
     async def generate_embeddings(
         self,
-        input_values: List[str],
+        input_values: list[str],
         model: str | None = None,
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         model_name = model or MODEL_ID
         cached = self._models.get(model_name)
         if not cached:
