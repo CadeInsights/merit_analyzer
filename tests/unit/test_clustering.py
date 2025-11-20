@@ -1,6 +1,7 @@
 from merit_analyzer.processors.clustering import cluster_failures
 from merit_analyzer.types import TestCase, TestCaseGroup, TestCaseValues, ErrorDescription, AssertionsResult
 
+
 async def test_cluster_failures_integration() -> None:
     analyses = [
         "User service timed out during login attempts.",

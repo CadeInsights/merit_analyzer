@@ -12,9 +12,10 @@ from .interface.cli import CLIApplication
 
 __all__ = ["cluster_failures", "CLIApplication"]
 
+
 def main() -> None:
     load_dotenv(Path.cwd() / ".env")
-    
+
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-    
+
     CLIApplication().run()

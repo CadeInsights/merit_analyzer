@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .policies import AGENT, TOOL, FILE_ACCESS_POLICY
 
+
 def read(file_path: str, offset: int | None = None, limit: int | None = None) -> dict[str, Any]:
     """Return numbered file contents with optional slicing."""
     lines = Path(file_path).read_text().splitlines()
@@ -20,10 +21,12 @@ def read(file_path: str, offset: int | None = None, limit: int | None = None) ->
     content = "\n".join(f"{index}:{text}" for index, text in enumerate(view, start=start + 1))
     return {"content": content, "total_lines": len(lines), "lines_returned": len(view)}
 
+
 def write(file_path: str, content: str) -> dict[str, Any]:
     """Overwrite a file and report bytes written."""
     written = Path(file_path).write_text(content)
     return {"message": "file updated", "bytes_written": written, "file_path": file_path}
+
 
 def edit(file_path: str, old_string: str, new_string: str, replace_all: bool | None = None) -> dict[str, Any]:
     """Replace occurrences of a string within a file."""
@@ -38,11 +41,13 @@ def edit(file_path: str, old_string: str, new_string: str, replace_all: bool | N
     replacements = total if replace_all else 1
     return {"message": "text replaced", "replacements": replacements, "file_path": file_path}
 
+
 def glob(pattern: str, path: str | None = None) -> dict[str, Any]:
     """Return paths that match a glob pattern."""
     base = Path(path) if path else Path(".")
     matches = sorted(str(match) for match in base.glob(pattern))
     return {"matches": matches, "count": len(matches), "search_path": str(base)}
+
 
 def grep(
     pattern: str,
@@ -69,11 +74,13 @@ def grep(
                     return {"matches": results, "total_matches": len(results)}
     return {"matches": results, "total_matches": len(results)}
 
+
 def ls(path: str | None = None) -> dict[str, Any]:
     """List directory entries."""
     target = Path(path) if path else Path(".")
     entries = sorted(str(entry) for entry in target.iterdir())
     return {"path": str(target), "entries": entries, "count": len(entries)}
+
 
 def todo(todos: List[Dict[str, Any]]) -> dict[str, Any]:
     """Summarize todo items by status."""

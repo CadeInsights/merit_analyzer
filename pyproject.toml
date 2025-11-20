@@ -50,6 +50,7 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["ALL",]
 ignore = [
+    "COM812", # conflicts with fomatters
     "RUF012",  # Doesn't play well with Pydantic
     "TC001",   # Doesn't play well with Pydantic
     "TC002",   # Doesn't play well with Pydantic

@@ -1,4 +1,3 @@
-
 from .embeddings import LocalEmbeddingsEngine, LocalEmbeddingsEngine, MODEL_ID
 
 local_embeddings_engine = LocalEmbeddingsEngine()

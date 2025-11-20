@@ -1,5 +1,6 @@
 from dataclasses import fields
 
+
 def dataclass_to_xml(data, n=1000):
     parts = []
     for field in fields(data):

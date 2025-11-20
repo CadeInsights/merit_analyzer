@@ -12,8 +12,10 @@ from .defaults import MAX_AGENT_TURNS
 
 load_dotenv()
 
+
 class LLMOpenAI(LLMAbstractHandler):
     """Handler for OpenAI models through Responses API"""
+
     default_small_model = "gpt-5-mini"
     default_big_model = "gpt-5"
     default_embedding_model = "text-embedding-3-small"
@@ -40,29 +42,13 @@ class LLMOpenAI(LLMAbstractHandler):
         self.client = open_ai_client
         self.compiled_agents: Dict[AGENT, Agent] = {}
 
-    async def generate_embeddings(
-            self, 
-            input_values: List[str], 
-            model: str | None = None
-            ) -> List[List[float]]:
-        response = self.client.embeddings.create(
-            model=model or self.default_embedding_model, 
-            input=input_values
-            )
+    async def generate_embeddings(self, input_values: List[str], model: str | None = None) -> List[List[float]]:
+        response = self.client.embeddings.create(model=model or self.default_embedding_model, input=input_values)
         return [item.embedding for item in response.data]
 
-    async def create_object(
-            self, 
-            prompt: str, 
-            schema: Type[ModelT], 
-            model: str | None = None
-            ) -> ModelT:
+    async def create_object(self, prompt: str, schema: Type[ModelT], model: str | None = None) -> ModelT:
         model = model or self.default_big_model
-        response = self.client.responses.parse(
-            model=model, 
-            input=prompt, 
-            text_format=schema
-            )
+        response = self.client.responses.parse(model=model, input=prompt, text_format=schema)
         parsed = response.output_parsed
         if not parsed:
             raise ValueError("LLM didn't return any objects")
@@ -77,15 +63,15 @@ class LLMOpenAI(LLMAbstractHandler):
         standard_tools: List[TOOL] = [],
         extra_tools: List[Callable] = [],
         cwd: str | Path | None = None,
-        output_type: type[ModelT] | type[str] = str
-        ):
+        output_type: type[ModelT] | type[str] = str,
+    ):
         tools = []
         for standard_tool in standard_tools:
             if standard_tool not in file_access.value:
                 raise ValueError(
                     f"""Tool {standard_tool.name} doesn't comply with access policy {file_access.name}.
                     Change file access policy, or remove the tool from the given tools."""
-                    )
+                )
             if standard_tool.value is None:
                 raise ValueError(
                     f"""Tool {standard_tool.name} has not been implemented for the OpenAI client yet.
@@ -109,16 +95,8 @@ class LLMOpenAI(LLMAbstractHandler):
         return
 
     async def run_agent(
-        self,
-        agent: AGENT,
-        task: str,
-        output_type: type[ModelT] | type[str],
-        max_turns: int | None = None
+        self, agent: AGENT, task: str, output_type: type[ModelT] | type[str], max_turns: int | None = None
     ) -> ModelT | str:
         compiled = self.compiled_agents[agent]
-        result = await Runner.run(
-            compiled, 
-            input=task, 
-            max_turns=max_turns or MAX_AGENT_TURNS
-            )
+        result = await Runner.run(compiled, input=task, max_turns=max_turns or MAX_AGENT_TURNS)
         return result.final_output_as(output_type)

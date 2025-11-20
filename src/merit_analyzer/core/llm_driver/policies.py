@@ -1,9 +1,11 @@
 from enum import Enum
 
+
 class AGENT(Enum):
     ERROR_ANALYZER = "error_analyzer"
     SUITE_SCHEMA_BUILDER = "suite_schema_builder"
     TEST = "test"
+
 
 class TOOL(Enum):
     READ = "read"  # Return file contents without changing them.
@@ -23,28 +25,23 @@ class TOOL(Enum):
     TASK = "task"  # Delegate work to a sub-agent with its own tools.
     SLASH_COMMAND = "slash_command"  # Invoke a custom slash command handler.
 
+
 class FILE_ACCESS_POLICY(Enum):
     READ_ONLY = (
-        TOOL.READ, 
-        TOOL.GREP, 
-        TOOL.GLOB, 
-        TOOL.LS, 
-        TOOL.WEB_SEARCH, 
+        TOOL.READ,
+        TOOL.GREP,
+        TOOL.GLOB,
+        TOOL.LS,
+        TOOL.WEB_SEARCH,
         TOOL.WEB_FETCH,
         TOOL.BASH_OUTPUT,
         TOOL.LIST_MCP_RESOURCES,
-        TOOL.READ_MCP_RESOURCE
-        )
-    READ_AND_WRITE = tuple(tool for tool in READ_ONLY) + (
-        TOOL.EDIT, 
-        TOOL.WRITE, 
-        TOOL.TODO_WRITE
-        )
+        TOOL.READ_MCP_RESOURCE,
+    )
+    READ_AND_WRITE = tuple(tool for tool in READ_ONLY) + (TOOL.EDIT, TOOL.WRITE, TOOL.TODO_WRITE)
     FULL_ACCESS = tuple(tool for tool in READ_AND_WRITE) + (
         TOOL.BASH,
         TOOL.SLASH_COMMAND,
         TOOL.KILL_BASH,
     )
-    READ_AND_PLAN = tuple(tool for tool in READ_ONLY) + (
-        TOOL.TODO_WRITE,
-    )
+    READ_AND_PLAN = tuple(tool for tool in READ_ONLY) + (TOOL.TODO_WRITE,)

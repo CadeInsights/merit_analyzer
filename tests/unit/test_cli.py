@@ -70,9 +70,7 @@ async def test_analyze_command_executes_pipeline(monkeypatch):
         ]
 
     analysis = ErrorAnalysis(
-        involved_code_components=[
-            CodeComponent(name="component", path="src/app.py", type=ComponentType.FILE)
-        ],
+        involved_code_components=[CodeComponent(name="component", path="src/app.py", type=ComponentType.FILE)],
         traceback=[FrameInfo(index=0, summary="Frame summary")],
         recommendations=[
             ErrorSolution(
@@ -120,4 +118,4 @@ async def test_analyze_command_executes_pipeline(monkeypatch):
     assert fake_analyzer.calls == 1
     assert recorded["groups"][0].error_analysis == analysis
     assert recorded["report_path"] == "report.md"
-    assert case.assertions_result.errors == ["enriched"] #type: ignore
+    assert case.assertions_result.errors == ["enriched"]  # type: ignore

@@ -10,10 +10,12 @@ from agents.tool_context import ToolContext
 from merit_analyzer.core.llm_driver.openai_handler import LLMOpenAI
 from merit_analyzer.core.llm_driver.policies import AGENT, FILE_ACCESS_POLICY, TOOL
 
+
 class AgentResponse(BaseModel):
     read_file_name: str = Field(description="Exact file name with file extention without path")
     write_file_name: str = Field(description="Exact file name with file extention without path")
     code_file_name: str = Field(description="Exact file name with file extention without path")
+
 
 @pytest.mark.asyncio
 async def test_openai_handler_agent_writes_access_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -29,7 +31,7 @@ async def test_openai_handler_agent_writes_access_code(monkeypatch: pytest.Monke
         - name of the file that was edited to add the code
         - name of the file with another code in the filename
         """
-    
+
     handler = LLMOpenAI(open_ai_client=MagicMock())
     handler.compile_agent(
         agent_name=AGENT.TEST,
@@ -39,7 +41,6 @@ async def test_openai_handler_agent_writes_access_code(monkeypatch: pytest.Monke
         output_type=AgentResponse,
     )
 
-    
     response = await handler.run_agent(AGENT.TEST, task, str)
     assert isinstance(response, AgentResponse)
     assert response.read_file_name == "read_test.md"

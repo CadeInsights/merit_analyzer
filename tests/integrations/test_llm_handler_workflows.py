@@ -35,9 +35,7 @@ class SampleSchema(BaseModel):
 
 @pytest.mark.asyncio
 async def test_create_object_returns_expected_schema(llm_client: LLMAbstractHandler) -> None:
-    prompt = (
-        """Return JSON saying that subject is "integration coverage" and it's severity is 2."""
-    )
+    prompt = """Return JSON saying that subject is "integration coverage" and it's severity is 2."""
 
     result = await llm_client.create_object(prompt=prompt, schema=SampleSchema)
 

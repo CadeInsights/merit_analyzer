@@ -12,6 +12,7 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 # To add other LLM providers — inherit from the abstract LLM handler
 
+
 class LLMAbstractHandler(ABC):
     """Abstract LLM handler"""
 
@@ -38,7 +39,8 @@ class LLMAbstractHandler(ABC):
         standard_tools: List[TOOL] = [],
         extra_tools: List[Callable] = [],
         cwd: str | Path | None = None,
-        output_type: type[ModelT] | type[str] = str):
+        output_type: type[ModelT] | type[str] = str,
+    ):
         pass
 
     @overload
@@ -49,10 +51,6 @@ class LLMAbstractHandler(ABC):
 
     @abstractmethod
     async def run_agent(
-        self,
-        agent: AGENT,
-        task: str,
-        output_type: type[BaseModel] | type[str],
-        max_turns: int | None = None
-        ) -> BaseModel | str:
+        self, agent: AGENT, task: str, output_type: type[BaseModel] | type[str], max_turns: int | None = None
+    ) -> BaseModel | str:
         pass

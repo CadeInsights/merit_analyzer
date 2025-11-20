@@ -5,23 +5,23 @@ from pydantic import BaseModel, Field
 
 from .code import CodeComponent
 
+
 class ErrorDescription(BaseModel):
     """Error messages enreached with context"""
-    errors: List[str] = Field(
-        description="List all problems with this AI system output that led to failed assertions"
-        )
+
+    errors: List[str] = Field(description="List all problems with this AI system output that led to failed assertions")
+
 
 class FrameInfo(BaseModel):
     """Frame for building Traceback"""
-    index: int = Field(
-        description="What's the order index of this frame"
-        )
-    summary: str = Field(
-        description="In less then 30 words explain what happened in this frame"
-        )
+
+    index: int = Field(description="What's the order index of this frame")
+    summary: str = Field(description="In less then 30 words explain what happened in this frame")
+
 
 class ErrorSolution(BaseModel):
     """Solution on how to fix specific errors"""
+
     type: Literal["code", "prompt", "config", "design"] = Field(
         ...,
         description="Type of fix",
@@ -43,8 +43,10 @@ class ErrorSolution(BaseModel):
         description="Line number(s) to modify (e.g., '6' or '6-8')",
     )
 
+
 class ErrorAnalysis(BaseModel):
     """Analysis for a group of errors"""
+
     involved_code_components: List[CodeComponent] = Field(
         ...,
         description="The root cause with file:line reference (e.g., 'calculator.py:35 - Missing zero check causes ZeroDivisionError')",
@@ -54,7 +56,7 @@ class ErrorAnalysis(BaseModel):
         description="The exact code snippet that is causing the problem",
     )
     recommendations: List[ErrorSolution] = Field(
-            min_length=1,
-            max_length=3,
-            description="List of 1-3 actionable recommendations with actual code fixes",
-        )
+        min_length=1,
+        max_length=3,
+        description="List of 1-3 actionable recommendations with actual code fixes",
+    )

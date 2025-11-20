@@ -7,16 +7,13 @@ from ...types import TestCaseGroup, ErrorAnalysis
 
 from ...core import get_llm_client, AGENT, FILE_ACCESS_POLICY, TOOL, dataclass_to_xml
 
+
 class ErrorAnalyzer:
     name = AGENT.ERROR_ANALYZER
     file_access = FILE_ACCESS_POLICY.READ_ONLY
     system_prompt = SYSTEM
     output_type = ErrorAnalysis
-    standard_tools = [
-        TOOL.GLOB, 
-        TOOL.GREP, 
-        TOOL.LS, 
-        TOOL.READ]
+    standard_tools = [TOOL.GLOB, TOOL.GREP, TOOL.LS, TOOL.READ]
 
     async def run(self, failed_group: TestCaseGroup) -> ErrorAnalysis:
         """Analyze failed test groups and provide solutions for each"""
@@ -39,9 +36,8 @@ class ErrorAnalyzer:
             name=failed_group.metadata.name,
             description=failed_group.metadata.description,
             schema=schema,
-            samples="\n".join(
-                [dataclass_to_xml(c) for c in failed_group.test_cases]
-                ))
+            samples="\n".join([dataclass_to_xml(c) for c in failed_group.test_cases]),
+        )
 
         error_analyses = await client.run_agent(self.name, task, self.output_type)
 

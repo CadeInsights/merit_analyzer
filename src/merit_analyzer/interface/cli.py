@@ -81,14 +81,15 @@ class AnalyzeCommand:
         self.console.print("[cyan]Parsing test cases...", end="")
         test_cases = parse_test_cases_from_csv(str(self.csv_path))
         self.console.print(" [green]✓[/green]")
-        
-        failed_cases = [
-            case for case in test_cases if not case.assertions_result or not case.assertions_result.passed
-        ]
+
+        failed_cases = [case for case in test_cases if not case.assertions_result or not case.assertions_result.passed]
         if not failed_cases:
             format_analysis_results_html([], str(self.report_path), str(self.csv_path))
             report_url = self.report_path.resolve().as_uri()
-            self.console.print(f"No failing tests found. Blank report generated at [link={report_url}]{report_url}[/link]", style="bold green")
+            self.console.print(
+                f"No failing tests found. Blank report generated at [link={report_url}]{report_url}[/link]",
+                style="bold green",
+            )
             return
 
         self.console.print("[cyan]Generating error descriptions...", end="")
