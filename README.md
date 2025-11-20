@@ -9,7 +9,7 @@ Error analysis for AI projects.
 - backend parses each row inside this file into a data object: test input (any), expected output (any), actual output (any), pass (bool), error_message (str | None), additional_context (str | None). If no error_message is provided - it generates it with LLM
 - backend clusters all messages into groups. For each group it generates a name (str) and pattern (str).
 - backend predicts what code contributes to each group of errors the most, and provide ideas on fixing them.
-- the tool returns a Markdown file with the following structure: error group name > problematic behavior > problematic code > relevant test results
+- the tool returns an HTML file with the following structure: error group name > problematic behavior > problematic code > relevant test results. The HTML report can be opened directly in a browser and displays a clickable file:// URL in the terminal output.
 
 ## Environment Variables
 
@@ -77,7 +77,7 @@ uv run merit-analyzer analyze <csv_path> [OPTIONS]
 - `csv_path` (required): Path to CSV file containing test results with columns: `case_input`, `reference_value`, `output_for_assertions`, `passed`, `error_message`
 
 **Options:**
-- `--report <path>`: Where to write the Markdown report (default: `merit_report.md`)
+- `--report <path>`: Where to write the HTML report (default: `merit_report.html`)
 - `--model-vendor <vendor>`: Override `MODEL_VENDOR` environment variable (e.g., `openai`, `anthropic`)
 - `--inference-vendor <vendor>`: Override `INFERENCE_VENDOR` environment variable (e.g., `openai`, `anthropic`, `aws`, `gcp`)
 
@@ -90,7 +90,7 @@ uv run merit-analyzer analyze <csv_path> [OPTIONS]
 # INFERENCE_VENDOR=openai
 # OPENAI_API_KEY=sk-...
 
-uv run merit-analyzer analyze tests.csv --report analysis.md
+uv run merit-analyzer analyze tests.csv --report analysis.html
 ```
 
 **Using Anthropic Direct API:**
@@ -100,7 +100,7 @@ uv run merit-analyzer analyze tests.csv --report analysis.md
 # INFERENCE_VENDOR=anthropic
 # ANTHROPIC_API_KEY=sk-ant-...
 
-uv run merit-analyzer analyze tests.csv --report analysis.md
+uv run merit-analyzer analyze tests.csv --report analysis.html
 ```
 
 **Using AWS Bedrock:**
@@ -112,7 +112,7 @@ uv run merit-analyzer analyze tests.csv --report analysis.md
 # AWS_SECRET_ACCESS_KEY=...
 # AWS_REGION=us-east-1
 
-uv run merit-analyzer analyze tests.csv --report analysis.md
+uv run merit-analyzer analyze tests.csv --report analysis.html
 ```
 
 **Overriding vendors via CLI flags:**
@@ -120,7 +120,7 @@ uv run merit-analyzer analyze tests.csv --report analysis.md
 uv run merit-analyzer analyze tests.csv \
   --model-vendor anthropic \
   --inference-vendor aws \
-  --report bedrock_analysis.md
+  --report bedrock_analysis.html
 ```
 
 Note: When using CLI flags to override vendors, you still need the appropriate API keys set in your environment variables.
