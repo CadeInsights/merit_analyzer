@@ -1,4 +1,5 @@
-"""Module for defining test cases and case sets.
+"""
+Module for defining test cases and case sets.
 """
 
 from collections.abc import Callable
@@ -13,7 +14,7 @@ OutputsT = TypeVar("OutputsT")
 
 
 class Case(BaseModel):
-    """A single test case with inputs, expected output, and actual output.
+    """A single test case with inputs and expected output.
 
     Attributes:
     ----------
