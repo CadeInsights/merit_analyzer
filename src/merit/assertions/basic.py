@@ -11,18 +11,20 @@ class ExactMatch(Assertion):
 
     name = "ExactMatch"
 
+    def __init__(self, expected: Any):
+        self.expected = expected
+
     def __call__(self, actual: Any, case: Case) -> AssertionResult:
         """Check if actual output exactly matches expected."""
-        # Handle string comparison with strip
-        if isinstance(actual, str) and isinstance(case.expected_output, str):
-            passed = actual.strip() == case.expected_output.strip()
+        if isinstance(actual, str) and isinstance(self.expected, str):
+            passed = actual.strip() == self.expected.strip()
         else:
-            passed = actual == case.expected_output
+            passed = actual == self.expected
 
         return AssertionResult(
             assertion_name=self.name,
             passed=passed,
             score=1.0 if passed else 0.0,
             confidence=1.0,
-            message=None if passed else f"Expected: {case.expected_output!r}, Got: {actual!r}",
+            message=None if passed else f"Expected: {self.expected!r}, Got: {actual!r}",
         )

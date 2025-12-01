@@ -1,6 +1,23 @@
 """Simple example of using Merit testing framework."""
 
-from merit import Case, CaseSet, ExactMatch, PassRate, Suite
+from merit import Case, ExactMatch, PassRate, Suite, Assertion, AssertionResult
+
+class StartsWithAssertion(Assertion):
+    """ Custom assertion example. """
+    name = "StartsWithAssertion"
+
+    def __init__(self, expected: str):
+        self.expected = expected
+
+    def __call__(self, actual: str, case: Case) -> AssertionResult:
+        passed = actual.lower().startswith(self.expected.lower())
+        return AssertionResult(
+            assertion_name=self.name,
+            passed=passed,
+            score=1.0 if passed else 0.0,
+            confidence=1.0,
+            message=None if passed else f"Expected (case-insensitive): {self.expected!r}, Got: {actual!r}",
+        )
 
 
 # 1. Define your system under test
@@ -10,16 +27,14 @@ def simple_chatbot(prompt: str) -> str:
 
 
 # 2. Create test cases
-cases = CaseSet(
-    cases=[
-        Case(input="World", expected_output="Hello, World!"),
-        Case(input="Alice", expected_output="Hello, Alice!"),
-        Case(input="Bob", expected_output="Hello, Bob!"),
-    ]
-)
+cases = [
+    Case(input="World", assertions=[ExactMatch("Hello, World!")]),
+    Case(input="Alice", assertions=[ExactMatch("Hello, Alice!")]),
+    Case(input="Bob", assertions=[ExactMatch("Hello, Bob!")]),
+]
 
 # 3. Create suite with assertions
-suite = Suite(name="Chatbot Tests", case_set=cases, assertions=ExactMatch())
+suite = Suite(name="Chatbot Tests", cases=cases, assertions=StartsWithAssertion("Hello"))
 
 # 4. Run tests
 results = suite.run(simple_chatbot)

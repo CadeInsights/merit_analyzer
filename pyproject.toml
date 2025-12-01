@@ -36,6 +36,7 @@ lint = [
 ]
 
 [project.scripts]
+merit = "merit.cli:main"
 merit-analyzer = "merit_analyzer:main"
 
 [build-system]
