@@ -47,6 +47,9 @@ class Assertion(ABC):
         if not hasattr(cls, "name"):
             cls.name = cls.__name__
 
+    def __init__(self, **kwargs):
+        pass
+
     @abstractmethod
     def __call__(self, actual: Any, case: "Case") -> AssertionResult:
         """Evaluate the assertion on a test case.
