@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import tomllib
 
 
 @dataclass
@@ -35,7 +34,6 @@ DEFAULT_CONFIG = MeritConfig(
 
 def load_config(start_path: str | Path | None = None) -> MeritConfig:
     """Load configuration from pyproject.toml or merit.toml."""
-
     base = Path(start_path or Path.cwd()).resolve()
     config = MeritConfig(
         test_paths=list(DEFAULT_CONFIG.test_paths),
@@ -67,7 +65,6 @@ def load_config(start_path: str | Path | None = None) -> MeritConfig:
 
 def _find_file(start: Path, filename: str) -> Path | None:
     """Search upwards from start for filename."""
-
     current = start
     while True:
         candidate = current / filename
@@ -85,7 +82,6 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
     """Apply a single config section to the resolved config."""
-
     mapping = {
         "test-paths": "test_paths",
         "test_paths": "test_paths",
@@ -117,4 +113,4 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
                 config.keyword = value
 
 
-__all__ = ["MeritConfig", "load_config", "DEFAULT_CONFIG"]
+__all__ = ["DEFAULT_CONFIG", "MeritConfig", "load_config"]

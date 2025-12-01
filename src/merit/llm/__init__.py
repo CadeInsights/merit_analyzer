@@ -3,7 +3,7 @@
 from merit.llm.base import LLMProvider
 from merit.llm.client import build_client
 from merit.llm.config import AgentConfig, LLMConfig
-from merit.llm.defaults import Agent, FileAccessLevel, Tool, MAX_AGENT_TURNS, MAX_JSON_PARSING_ATTEMPTS
+from merit.llm.defaults import MAX_AGENT_TURNS, MAX_JSON_PARSING_ATTEMPTS, Agent, FileAccessLevel, Tool
 
 
 __all__ = [

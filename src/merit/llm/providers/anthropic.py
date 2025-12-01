@@ -15,10 +15,10 @@ from claude_agent_sdk import (
 )
 from pydantic import BaseModel, ValidationError, create_model
 
-from merit.llm.config import AgentConfig, OutputT
 from merit.llm.base import LLMProvider, ModelT
-from merit.llm.embeddings import local_embeddings, MODEL_ID
-from merit.llm.defaults import FileAccessLevel, Tool, MAX_JSON_PARSING_ATTEMPTS
+from merit.llm.config import AgentConfig, OutputT
+from merit.llm.defaults import MAX_JSON_PARSING_ATTEMPTS, FileAccessLevel, Tool
+from merit.llm.embeddings import MODEL_ID, local_embeddings
 
 
 class AnthropicProvider(LLMProvider):
@@ -115,7 +115,7 @@ class AnthropicProvider(LLMProvider):
             raise ValueError("Agent returned no response")
 
         if isinstance(client_response, agent.output_type):
-            return cast(OutputT, client_response)
+            return cast("OutputT", client_response)
 
         if issubclass(agent.output_type, BaseModel) and isinstance(client_response, str):
             return await self._parse_to_schema(client_response, agent.output_type)

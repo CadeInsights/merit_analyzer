@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any
 
 
 @dataclass
@@ -20,7 +21,7 @@ def _ensure_tag_data(target: Any) -> TagData:
     data: TagData | None = getattr(target, "__merit_tag_data__", None)
     if data is None:
         data = TagData()
-        setattr(target, "__merit_tag_data__", data)
+        target.__merit_tag_data__ = data
     return data
 
 
@@ -37,13 +38,11 @@ def _copy_tag_data(data: TagData | None) -> TagData:
 
 def get_tag_data(target: Any) -> TagData:
     """Return a copy of tag metadata for the target."""
-
     return _copy_tag_data(getattr(target, "__merit_tag_data__", None))
 
 
 def merge_tag_data(*datas: TagData | None) -> TagData:
     """Merge tag metadata, later entries overriding earlier ones."""
-
     merged = TagData()
     for data in datas:
         if not data:

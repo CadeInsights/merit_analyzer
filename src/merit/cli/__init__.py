@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import shlex
 import sys
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from rich.console import Console
 
@@ -17,7 +17,6 @@ from merit.testing.runner import Runner
 
 def main() -> None:
     """Entry point for merit CLI."""
-
     config = load_config()
     parser = _build_parser()
     argv = [*config.addopts, *sys.argv[1:]] if config.addopts else sys.argv[1:]
@@ -202,4 +201,4 @@ class KeywordMatcher:
         self.index += 1
 
 
-__all__ = ["main", "KeywordMatcher"]
+__all__ = ["KeywordMatcher", "main"]

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -66,13 +67,11 @@ def parametrize(
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Parameterize a test function or method.
 
-    Examples
+    Examples:
     --------
     >>> @parametrize("prompt,expected", [("hi", "Hello hi"), ("hey", "Hello hey")])
-    ... def merit_chat(prompt, expected):
-    ...     ...
+    ... def merit_chat(prompt, expected): ...
     """
-
     names = _normalize_argnames(argnames)
     values_list = tuple(_normalize_values(value, len(names)) for value in argvalues)
     if not values_list:
@@ -90,7 +89,7 @@ def parametrize(
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         configs: list[ParameterConfig] = getattr(fn, "__merit_parametrize__", [])
         configs.append(config)
-        setattr(fn, "__merit_parametrize__", configs)
+        fn.__merit_parametrize__ = configs
         return fn
 
     return decorator
@@ -98,7 +97,6 @@ def parametrize(
 
 def get_parameter_sets(fn: Callable[..., Any]) -> list[ParameterSet]:
     """Return all ParameterSet combinations for a callable."""
-
     configs: list[ParameterConfig] = getattr(fn, "__merit_parametrize__", [])
     if not configs:
         return []

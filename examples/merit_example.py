@@ -7,6 +7,7 @@ import merit
 
 # === Resources (similar to pytest fixtures) ===
 
+
 @merit.resource
 def config():
     """Simple sync resource."""

@@ -5,10 +5,10 @@ from typing import cast
 from agents import Agent, Runner, function_tool
 from openai import OpenAI
 
-from merit.llm.config import AgentConfig, OutputT
 from merit.llm.base import LLMProvider, ModelT
-from merit.llm.tools import filesystem
+from merit.llm.config import AgentConfig, OutputT
 from merit.llm.defaults import Tool
+from merit.llm.tools import filesystem
 
 
 class OpenAIProvider(LLMProvider):
@@ -63,7 +63,7 @@ class OpenAIProvider(LLMProvider):
     async def run(self, agent: AgentConfig[OutputT], task: str) -> OutputT:
         sdk_agent = self._build_agent(agent)
         result = await Runner.run(sdk_agent, input=task, max_turns=agent.max_turns)
-        return cast(OutputT, result.final_output_as(agent.output_type))
+        return cast("OutputT", result.final_output_as(agent.output_type))
 
     def _build_agent(self, agent: AgentConfig) -> Agent:
         """Build OpenAI Agent from AgentConfig."""
@@ -71,15 +71,11 @@ class OpenAIProvider(LLMProvider):
 
         for tool_enum in agent.tools:
             if tool_enum not in agent.file_access.value:
-                raise ValueError(
-                    f"Tool {tool_enum.name} not permitted by {agent.file_access.name} policy"
-                )
+                raise ValueError(f"Tool {tool_enum.name} not permitted by {agent.file_access.name} policy")
 
             tool_func = self._tool_function_map.get(tool_enum)
             if tool_func is None:
-                raise NotImplementedError(
-                    f"Tool {tool_enum.name} not implemented for OpenAI provider"
-                )
+                raise NotImplementedError(f"Tool {tool_enum.name} not implemented for OpenAI provider")
 
             tools.append(function_tool(tool_func))
 

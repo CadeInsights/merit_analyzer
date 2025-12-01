@@ -3,10 +3,11 @@
 import importlib.util
 import inspect
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable
+from typing import Any
 
 from merit.testing.parametrize import get_parameter_sets
 from merit.testing.tags import TagData, get_tag_data, merge_tag_data
@@ -97,7 +98,6 @@ def _build_items_for_callable(
     parent_tags: TagData | None = None,
 ) -> list[TestItem]:
     """Create TestItems for a callable, expanding parametrizations if present."""
-
     combined_tags = merge_tag_data(parent_tags, get_tag_data(fn))
 
     base_kwargs = dict(

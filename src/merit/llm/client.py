@@ -1,18 +1,18 @@
 """LLM client factory."""
 
 from merit.llm.base import LLMProvider
-from merit.llm.config import LLMConfig, SUPPORTED_COMBINATIONS
+from merit.llm.config import SUPPORTED_COMBINATIONS, LLMConfig
 
 
 def build_client(config: LLMConfig) -> LLMProvider:
     """Build an LLM provider from configuration.
-    
+
     Args:
         config: LLMConfig with vendor settings
-        
+
     Returns:
         Configured LLMProvider instance
-        
+
     Raises:
         ValueError: If vendor combination is not supported
     """
@@ -27,18 +27,21 @@ def build_client(config: LLMConfig) -> LLMProvider:
     match mv, iv:
         case "openai", "openai":
             from openai import OpenAI
+
             from merit.llm.providers.openai import OpenAIProvider
 
             return OpenAIProvider(OpenAI())
 
         case "anthropic", "anthropic":
             from anthropic import Anthropic
+
             from merit.llm.providers.anthropic import AnthropicProvider
 
             return AnthropicProvider(Anthropic())
 
         case "anthropic", "aws":
             from anthropic import AnthropicBedrock
+
             from merit.llm.providers.anthropic import AnthropicProvider
 
             return AnthropicProvider(
@@ -49,6 +52,7 @@ def build_client(config: LLMConfig) -> LLMProvider:
 
         case "anthropic", "gcp":
             from anthropic import AnthropicVertex
+
             from merit.llm.providers.anthropic import AnthropicProvider
 
             if not config.project_id:

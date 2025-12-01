@@ -1,9 +1,11 @@
 """Simple example of using Merit testing framework."""
 
-from merit import Case, ExactMatch, PassRate, Suite, Assertion, AssertionResult
+from merit import Assertion, AssertionResult, Case, ExactMatch, PassRate, Suite
+
 
 class StartsWithAssertion(Assertion):
-    """ Custom assertion example. """
+    """Custom assertion example."""
+
     name = "StartsWithAssertion"
 
     def __init__(self, expected: str):

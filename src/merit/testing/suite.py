@@ -68,7 +68,7 @@ class Suite:
                 results.append(result)
 
         return results
-    
+
     @classmethod
     def from_csv(cls, path: str) -> "Suite":
         """Load test cases from a CSV file."""
@@ -78,4 +78,3 @@ class Suite:
     def from_json(cls, path: str) -> "Suite":
         """Load test cases from a JSON file."""
         # TODO: Implementation
-

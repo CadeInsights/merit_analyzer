@@ -10,7 +10,9 @@ from sentence_transformers import SentenceTransformer
 MODEL_ID = "granite-embedding-small-english-r2"
 
 # Path to pre-downloaded model weights in merit_analyzer
-_WEIGHTS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "merit_analyzer" / "core" / "local_models" / "weights"
+_WEIGHTS_DIR = (
+    Path(__file__).resolve().parent.parent.parent.parent / "merit_analyzer" / "core" / "local_models" / "weights"
+)
 MODEL_SNAPSHOT = (
     _WEIGHTS_DIR
     / "models--ibm-granite--granite-embedding-small-english-r2"
@@ -32,11 +34,11 @@ class LocalEmbeddingsEngine:
         model: str | None = None,
     ) -> list[list[float]]:
         """Generate embeddings for input texts.
-        
+
         Args:
             inputs: List of texts to embed
             model: Model name (defaults to granite-embedding-small-english-r2)
-            
+
         Returns:
             List of embedding vectors
         """

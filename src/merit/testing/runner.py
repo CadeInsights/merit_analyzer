@@ -128,9 +128,7 @@ class Runner:
                 failures += 1
                 if self.maxfail and failures >= self.maxfail:
                     stopped_early = True
-                    self.console.print(
-                        f"[red]Stopping early after {self.maxfail} failure(s).[/red]"
-                    )
+                    self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
                     break
 
         # Teardown all resources
@@ -229,18 +227,12 @@ class Runner:
                 self.console.print(f"    [yellow]{type(result.error).__name__}: {result.error}[/yellow]")
         elif result.status == TestStatus.SKIPPED:
             reason = result.error.args[0] if result.error else "skipped"
-            self.console.print(
-                f"  [yellow]-[/yellow] {result.item.full_name} [dim]skipped ({reason})[/dim]"
-            )
+            self.console.print(f"  [yellow]-[/yellow] {result.item.full_name} [dim]skipped ({reason})[/dim]")
         elif result.status == TestStatus.XFAILED:
             reason = result.error.args[0] if result.error else "expected failure"
-            self.console.print(
-                f"  [blue]x[/blue] {result.item.full_name} [dim]xfailed ({reason})[/dim]"
-            )
+            self.console.print(f"  [blue]x[/blue] {result.item.full_name} [dim]xfailed ({reason})[/dim]")
         elif result.status == TestStatus.XPASSED:
-            self.console.print(
-                f"  [magenta]![/magenta] {result.item.full_name} [dim]XPASS[/dim]"
-            )
+            self.console.print(f"  [magenta]![/magenta] {result.item.full_name} [dim]XPASS[/dim]")
 
     def _print_summary(self, run_result: RunResult) -> None:
         """Print test run summary."""
