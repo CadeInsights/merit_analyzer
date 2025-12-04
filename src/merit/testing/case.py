@@ -1,5 +1,4 @@
-"""Module for defining test cases and case sets.
-"""
+"""Module for defining test cases and case sets."""
 
 from collections.abc import Callable
 from typing import Any, TypeVar

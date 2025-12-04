@@ -8,6 +8,7 @@ from typing import Any
 
 from rich.console import Console
 
+from merit.assertions import AssertionResult
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 
@@ -32,6 +33,7 @@ class TestResult:
     duration_ms: float
     error: Exception | None = None
     output: Any = None
+    assertion_result: AssertionResult | None = None
 
 
 @dataclass
@@ -198,10 +200,19 @@ class Runner:
 
         except AssertionError as e:
             duration = (time.perf_counter() - start) * 1000
+            assertion_result = getattr(e, "assertion_result", None)
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
-                return TestResult(item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err)
-            return TestResult(item=item, status=TestStatus.FAILED, duration_ms=duration, error=e)
+                return TestResult(
+                    item=item,
+                    status=TestStatus.XFAILED,
+                    duration_ms=duration,
+                    error=err,
+                    assertion_result=assertion_result,
+                )
+            return TestResult(
+                item=item, status=TestStatus.FAILED, duration_ms=duration, error=e, assertion_result=assertion_result
+            )
 
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
@@ -219,7 +230,12 @@ class Runner:
             self.console.print(f"  [green]✓[/green] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
         elif result.status == TestStatus.FAILED:
             self.console.print(f"  [red]✗[/red] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
-            if result.error:
+            if result.assertion_result:
+                ar = result.assertion_result
+                self.console.print(f"    [red]{ar.assertion_name}: {ar.message}[/red]")
+                if ar.score is not None:
+                    self.console.print(f"    [dim]score={ar.score:.2f}, confidence={ar.confidence:.2f}[/dim]")
+            elif result.error:
                 self.console.print(f"    [red]{result.error}[/red]")
         elif result.status == TestStatus.ERROR:
             self.console.print(f"  [yellow]![/yellow] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")

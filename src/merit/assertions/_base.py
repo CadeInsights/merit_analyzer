@@ -1,13 +1,17 @@
 """Base assertion classes and result types."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel
 
 
-if TYPE_CHECKING:
-    from merit.testing import Case
+def _truncate(value: Any, max_len: int = 30) -> str:
+    """Truncate a repr string if too long."""
+    s = repr(value)
+    if len(s) <= max_len:
+        return s
+    return s[: max_len - 3] + "..."
 
 
 class AssertionResult(BaseModel):
@@ -34,11 +38,25 @@ class AssertionResult(BaseModel):
     message: str | None = None
 
 
+class AssertionFailedError(AssertionError):
+    """AssertionError with attached AssertionResult."""
+
+    def __init__(self, result: AssertionResult):
+        self.assertion_result = result
+        message = f"{result.assertion_name} failed"
+        if result.message:
+            message += f": {result.message}"
+        super().__init__(message)
+
+
 class Assertion(ABC):
     """Base class for test assertions.
 
     The 'name' attribute is automatically set to the class name,
     but can be overridden by defining it explicitly as a class variable.
+
+    Subclasses implement `evaluate()` which returns an AssertionResult.
+    Calling the assertion raises AssertionFailedError if the result fails.
     """
 
     def __init_subclass__(cls, **kwargs):
@@ -50,16 +68,37 @@ class Assertion(ABC):
     def __init__(self, **kwargs):
         pass
 
-    @abstractmethod
-    def __call__(self, actual: Any, case: "Case") -> AssertionResult:
-        """Evaluate the assertion on a test case.
+    def __call__(self, actual: Any) -> AssertionResult:
+        """Evaluate the assertion and raise on failure.
 
         Parameters
         ----------
         actual : Any
             The actual output from the system under test
-        case : Case
-            Test case containing expected output
+
+        Returns:
+        -------
+        AssertionResult
+            Result of the assertion evaluation
+
+        Raises:
+        ------
+        AssertionFailedError
+            If the assertion fails (passed=False)
+        """
+        result = self.evaluate(actual)
+        if not result.passed:
+            raise AssertionFailedError(result)
+        return result
+
+    @abstractmethod
+    def evaluate(self, actual: Any) -> AssertionResult:
+        """Evaluate the assertion.
+
+        Parameters
+        ----------
+        actual : Any
+            The actual output from the system under test
 
         Returns:
         -------
