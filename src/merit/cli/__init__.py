@@ -45,6 +45,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip tests that match this tag",
     )
     test_parser.add_argument("--maxfail", type=int, help="Stop after this many failures")
+    test_parser.add_argument(
+        "--concurrency",
+        type=int,
+        help="Number of concurrent tests (default: 1, 0 for unlimited up to 10)",
+    )
     test_parser.add_argument("-q", "--quiet", action="count", default=0, help="Reduce CLI output")
     test_parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase CLI output")
 
@@ -79,6 +84,12 @@ def _resolve_maxfail(args: argparse.Namespace, config: MeritConfig) -> int | Non
 
 def _resolve_verbosity(args: argparse.Namespace, config: MeritConfig) -> int:
     return config.verbosity + args.verbose - args.quiet
+
+
+def _resolve_concurrency(args: argparse.Namespace, config: MeritConfig) -> int:
+    if args.concurrency is not None:
+        return max(0, args.concurrency)
+    return config.concurrency
 
 
 def _collect_items(paths: Sequence[str]) -> list[TestItem]:
@@ -117,6 +128,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
     keyword = _resolve_keyword(args, config)
     maxfail = _resolve_maxfail(args, config)
     verbosity = _resolve_verbosity(args, config)
+    concurrency = _resolve_concurrency(args, config)
 
     items = _collect_items(paths)
     try:
@@ -125,7 +137,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         Console().print(f"[red]{exc}[/red]")
         return 2
 
-    runner = Runner(maxfail=maxfail, verbosity=verbosity)
+    runner = Runner(maxfail=maxfail, verbosity=verbosity, concurrency=concurrency)
     result = await runner.run(items=items)
 
     return 0 if result.failed == 0 and result.errors == 0 else 1

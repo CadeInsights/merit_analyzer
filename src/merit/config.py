@@ -19,6 +19,7 @@ class MeritConfig:
     maxfail: int | None
     verbosity: int
     addopts: list[str]
+    concurrency: int  # 1=sequential, 0=unlimited, max default=10
 
 
 DEFAULT_CONFIG = MeritConfig(
@@ -29,6 +30,7 @@ DEFAULT_CONFIG = MeritConfig(
     maxfail=None,
     verbosity=0,
     addopts=[],
+    concurrency=1,
 )
 
 
@@ -43,6 +45,7 @@ def load_config(start_path: str | Path | None = None) -> MeritConfig:
         maxfail=DEFAULT_CONFIG.maxfail,
         verbosity=DEFAULT_CONFIG.verbosity,
         addopts=list(DEFAULT_CONFIG.addopts),
+        concurrency=DEFAULT_CONFIG.concurrency,
     )
 
     pyproject = _find_file(base, "pyproject.toml")
@@ -93,6 +96,7 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         "maxfail": "maxfail",
         "verbosity": "verbosity",
         "addopts": "addopts",
+        "concurrency": "concurrency",
     }
 
     for key, value in section.items():
@@ -111,6 +115,9 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         elif attr == "keyword":
             if isinstance(value, str):
                 config.keyword = value
+        elif attr == "concurrency":
+            if isinstance(value, int) and value >= 0:
+                config.concurrency = value
 
 
 __all__ = ["DEFAULT_CONFIG", "MeritConfig", "load_config"]

@@ -104,10 +104,36 @@ def clear_registry() -> None:
 class ResourceResolver:
     """Resolves and caches resources for test execution."""
 
-    def __init__(self, registry: dict[str, ResourceDef] | None = None) -> None:
+    def __init__(
+        self,
+        registry: dict[str, ResourceDef] | None = None,
+        *,
+        parent: "ResourceResolver | None" = None,
+    ) -> None:
         self._registry = registry if registry is not None else _registry
         self._cache: dict[tuple[Scope, str], Any] = {}
         self._teardowns: list[tuple[Scope, Generator[Any, None, None] | AsyncGenerator[Any, None]]] = []
+        self._parent = parent
+
+    def fork_for_case(self) -> "ResourceResolver":
+        """Create a child resolver for isolated CASE-scope execution.
+        
+        Shares SUITE/SESSION cache with parent. SUITE/SESSION teardowns
+        are registered with the parent to ensure proper cleanup.
+        """
+        child = ResourceResolver(self._registry, parent=self)
+        # Share higher-scope cached values
+        for key, value in self._cache.items():
+            if key[0] in {Scope.SUITE, Scope.SESSION}:
+                child._cache[key] = value
+        return child
+
+    def _register_teardown(self, scope: Scope, gen: Generator[Any, None, None] | AsyncGenerator[Any, None]) -> None:
+        """Register a teardown, delegating to parent for SUITE/SESSION scopes."""
+        if scope in {Scope.SUITE, Scope.SESSION} and self._parent:
+            self._parent._register_teardown(scope, gen)
+        else:
+            self._teardowns.append((scope, gen))
 
     async def resolve(self, name: str) -> Any:
         """Resolve a resource by name, including its dependencies."""
@@ -130,17 +156,20 @@ class ResourceResolver:
         if defn.is_async_generator:
             gen = defn.fn(**kwargs)
             value = await gen.__anext__()
-            self._teardowns.append((defn.scope, gen))
+            self._register_teardown(defn.scope, gen)
         elif defn.is_generator:
             gen = defn.fn(**kwargs)
             value = next(gen)
-            self._teardowns.append((defn.scope, gen))
+            self._register_teardown(defn.scope, gen)
         elif defn.is_async:
             value = await defn.fn(**kwargs)
         else:
             value = defn.fn(**kwargs)
 
         self._cache[cache_key] = value
+        # Sync cache to parent for SUITE/SESSION scopes
+        if defn.scope in {Scope.SUITE, Scope.SESSION} and self._parent:
+            self._parent._cache[cache_key] = value
         return value
 
     async def resolve_many(self, names: list[str]) -> dict[str, Any]:

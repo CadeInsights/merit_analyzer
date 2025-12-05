@@ -81,7 +81,23 @@ class RunResult:
 
 
 class Runner:
-    """Executes discovered tests with resource injection."""
+    """Executes discovered tests with resource injection.
+
+    Examples:
+        # Sequential execution (default)
+        runner = Runner()
+        result = await runner.run(path="tests/")
+
+        # Concurrent execution with 5 workers
+        runner = Runner(concurrency=5)
+        result = await runner.run(path="tests/")
+
+        # Unlimited concurrency (capped at 10)
+        runner = Runner(concurrency=0)
+        result = await runner.run(path="tests/")
+    """
+
+    DEFAULT_MAX_CONCURRENCY = 10
 
     def __init__(
         self,
@@ -89,10 +105,15 @@ class Runner:
         *,
         maxfail: int | None = None,
         verbosity: int = 0,
+        concurrency: int = 1,
+        timeout: float | None = None,
     ) -> None:
         self.console = console or Console()
         self.maxfail = maxfail if maxfail and maxfail > 0 else None
         self.verbosity = verbosity
+        self.timeout = timeout  # Per-test timeout in seconds
+        # 0 = unlimited (capped at DEFAULT_MAX_CONCURRENCY), 1 = sequential, >1 = concurrent
+        self.concurrency = concurrency if concurrency > 0 else self.DEFAULT_MAX_CONCURRENCY
 
     async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> RunResult:
         """Run tests and return results.
@@ -115,32 +136,102 @@ class Runner:
 
         resolver = ResourceResolver(get_registry())
 
-        failures = 0
-        stopped_early = False
-
-        for item in items:
-            result = await self._run_test(item, resolver)
-            run_result.results.append(result)
-            self._print_result(result)
-
-            # Clear case-scoped resources after each test
-            await resolver.teardown_scope(Scope.CASE)
-
-            if result.status in {TestStatus.FAILED, TestStatus.ERROR}:
-                failures += 1
-                if self.maxfail and failures >= self.maxfail:
-                    stopped_early = True
-                    self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
-                    break
+        if self.concurrency == 1:
+            await self._run_sequential(items, resolver, run_result)
+        else:
+            await self._run_concurrent(items, resolver, run_result)
 
         # Teardown all resources
         await resolver.teardown()
 
         run_result.total_duration_ms = (time.perf_counter() - start) * 1000
-        run_result.stopped_early = stopped_early
         self._print_summary(run_result)
 
         return run_result
+
+    async def _run_sequential(
+        self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult
+    ) -> None:
+        """Run tests sequentially."""
+        failures = 0
+        for item in items:
+            result = await self._run_test(item, resolver)
+            run_result.results.append(result)
+            self._print_result(result)
+            await resolver.teardown_scope(Scope.CASE)
+
+            if result.status in {TestStatus.FAILED, TestStatus.ERROR}:
+                failures += 1
+                if self.maxfail and failures >= self.maxfail:
+                    run_result.stopped_early = True
+                    self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
+                    break
+
+    async def _run_concurrent(
+        self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult
+    ) -> None:
+        """Run tests concurrently with semaphore control."""
+        semaphore = asyncio.Semaphore(self.concurrency)
+        lock = asyncio.Lock()
+        failures = 0
+        stop_flag = False
+
+        async def run_one(idx: int, item: TestItem) -> tuple[int, TestResult | None]:
+            nonlocal failures, stop_flag
+            if stop_flag:
+                return (idx, None)
+            async with semaphore:
+                if stop_flag:
+                    return (idx, None)
+                child_resolver = resolver.fork_for_case()
+                start = time.perf_counter()
+                result: TestResult
+                try:
+                    if self.timeout:
+                        result = await asyncio.wait_for(
+                            self._run_test(item, child_resolver),
+                            timeout=self.timeout,
+                        )
+                    else:
+                        result = await self._run_test(item, child_resolver)
+                except asyncio.TimeoutError:
+                    duration = (time.perf_counter() - start) * 1000
+                    result = TestResult(
+                        item=item,
+                        status=TestStatus.ERROR,
+                        duration_ms=duration,
+                        error=TimeoutError(f"Test timed out after {self.timeout}s"),
+                    )
+                except Exception as e:
+                    duration = (time.perf_counter() - start) * 1000
+                    result = TestResult(item=item, status=TestStatus.ERROR, duration_ms=duration, error=e)
+                finally:
+                    await child_resolver.teardown_scope(Scope.CASE)
+
+                if result.status in {TestStatus.FAILED, TestStatus.ERROR}:
+                    async with lock:
+                        failures += 1
+                        if self.maxfail and failures >= self.maxfail:
+                            stop_flag = True
+                            run_result.stopped_early = True
+                return (idx, result)
+
+        indexed_results = await asyncio.gather(
+            *[run_one(i, item) for i, item in enumerate(items)], return_exceptions=True
+        )
+
+        # Sort by original index for deterministic output order
+        sorted_results = sorted(
+            (r for r in indexed_results if isinstance(r, tuple) and r[1] is not None),
+            key=lambda x: x[0],
+        )
+
+        for _, result in sorted_results:
+            run_result.results.append(result)
+            self._print_result(result)
+
+        if run_result.stopped_early:
+            self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
 
     async def _run_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
         """Execute a single test with resource injection."""
