@@ -50,6 +50,17 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Number of concurrent tests (default: 1, 0 for unlimited up to 10)",
     )
+    test_parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="Enable OpenTelemetry tracing of tests and SUT calls",
+    )
+    test_parser.add_argument(
+        "--trace-output",
+        type=str,
+        default="traces.json",
+        help="Output path for trace data (default: traces.json)",
+    )
     test_parser.add_argument("-q", "--quiet", action="count", default=0, help="Reduce CLI output")
     test_parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase CLI output")
 
@@ -137,7 +148,13 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         Console().print(f"[red]{exc}[/red]")
         return 2
 
-    runner = Runner(maxfail=maxfail, verbosity=verbosity, concurrency=concurrency)
+    runner = Runner(
+        maxfail=maxfail,
+        verbosity=verbosity,
+        concurrency=concurrency,
+        enable_tracing=args.trace,
+        trace_output=args.trace_output,
+    )
     result = await runner.run(items=items)
 
     return 0 if result.failed == 0 and result.errors == 0 else 1

@@ -10,6 +10,8 @@ from .assertions import (
 )
 from .metrics import AverageScore, Metric, PassRate
 from .testing import Case, Suite, parametrize, resource, tag
+from .testing.sut import sut
+from .tracing import export_traces, init_tracing, trace_step
 from .version import __version__
 
 
@@ -20,6 +22,7 @@ __all__ = [
     "parametrize",
     "tag",
     "resource",
+    "sut",
     # Assertions
     "Assertion",
     "AssertionFailedError",
@@ -31,4 +34,8 @@ __all__ = [
     "Metric",
     "PassRate",
     "AverageScore",
+    # Tracing
+    "init_tracing",
+    "export_traces",
+    "trace_step",
 ]

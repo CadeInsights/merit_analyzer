@@ -10,14 +10,17 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+from opentelemetry.trace import StatusCode
 from rich.console import Console
 
 from merit.assertions import AssertionResult
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
+from merit.tracing import clear_traces, export_traces, get_tracer, init_tracing
 from merit.version import __version__
 
 
@@ -252,6 +255,8 @@ class Runner:
         verbosity: int = 0,
         concurrency: int = 1,
         timeout: float | None = None,
+        enable_tracing: bool = False,
+        trace_output: Path | str | None = None,
     ) -> None:
         self.console = console or Console()
         self.maxfail = maxfail if maxfail and maxfail > 0 else None
@@ -259,6 +264,8 @@ class Runner:
         self.timeout = timeout  # Per-test timeout in seconds
         # 0 = unlimited (capped at DEFAULT_MAX_CONCURRENCY), 1 = sequential, >1 = concurrent
         self.concurrency = concurrency if concurrency > 0 else self.DEFAULT_MAX_CONCURRENCY
+        self.enable_tracing = enable_tracing
+        self.trace_output = Path(trace_output) if trace_output else Path("traces.json")
 
     async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> RunResult:
         """Run tests and return results.
@@ -269,6 +276,11 @@ class Runner:
         """
         run_result = RunResult()
         run_result.environment = capture_environment()
+
+        # Initialize tracing if enabled
+        if self.enable_tracing:
+            init_tracing()
+            clear_traces()
 
         if items is None:
             items = collect(path)
@@ -297,6 +309,12 @@ class Runner:
         if run_result.environment:
             run_result.environment.end_time = datetime.now(UTC)
         self._print_summary(run_result)
+
+        # Export traces if enabled
+        if self.enable_tracing:
+            span_count = export_traces(self.trace_output)
+            if span_count > 0:
+                self.console.print(f"[dim]Exported {span_count} trace spans to {self.trace_output}[/dim]")
 
         return run_result
 
@@ -417,7 +435,29 @@ class Runner:
             if cls:
                 instance = cls()
 
+        # Execute test, optionally wrapped in a trace span
+        return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+
+    async def _execute_test_body(
+        self,
+        item: TestItem,
+        instance: Any,
+        kwargs: dict[str, Any],
+        start: float,
+        expect_failure: bool,
+    ) -> TestResult:
+        """Execute the test body, optionally wrapped in a trace span."""
+        tracer = get_tracer() if self.enable_tracing else None
+        span_context = tracer.start_as_current_span(f"test.{item.full_name}") if tracer else None
+
         try:
+            if span_context:
+                span = span_context.__enter__()
+                span.set_attribute("test.name", item.name)
+                span.set_attribute("test.module", str(item.module_path))
+                if item.tags:
+                    span.set_attribute("test.tags", list(item.tags))
+
             if instance:
                 if item.is_async:
                     await item.fn(instance, **kwargs)
@@ -429,6 +469,11 @@ class Runner:
                 item.fn(**kwargs)
 
             duration = (time.perf_counter() - start) * 1000
+
+            if span_context:
+                span.set_attribute("test.status", "passed")
+                span.set_attribute("test.duration_ms", duration)
+
             if expect_failure:
                 if item.xfail_strict:
                     err = AssertionError(item.xfail_reason or "xfail marked test passed")
@@ -439,6 +484,13 @@ class Runner:
         except AssertionError as e:
             duration = (time.perf_counter() - start) * 1000
             assertion_result = getattr(e, "assertion_result", None)
+
+            if span_context:
+                span.set_attribute("test.status", "failed")
+                span.set_attribute("test.duration_ms", duration)
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(
@@ -454,10 +506,21 @@ class Runner:
 
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
+
+            if span_context:
+                span.set_attribute("test.status", "error")
+                span.set_attribute("test.duration_ms", duration)
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err)
             return TestResult(item=item, status=TestStatus.ERROR, duration_ms=duration, error=e)
+
+        finally:
+            if span_context:
+                span_context.__exit__(None, None, None)
 
     def _print_result(self, result: TestResult) -> None:
         """Print a single test result."""
