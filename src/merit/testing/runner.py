@@ -265,7 +265,7 @@ class Runner:
         # 0 = unlimited (capped at DEFAULT_MAX_CONCURRENCY), 1 = sequential, >1 = concurrent
         self.concurrency = concurrency if concurrency > 0 else self.DEFAULT_MAX_CONCURRENCY
         self.enable_tracing = enable_tracing
-        self.trace_output = Path(trace_output) if trace_output else Path("traces.json")
+        self.trace_output = Path(trace_output) if trace_output else Path("traces.jsonl")
 
     async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> RunResult:
         """Run tests and return results.
@@ -279,7 +279,7 @@ class Runner:
 
         # Initialize tracing if enabled
         if self.enable_tracing:
-            init_tracing()
+            init_tracing(output_path=self.trace_output)
             clear_traces()
 
         if items is None:

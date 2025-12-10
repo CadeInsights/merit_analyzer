@@ -6,6 +6,7 @@ and any LLM calls made within are automatically captured as child spans.
 """
 
 import inspect
+import re
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
 
@@ -17,19 +18,21 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-import re
-
-
 def _to_snake_case(name: str) -> str:
     """Convert CamelCase to snake_case."""
     s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-def sut(fn: Callable[P, T] | type | None = None, *, name: str | None = None) -> Any:
+def sut(
+    fn: Callable[P, T] | type | None = None,
+    *,
+    name: str | None = None,
+    method: str = "__call__",
+) -> Any:
     """Register a callable as a traced system-under-test resource.
 
-    Supports sync functions, async functions, and classes with __call__.
+    Supports sync functions, async functions, and classes.
     Each invocation creates a span that captures input/output and nests
     LLM calls as children.
 
@@ -39,6 +42,7 @@ def sut(fn: Callable[P, T] | type | None = None, *, name: str | None = None) -> 
     Args:
         fn: The callable to register as SUT.
         name: Optional name override (defaults to function/class name).
+        method: The method name to trace for class-based SUTs (default: "__call__").
 
     Example:
         @sut
@@ -50,12 +54,16 @@ def sut(fn: Callable[P, T] | type | None = None, *, name: str | None = None) -> 
             def __call__(self, query: str) -> str:
                 return self.generate(self.retrieve(query))
 
-        def merit_test(my_agent, rag_pipeline):
+        @sut(method="run")
+        class Agent:
+            def run(self, task: str) -> str: ...
+
+        def merit_test(my_agent, rag_pipeline, agent):
             result = my_agent("Hello")
-            assert "world" in result.lower()
+            agent.run("Task")
     """
     if fn is None:
-        return lambda f: sut(f, name=name)
+        return lambda f: sut(f, name=name, method=method)
 
     if name:
         sut_name = name
@@ -65,7 +73,7 @@ def sut(fn: Callable[P, T] | type | None = None, *, name: str | None = None) -> 
         sut_name = fn.__name__
 
     if inspect.isclass(fn):
-        return _wrap_class(fn, sut_name)
+        return _wrap_class(fn, sut_name, method)
 
     return _wrap_callable(fn, sut_name)
 
@@ -109,49 +117,61 @@ def _wrap_callable(fn: Callable[P, T], sut_name: str) -> Callable[[], Callable[P
     return resource(factory, scope=Scope.SESSION)
 
 
-def _wrap_class(cls: type, sut_name: str) -> Callable[[], Any]:
-    """Wrap a class with __call__ and register instance as resource."""
+def _wrap_class(cls: type, sut_name: str, method_name: str) -> Callable[[], Any]:
+    """Wrap a class method and register instance as resource."""
 
     def factory() -> Any:
         instance = cls()
-        original_call = instance.__call__
-        is_async = inspect.iscoroutinefunction(original_call)
+        original_method = getattr(instance, method_name)
+        is_async = inspect.iscoroutinefunction(original_method)
 
         if is_async:
 
             class TracedWrapper:
                 def __init__(self, wrapped: Any):
                     self._wrapped = wrapped
-                    self._original_call = wrapped.__call__
+                    self._original_method = getattr(wrapped, method_name)
 
-                async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+                async def _traced_method(self, *args: Any, **kwargs: Any) -> Any:
                     tracer = get_tracer()
                     with tracer.start_as_current_span(f"sut.{sut_name}") as span:
                         _set_input_attrs(span, args, kwargs)
-                        result = await self._original_call(*args, **kwargs)
+                        result = await self._original_method(*args, **kwargs)
                         _set_output_attrs(span, result)
                         return result
 
                 def __getattr__(self, name: str) -> Any:
+                    if name == method_name:
+                        return self._traced_method
                     return getattr(self._wrapped, name)
+
+                # If method is __call__, make the wrapper callable
+                if method_name == "__call__":
+                    __call__ = _traced_method
 
             return TracedWrapper(instance)
 
         class TracedWrapper:
             def __init__(self, wrapped: Any):
                 self._wrapped = wrapped
-                self._original_call = wrapped.__call__
+                self._original_method = getattr(wrapped, method_name)
 
-            def __call__(self, *args: Any, **kwargs: Any) -> Any:
+            def _traced_method(self, *args: Any, **kwargs: Any) -> Any:
                 tracer = get_tracer()
                 with tracer.start_as_current_span(f"sut.{sut_name}") as span:
                     _set_input_attrs(span, args, kwargs)
-                    result = self._original_call(*args, **kwargs)
+                    result = self._original_method(*args, **kwargs)
                     _set_output_attrs(span, result)
                     return result
 
             def __getattr__(self, name: str) -> Any:
+                if name == method_name:
+                    return self._traced_method
                 return getattr(self._wrapped, name)
+
+            # If method is __call__, make the wrapper callable
+            if method_name == "__call__":
+                __call__ = _traced_method
 
         return TracedWrapper(instance)
 
@@ -187,7 +207,10 @@ def _set_output_attrs(span: Any, result: Any) -> None:
 
 def _truncate_repr(value: Any, max_len: int = 1000) -> str:
     """Truncate a repr string if too long."""
-    s = repr(value)
-    if len(s) <= max_len:
-        return s
-    return s[: max_len - 3] + "..."
+    try:
+        s = repr(value)
+        if len(s) <= max_len:
+            return s
+        return s[: max_len - 3] + "..."
+    except Exception:
+        return "<repr-failed>"

@@ -24,8 +24,14 @@ def setup_tracing_once():
 
 
 @pytest.fixture(autouse=True)
-def clear_traces_each():
-    """Clear traces before and after each test."""
+def clear_traces_each(tmp_path):
+    """Point tracing to a temp file and clear before/after each test."""
+    from merit.tracing import _exporter
+
+    if _exporter:
+        _exporter.output_path = tmp_path / "traces.jsonl"
+        _exporter.output_path.write_text("")
+
     clear_traces()
     yield
     clear_traces()
@@ -161,8 +167,6 @@ class TestSutTracing:
     async def test_sync_sut_creates_span(self, tmp_path):
         import json
 
-        from merit.tracing import export_traces
-
         @sut
         def traced_sut(x: int) -> int:
             return x * 2
@@ -171,23 +175,19 @@ class TestSutTracing:
         resolved = await resolver.resolve("traced_sut")
         resolved(5)
 
-        output = tmp_path / "traces.json"
-        count = export_traces(output)
+        from merit.tracing import _exporter
 
-        assert count >= 1
-        data = json.loads(output.read_text())
-        span_names = []
-        for rs in data["resourceSpans"]:
-            for ss in rs.get("scopeSpans", []):
-                for sp in ss.get("spans", []):
-                    span_names.append(sp["name"])
+        assert _exporter is not None
+        output = _exporter.output_path
+        lines = output.read_text().strip().splitlines()
+        assert len(lines) >= 1
+
+        span_names = [json.loads(line)["name"] for line in lines]
         assert "sut.traced_sut" in span_names
 
     @pytest.mark.asyncio
     async def test_async_sut_creates_span(self, tmp_path):
         import json
-
-        from merit.tracing import export_traces
 
         @sut
         async def async_traced(x: int) -> int:
@@ -198,23 +198,19 @@ class TestSutTracing:
         resolved = await resolver.resolve("async_traced")
         await resolved(5)
 
-        output = tmp_path / "traces.json"
-        count = export_traces(output)
+        from merit.tracing import _exporter
 
-        assert count >= 1
-        data = json.loads(output.read_text())
-        span_names = []
-        for rs in data["resourceSpans"]:
-            for ss in rs.get("scopeSpans", []):
-                for sp in ss.get("spans", []):
-                    span_names.append(sp["name"])
+        assert _exporter is not None
+        output = _exporter.output_path
+        lines = output.read_text().strip().splitlines()
+        assert len(lines) >= 1
+
+        span_names = [json.loads(line)["name"] for line in lines]
         assert "sut.async_traced" in span_names
 
     @pytest.mark.asyncio
     async def test_class_sut_creates_span(self, tmp_path):
         import json
-
-        from merit.tracing import export_traces
 
         @sut
         class TracedPipeline:
@@ -225,16 +221,14 @@ class TestSutTracing:
         resolved = await resolver.resolve("traced_pipeline")
         resolved("test query")
 
-        output = tmp_path / "traces.json"
-        count = export_traces(output)
+        from merit.tracing import _exporter
 
-        assert count >= 1
-        data = json.loads(output.read_text())
-        span_names = []
-        for rs in data["resourceSpans"]:
-            for ss in rs.get("scopeSpans", []):
-                for sp in ss.get("spans", []):
-                    span_names.append(sp["name"])
+        assert _exporter is not None
+        output = _exporter.output_path
+        lines = output.read_text().strip().splitlines()
+        assert len(lines) >= 1
+
+        span_names = [json.loads(line)["name"] for line in lines]
         assert "sut.traced_pipeline" in span_names
 
 

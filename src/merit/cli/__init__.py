@@ -58,7 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
     test_parser.add_argument(
         "--trace-output",
         type=str,
-        default="traces.json",
+        default="traces.jsonl",
         help="Output path for trace data (default: traces.json)",
     )
     test_parser.add_argument("-q", "--quiet", action="count", default=0, help="Reduce CLI output")
