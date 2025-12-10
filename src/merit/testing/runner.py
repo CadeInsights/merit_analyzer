@@ -20,7 +20,7 @@ from rich.console import Console
 from merit.assertions import AssertionResult
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
-from merit.tracing import clear_traces, export_traces, get_tracer, init_tracing
+from merit.tracing import clear_traces, get_tracer, init_tracing
 from merit.version import __version__
 
 
@@ -310,11 +310,11 @@ class Runner:
             run_result.environment.end_time = datetime.now(UTC)
         self._print_summary(run_result)
 
-        # Export traces if enabled
-        if self.enable_tracing:
-            span_count = export_traces(self.trace_output)
-            if span_count > 0:
-                self.console.print(f"[dim]Exported {span_count} trace spans to {self.trace_output}[/dim]")
+        # Tracing is streamed; surface the path for the user
+        if self.enable_tracing and self.trace_output.exists():
+            self.console.print(
+                f"[dim]Tracing written to {self.trace_output} ({self.trace_output.stat().st_size} bytes)[/dim]"
+            )
 
         return run_result
 

@@ -4,19 +4,16 @@ import json
 
 import pytest
 
-from merit.tracing import (
-    clear_traces,
-    export_traces,
-    get_tracer,
-    init_tracing,
-    trace_step,
-)
+from merit.tracing import clear_traces, get_tracer, init_tracing, trace_step
 
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_tracing_once():
+@pytest.fixture(scope="module")
+def trace_output_path(tmp_path_factory):
     """Initialize tracing once for all tests in this module."""
-    init_tracing(output_path="test_traces.jsonl")
+    tmp_dir = tmp_path_factory.mktemp("traces")
+    output_path = tmp_dir / "test_traces.jsonl"
+    init_tracing(output_path=str(output_path))
+    return output_path
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +24,7 @@ def clear_traces_each():
     clear_traces()
 
 
+@pytest.mark.usefixtures("trace_output_path")
 class TestInitTracing:
     """Tests for init_tracing function."""
 
@@ -40,66 +38,36 @@ class TestInitTracing:
         assert tracer is not None
 
 
+@pytest.mark.usefixtures("trace_output_path")
 class TestTraceStep:
     """Tests for trace_step context manager."""
 
-    def test_trace_step_creates_span(self, tmp_path):
-        # Re-init with tmp path for this test
-        from merit.tracing import _exporter
-
-        if _exporter:
-            _exporter.output_path = tmp_path / "traces.jsonl"
-            _exporter.output_path.write_text("")
-
+    def test_trace_step_creates_span(self, trace_output_path):
         with trace_step("test_step"):
             pass
 
-        output_file = tmp_path / "traces.jsonl"
-        assert output_file.exists()
+        assert trace_output_path.exists()
 
-        lines = output_file.read_text().strip().split("\n")
+        lines = trace_output_path.read_text().strip().split("\n")
         assert len(lines) == 1
 
         span = json.loads(lines[0])
         assert span["name"] == "test_step"
 
-    def test_trace_step_with_attributes(self, tmp_path):
-        from merit.tracing import _exporter
-
-        if _exporter:
-            _exporter.output_path = tmp_path / "traces_attrs.jsonl"
-            _exporter.output_path.write_text("")
-
+    def test_trace_step_with_attributes(self, trace_output_path):
         with trace_step("step_with_attrs", {"key": "value", "count": 42}):
             pass
 
-        output_file = tmp_path / "traces_attrs.jsonl"
-        lines = output_file.read_text().strip().split("\n")
+        lines = trace_output_path.read_text().strip().split("\n")
         span = json.loads(lines[0])
 
         attrs = span["attributes"]
         assert attrs.get("key") == "value"
         assert attrs.get("count") == 42
 
-    def test_nested_trace_steps(self, tmp_path):
-        from merit.tracing import _exporter
-
-        if _exporter:
-            _exporter.output_path = tmp_path / "traces_nested.jsonl"
-            _exporter.output_path.write_text("")
-
+    def test_nested_trace_steps(self, trace_output_path):
         with trace_step("outer"), trace_step("inner"):
             pass
 
-        output_file = tmp_path / "traces_nested.jsonl"
-        lines = output_file.read_text().strip().split("\n")
+        lines = trace_output_path.read_text().strip().split("\n")
         assert len(lines) == 2
-
-
-class TestExportTraces:
-    """Tests for export_traces function."""
-
-    def test_export_is_noop(self, tmp_path):
-        # export_traces is now a no-op since we stream
-        count = export_traces(tmp_path / "unused.json")
-        assert count == 0

@@ -76,14 +76,6 @@ def get_tracer(name: str = "merit") -> trace.Tracer:
     return trace.get_tracer(name)
 
 
-def export_traces(path: Path | str) -> int:
-    """No-op for streaming exporter (traces are written immediately).
-
-    Kept for compatibility with existing calls.
-    """
-    return 0
-
-
 def clear_traces() -> None:
     """Clear the trace file."""
     if _exporter is not None:
