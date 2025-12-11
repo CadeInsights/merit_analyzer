@@ -47,7 +47,9 @@ class AssertionMetadata(BaseModel):
 
     @field_serializer("actual", "reference")
     def _truncate(self, v: str, info: SerializationInfo) -> str:
-        """Truncate the values in the actual and reference fields to 50 characters."""
+        """
+        Truncate the values in the actual and reference fields to 50 characters.
+        """
         ctx = info.context or {}
         if ctx.get("truncate"):
             max_len = 50

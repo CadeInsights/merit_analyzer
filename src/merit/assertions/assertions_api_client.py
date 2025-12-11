@@ -14,7 +14,7 @@ class AssertionAPIRequest(BaseModel):
 
 
 class FactsCheckRequest(AssertionAPIRequest):
-    check: Literal["contradictions", "supported", "full_match"]
+    check: Literal["contradictions", "reference_in_actual", "full_match", "actual_in_reference"]
 
 
 class StyleCheckRequest(AssertionAPIRequest):
