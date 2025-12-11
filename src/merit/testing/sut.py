@@ -6,6 +6,7 @@ and any LLM calls made within are automatically captured as child spans.
 """
 
 import inspect
+import os
 import re
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
@@ -182,8 +183,6 @@ def _wrap_class(cls: type, sut_name: str, method_name: str) -> Callable[[], Any]
 
 def _set_input_attrs(span: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
     """Set input attributes on span, respecting trace content settings."""
-    import os
-
     if os.environ.get("MERIT_TRACE_CONTENT", "true").lower() != "true":
         span.set_attribute("sut.input.count", len(args) + len(kwargs))
         return
@@ -196,8 +195,6 @@ def _set_input_attrs(span: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -
 
 def _set_output_attrs(span: Any, result: Any) -> None:
     """Set output attributes on span, respecting trace content settings."""
-    import os
-
     if os.environ.get("MERIT_TRACE_CONTENT", "true").lower() != "true":
         span.set_attribute("sut.output.type", type(result).__name__)
         return

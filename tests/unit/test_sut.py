@@ -6,7 +6,7 @@ import pytest
 
 from merit.testing.resources import ResourceResolver, Scope, clear_registry, get_registry
 from merit.testing.sut import sut
-from merit.tracing import clear_traces, init_tracing
+from merit.tracing import clear_traces, init_tracing, set_trace_output_path
 
 
 @pytest.fixture(autouse=True)
@@ -18,19 +18,18 @@ def clean_registry():
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_tracing_once():
+def setup_tracing_once(tmp_path_factory):
     """Initialize tracing once for all tests in this module."""
-    init_tracing()
+    tmp_dir = tmp_path_factory.mktemp("traces")
+    output_path = tmp_dir / "sut_traces.jsonl"
+    set_trace_output_path(output_path=str(output_path))
 
 
 @pytest.fixture(autouse=True)
 def clear_traces_each(tmp_path):
     """Point tracing to a temp file and clear before/after each test."""
-    from merit.tracing import _exporter
-
-    if _exporter:
-        _exporter.output_path = tmp_path / "traces.jsonl"
-        _exporter.output_path.write_text("")
+    output_path = tmp_path / "traces.jsonl"
+    set_trace_output_path(output_path)
 
     clear_traces()
     yield
@@ -175,7 +174,7 @@ class TestSutTracing:
         resolved = await resolver.resolve("traced_sut")
         resolved(5)
 
-        from merit.tracing import _exporter
+        from merit.tracing.lifecycle import _exporter
 
         assert _exporter is not None
         output = _exporter.output_path
@@ -198,7 +197,7 @@ class TestSutTracing:
         resolved = await resolver.resolve("async_traced")
         await resolved(5)
 
-        from merit.tracing import _exporter
+        from merit.tracing.lifecycle import _exporter
 
         assert _exporter is not None
         output = _exporter.output_path
@@ -221,7 +220,7 @@ class TestSutTracing:
         resolved = await resolver.resolve("traced_pipeline")
         resolved("test query")
 
-        from merit.tracing import _exporter
+        from merit.tracing.lifecycle import _exporter
 
         assert _exporter is not None
         output = _exporter.output_path
