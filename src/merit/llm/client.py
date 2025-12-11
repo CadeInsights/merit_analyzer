@@ -2,6 +2,10 @@
 
 from merit.llm.base import LLMProvider
 from merit.llm.config import SUPPORTED_COMBINATIONS, LLMConfig
+from merit.llm.providers.anthropic import AnthropicProvider
+from merit.llm.providers.openai import OpenAIProvider
+from anthropic import Anthropic, AnthropicBedrock, AnthropicVertex
+from openai import OpenAI
 
 
 def build_client(config: LLMConfig) -> LLMProvider:
@@ -26,24 +30,12 @@ def build_client(config: LLMConfig) -> LLMProvider:
 
     match mv, iv:
         case "openai", "openai":
-            from openai import OpenAI
-
-            from merit.llm.providers.openai import OpenAIProvider
-
             return OpenAIProvider(OpenAI())
 
         case "anthropic", "anthropic":
-            from anthropic import Anthropic
-
-            from merit.llm.providers.anthropic import AnthropicProvider
-
             return AnthropicProvider(Anthropic())
 
         case "anthropic", "aws":
-            from anthropic import AnthropicBedrock
-
-            from merit.llm.providers.anthropic import AnthropicProvider
-
             return AnthropicProvider(
                 AnthropicBedrock(),
                 default_model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -51,10 +43,6 @@ def build_client(config: LLMConfig) -> LLMProvider:
             )
 
         case "anthropic", "gcp":
-            from anthropic import AnthropicVertex
-
-            from merit.llm.providers.anthropic import AnthropicProvider
-
             if not config.project_id:
                 raise ValueError("project_id required for GCP Vertex AI")
 

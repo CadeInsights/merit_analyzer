@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from merit.tracing import clear_traces, get_tracer, init_tracing, trace_step
+from merit.tracing import clear_traces, get_tracer, init_tracing, set_trace_output_path, trace_step
 
 
 @pytest.fixture(scope="module")
@@ -12,7 +12,7 @@ def trace_output_path(tmp_path_factory):
     """Initialize tracing once for all tests in this module."""
     tmp_dir = tmp_path_factory.mktemp("traces")
     output_path = tmp_dir / "test_traces.jsonl"
-    init_tracing(output_path=str(output_path))
+    set_trace_output_path(output_path=str(output_path))
     return output_path
 
 
