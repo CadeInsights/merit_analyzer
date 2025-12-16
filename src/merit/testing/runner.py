@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 from rich.console import Console
 
-from merit.assertions import AssertionResult
+from merit.checks import CheckerResult, close_remote_checks_client
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.version import __version__
@@ -177,7 +177,7 @@ class TestResult:
     duration_ms: float
     error: Exception | None = None
     output: Any = None
-    assertion_result: AssertionResult | None = None
+    check_result: CheckerResult | None = None # TODO: do we still need to parse check results?
 
 
 @dataclass
@@ -292,6 +292,7 @@ class Runner:
 
         # Teardown all resources
         await resolver.teardown()
+        await close_remote_checks_client()
 
         run_result.total_duration_ms = (time.perf_counter() - start) * 1000
         if run_result.environment:
@@ -438,7 +439,7 @@ class Runner:
 
         except AssertionError as e:
             duration = (time.perf_counter() - start) * 1000
-            assertion_result = getattr(e, "assertion_result", None)
+            check_result = getattr(e, "check_result", None)
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(
@@ -446,10 +447,10 @@ class Runner:
                     status=TestStatus.XFAILED,
                     duration_ms=duration,
                     error=err,
-                    assertion_result=assertion_result,
+                    check_result=check_result,
                 )
             return TestResult(
-                item=item, status=TestStatus.FAILED, duration_ms=duration, error=e, assertion_result=assertion_result
+                item=item, status=TestStatus.FAILED, duration_ms=duration, error=e, check_result=check_result
             )
 
         except Exception as e:
@@ -468,11 +469,9 @@ class Runner:
             self.console.print(f"  [green]✓[/green] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
         elif result.status == TestStatus.FAILED:
             self.console.print(f"  [red]✗[/red] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
-            if result.assertion_result:
-                ar = result.assertion_result
-                self.console.print(f"    [red]{ar.assertion_name}: {ar.message}[/red]")
-                if ar.score is not None:
-                    self.console.print(f"    [dim]score={ar.score:.2f}, confidence={ar.confidence:.2f}[/dim]")
+            if result.check_result:
+                ar = result.check_result
+                self.console.print(f"    [red]{ar.checker.checker_name}: {ar.message}[/red]")
             elif result.error:
                 self.console.print(f"    [red]{result.error}[/red]")
         elif result.status == TestStatus.ERROR:

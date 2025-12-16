@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from merit.assertions._base import AssertionResult
+from merit.checks.base import CheckerResult
 
 
 class Metric(ABC):
@@ -18,5 +18,5 @@ class Metric(ABC):
             cls.name = cls.__name__
 
     @abstractmethod
-    def __call__(self, results: list[AssertionResult]) -> float:
+    def __call__(self, results: list[CheckerResult]) -> float:
         """Compute the metric score given assertion results."""

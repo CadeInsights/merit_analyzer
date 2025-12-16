@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from merit.assertions._base import Assertion, AssertionResult
+from merit.checks.base import Checker, CheckerResult
 from merit.testing.case import Case
 
 
@@ -20,7 +20,7 @@ class Suite:
         Suite-level assertions to run on each case
     """
 
-    def __init__(self, name: str, cases: list[Case], assertions: list[Assertion] | Assertion | None = None):
+    def __init__(self, name: str, cases: list[Case], assertions: list[Checker] | Checker | None = None):
         """Args:
         name : str
             Name for this suite
@@ -33,15 +33,15 @@ class Suite:
         self.cases = cases
         self.assertions = self._normalize_assertions(assertions)
 
-    def _normalize_assertions(self, assertions: list | Assertion | None) -> list[Assertion]:
+    def _normalize_assertions(self, assertions: list | Checker | None) -> list[Checker]:
         """Normalize assertions to list."""
         if assertions is None:
             return []
-        if isinstance(assertions, Assertion):
+        if isinstance(assertions, Checker):
             return [assertions]
         return list(assertions)
 
-    def run(self, system_under_test: Callable[[Any], Any]) -> list[AssertionResult]:
+    def run(self, system_under_test: Callable[[Any], Any]) -> list[CheckerResult]:
         """Run all test cases in the suite.
 
         Parameters
