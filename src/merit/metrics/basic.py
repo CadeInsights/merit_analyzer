@@ -1,6 +1,6 @@
 """Basic metric implementations."""
 
-from merit.assertions._base import AssertionResult
+from merit.checkers.base import CheckerResult
 from merit.metrics._base import Metric
 
 
@@ -9,12 +9,12 @@ class PassRate(Metric):
 
     name = "PassRate"
 
-    def __call__(self, results: list[AssertionResult]) -> float:
+    def __call__(self, results: list[CheckerResult]) -> float:
         """Calculate pass rate."""
         if not results:
             return 0.0
 
-        passed = sum(1 for r in results if r.passed)
+        passed = sum(1 for r in results if r.value)
         return passed / len(results)
 
 
@@ -23,12 +23,12 @@ class AverageScore(Metric):
 
     name = "AverageScore"
 
-    def __call__(self, results: list[AssertionResult]) -> float:
+    def __call__(self, results: list[CheckerResult]) -> float:
         """Calculate average score."""
         if not results:
             return 0.0
 
-        scores = [r.score for r in results if r.score is not None]
+        scores = [r.confidence for r in results if r.confidence is not None]
         if not scores:
             return 0.0
 

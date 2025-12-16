@@ -1,13 +1,13 @@
 """Merit - Testing framework for AI agents."""
 
-from .assertions import (
-    Assertion,
-    AssertionFailedError,
-    AssertionResult,
-    Contains,
-    ExactMatch,
-    StartsWith,
-)
+# from .assertions import (
+#     Assertion,
+#     AssertionFailedError,
+#     AssertionResult,
+#     Contains,
+#     ExactMatch,
+#     StartsWith,
+# )
 from .metrics import AverageScore, Metric, PassRate
 from .testing import Case, Suite, parametrize, resource, tag
 from .testing.sut import sut

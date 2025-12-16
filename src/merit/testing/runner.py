@@ -10,14 +10,14 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from pathlib import Path
 from typing import Any
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from opentelemetry.trace import StatusCode
 from rich.console import Console
 
-from merit.assertions import AssertionResult
+from merit.checkers import CheckerResult, close_checker_api_client
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, get_tracer, init_tracing
@@ -180,7 +180,7 @@ class TestResult:
     duration_ms: float
     error: Exception | None = None
     output: Any = None
-    assertion_result: AssertionResult | None = None
+    checker_results: list[CheckerResult] = field(default_factory=list) # TODO: implement collecting and printing checker results
 
 
 @dataclass
@@ -304,6 +304,7 @@ class Runner:
 
         # Teardown all resources
         await resolver.teardown()
+        await close_checker_api_client()
 
         run_result.total_duration_ms = (time.perf_counter() - start) * 1000
         if run_result.environment:
@@ -483,7 +484,6 @@ class Runner:
 
         except AssertionError as e:
             duration = (time.perf_counter() - start) * 1000
-            assertion_result = getattr(e, "assertion_result", None)
 
             if span_context:
                 span.set_attribute("test.status", "failed")
@@ -497,11 +497,10 @@ class Runner:
                     item=item,
                     status=TestStatus.XFAILED,
                     duration_ms=duration,
-                    error=err,
-                    assertion_result=assertion_result,
+                    error=err
                 )
             return TestResult(
-                item=item, status=TestStatus.FAILED, duration_ms=duration, error=e, assertion_result=assertion_result
+                item=item, status=TestStatus.FAILED, duration_ms=duration, error=e
             )
 
         except Exception as e:
@@ -531,12 +530,7 @@ class Runner:
             self.console.print(f"  [green]✓[/green] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
         elif result.status == TestStatus.FAILED:
             self.console.print(f"  [red]✗[/red] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
-            if result.assertion_result:
-                ar = result.assertion_result
-                self.console.print(f"    [red]{ar.assertion_name}: {ar.message}[/red]")
-                if ar.score is not None:
-                    self.console.print(f"    [dim]score={ar.score:.2f}, confidence={ar.confidence:.2f}[/dim]")
-            elif result.error:
+            if result.error:
                 self.console.print(f"    [red]{result.error}[/red]")
         elif result.status == TestStatus.ERROR:
             self.console.print(f"  [yellow]![/yellow] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
