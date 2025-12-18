@@ -17,6 +17,19 @@ class TagData:
     xfail_strict: bool = False
 
 
+@dataclass
+class RepeatData:
+    """Configuration for repeating a test multiple times."""
+
+    count: int
+    min_passes: int
+
+
+def get_repeat_data(target: Any) -> RepeatData | None:
+    """Return repeat configuration for the target, if any."""
+    return getattr(target, "__merit_repeat__", None)
+
+
 def _ensure_tag_data(target: Any) -> TagData:
     data: TagData | None = getattr(target, "__merit_tag_data__", None)
     if data is None:
@@ -94,7 +107,41 @@ class TagDecorator:
 
         return decorator
 
+    def repeat(
+        self,
+        count: int,
+        *,
+        min_passes: int | None = None,
+    ) -> Callable[[Any], Any]:
+        """Repeat a test multiple times, requiring min_passes to pass.
+
+        Args:
+            count: Number of times to run the test.
+            min_passes: Minimum passes required. Defaults to count (all must pass).
+        """
+        if count < 1:
+            raise ValueError(f"repeat count must be >= 1, got {count}")
+        
+        actual_min_passes = min_passes if min_passes is not None else count
+        
+        if actual_min_passes < 1:
+            raise ValueError(f"min_passes must be >= 1, got {actual_min_passes}")
+        
+        if actual_min_passes > count:
+            raise ValueError(f"min_passes ({actual_min_passes}) cannot exceed count ({count})")
+        
+        def decorator(target: Any) -> Any:
+            target.__merit_repeat__ = RepeatData(
+                count=count,
+                min_passes=actual_min_passes,
+            )
+            data = _ensure_tag_data(target)
+            data.tags.add("repeat")
+            return target
+
+        return decorator
+
 
 tag = TagDecorator()
 
-__all__ = ["TagData", "get_tag_data", "merge_tag_data", "tag"]
+__all__ = ["RepeatData", "TagData", "get_repeat_data", "get_tag_data", "merge_tag_data", "tag"]

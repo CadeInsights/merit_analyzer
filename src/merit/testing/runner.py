@@ -181,6 +181,7 @@ class TestResult:
     error: Exception | None = None
     output: Any = None
     checker_results: list[CheckerResult] = field(default_factory=list) # TODO: implement collecting and printing checker results
+    repeat_runs: list["TestResult"] | None = None
 
 
 @dataclass
@@ -399,8 +400,59 @@ class Runner:
         if run_result.stopped_early:
             self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
 
+    async def _run_repeated_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
+        """Execute a test multiple times and aggregate results."""
+        start = time.perf_counter()
+        repeat_runs: list[TestResult] = []
+        min_passes = item.repeat_min_passes if item.repeat_min_passes is not None else item.repeat_count
+
+        # Create a non-repeating item for individual runs
+        single_item = TestItem(
+            name=item.name,
+            fn=item.fn,
+            module_path=item.module_path,
+            is_async=item.is_async,
+            params=item.params,
+            class_name=item.class_name,
+            param_values=item.param_values,
+            id_suffix=item.id_suffix,
+            tags=item.tags,
+            skip_reason=item.skip_reason,
+            xfail_reason=item.xfail_reason,
+            xfail_strict=item.xfail_strict,
+            repeat_count=1,
+            repeat_min_passes=None,
+        )
+
+        for _ in range(item.repeat_count):
+            result = await self._run_single_test(single_item, resolver)
+            repeat_runs.append(result)
+
+        duration = (time.perf_counter() - start) * 1000
+        passed_count = sum(1 for r in repeat_runs if r.status == TestStatus.PASSED)
+
+        if passed_count >= min_passes:
+            status = TestStatus.PASSED
+        else:
+            status = TestStatus.FAILED
+
+        return TestResult(
+            item=item,
+            status=status,
+            duration_ms=duration,
+            repeat_runs=repeat_runs,
+        )
+
     async def _run_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
         """Execute a single test with resource injection."""
+        # Handle repeated tests
+        if item.repeat_count > 1:
+            return await self._run_repeated_test(item, resolver)
+
+        return await self._run_single_test(item, resolver)
+
+    async def _run_single_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
+        """Execute a single test run (no repeat handling)."""
         start = time.perf_counter()
 
         if item.skip_reason:
@@ -524,6 +576,18 @@ class Runner:
     def _print_result(self, result: TestResult) -> None:
         """Print a single test result."""
         if self.verbosity < 0 and result.status not in {TestStatus.FAILED, TestStatus.ERROR}:
+            return
+
+        # Handle repeated tests with sub-results
+        if result.repeat_runs:
+            passed_count = sum(1 for r in result.repeat_runs if r.status == TestStatus.PASSED)
+            total_count = len(result.repeat_runs)
+            min_passes = result.item.repeat_min_passes or total_count
+            
+            if result.status == TestStatus.PASSED:
+                self.console.print(f"  [green]✓[/green] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim] [green]{passed_count}/{total_count} passed (≥{min_passes} required)[/green]")
+            else:
+                self.console.print(f"  [red]✗[/red] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim] [red]{passed_count}/{total_count} passed (≥{min_passes} required)[/red]")
             return
 
         if result.status == TestStatus.PASSED:

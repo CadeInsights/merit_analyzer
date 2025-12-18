@@ -32,3 +32,21 @@ def merit_external_dependency() -> None:
 def merit_chatbot_farewell() -> None:
     response = simple_chatbot("friend")
     assert response.endswith("Goodbye!")
+
+@merit.tag.repeat(count=5)
+def merit_chatbot_stability() -> None:
+    """Test that the chatbot consistently responds correctly."""
+    response = simple_chatbot("tester")
+    assert response == "Hello, tester!"
+
+@merit.tag.repeat(count=10, min_passes=8)
+def merit_mostly_fail():
+    """A test that fails too often and won't meet the minimum pass threshold.
+    
+    This demonstrates a flaky test that passes sometimes,
+    but requires 8 passes to be considered successful.
+    """
+    import random
+    random.seed()  # Different seed each run
+    # Only passes 20% of the time - will fail overall
+    assert random.random() < 0.2, "Random failure"

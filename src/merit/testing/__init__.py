@@ -9,11 +9,12 @@ from .parametrize import parametrize
 from .resources import ResourceResolver, Scope, resource
 from .runner import RunEnvironment, Runner, RunResult, TestResult, TestStatus, run
 from .suite import Suite
-from .tags import tag
+from .tags import tag, RepeatData
 
 
 __all__ = [
     "Case",
+    "RepeatData",
     "ResourceResolver",
     "RunEnvironment",
     "RunResult",
