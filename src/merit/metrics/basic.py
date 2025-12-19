@@ -1,6 +1,6 @@
 """Basic metric implementations."""
 
-from merit.checkers.base import CheckerResult
+from merit.predicates.base import PredicateResult
 from merit.metrics._base import Metric
 
 
@@ -9,7 +9,7 @@ class PassRate(Metric):
 
     name = "PassRate"
 
-    def __call__(self, results: list[CheckerResult]) -> float:
+    def __call__(self, results: list[PredicateResult]) -> float:
         """Calculate pass rate."""
         if not results:
             return 0.0
@@ -23,7 +23,7 @@ class AverageScore(Metric):
 
     name = "AverageScore"
 
-    def __call__(self, results: list[CheckerResult]) -> float:
+    def __call__(self, results: list[PredicateResult]) -> float:
         """Calculate average score."""
         if not results:
             return 0.0

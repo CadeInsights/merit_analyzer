@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""HTTP client for calling the Merit remote checker API."""
+"""HTTP client for calling the Merit remote predicate API."""
 
 import asyncio
 import random
@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class CheckerAPIRequest(BaseModel):
-    """Request payload sent to the remote checker service.
+class PredicateAPIRequest(BaseModel):
+    """Request payload sent to the remote predicate service.
 
     Parameters
     ----------
@@ -24,7 +24,7 @@ class CheckerAPIRequest(BaseModel):
     strict
         Whether to enforce strict checking semantics.
     context
-        Optional extra context provided to the checker.
+        Optional extra context provided to the predicate.
     """
 
     actual: str
@@ -34,8 +34,8 @@ class CheckerAPIRequest(BaseModel):
     context: str | None = None
 
 
-class CheckerAPIResponse(BaseModel):
-    """Response payload returned by the remote checker service.
+class PredicateAPIResponse(BaseModel):
+    """Response payload returned by the remote predicate service.
 
     Attributes
     ----------
@@ -52,8 +52,8 @@ class CheckerAPIResponse(BaseModel):
     message: str | None = None
 
 
-class CheckerAPISettings(BaseSettings):
-    """Configuration for `RemoteCheckerClient`.
+class PredicateAPISettings(BaseSettings):
+    """Configuration for `RemotePredicateClient`.
 
     Environment variables are read without a prefix.
 
@@ -102,10 +102,10 @@ class CheckerAPISettings(BaseSettings):
     )
 
 
-class CheckerAPIClient:
+class PredicateAPIClient:
     """Thin wrapper around an httpx.AsyncClient."""
 
-    def __init__(self, http: httpx.AsyncClient, settings: CheckerAPISettings) -> None:
+    def __init__(self, http: httpx.AsyncClient, settings: PredicateAPISettings) -> None:
         """Initialize the client.
 
         Parameters
@@ -126,7 +126,7 @@ class CheckerAPIClient:
         check: str,
         strict: bool = True,
         context: str | None = None,
-    ) -> CheckerAPIResponse:
+    ) -> PredicateAPIResponse:
         """Run a remote check against the configured service.
 
         Parameters
@@ -140,11 +140,11 @@ class CheckerAPIClient:
         strict
             Whether to enforce strict checking semantics.
         context
-            Optional extra context provided to the checker.
+            Optional extra context provided to the predicate.
 
         Returns
         -------
-        CheckerAPIResponse
+        PredicateAPIResponse
             Parsed response returned by the service.
 
         Raises
@@ -153,7 +153,7 @@ class CheckerAPIClient:
             If the request ultimately fails or returns a non-success status.
         """
 
-        payload = CheckerAPIRequest(
+        payload = PredicateAPIRequest(
             actual=actual,
             reference=reference,
             check=check,
@@ -190,32 +190,32 @@ class CheckerAPIClient:
                 continue
 
             resp.raise_for_status()
-            return CheckerAPIResponse.model_validate(resp.json())
+            return PredicateAPIResponse.model_validate(resp.json())
 
-        raise RuntimeError("CheckerAPIClient.check exhausted retries")
+        raise RuntimeError("PredicateAPIClient.check exhausted retries")
 
 
-class CheckerAPIFactory:
-    """Lazy, reusable factory for `CheckerAPIClient`.
+class PredicateAPIFactory:
+    """Lazy, reusable factory for `PredicateAPIClient`.
 
     The factory owns a single underlying `httpx.AsyncClient` and returns a
-    shared `CheckerAPIClient` instance while the HTTP client remains open.
+    shared `PredicateAPIClient` instance while the HTTP client remains open.
     """
 
-    def __init__(self, settings: CheckerAPISettings | None = None) -> None:
+    def __init__(self, settings: PredicateAPISettings | None = None) -> None:
         """Create a factory.
 
         Parameters
         ----------
         settings
             Optional settings override. If omitted, settings are loaded from the
-            environment via `CheckerAPISettings`.
+            environment via `PredicateAPISettings`.
         """
 
-        self._settings = settings or CheckerAPISettings()  # type: ignore[call-arg]
+        self._settings = settings or PredicateAPISettings()  # type: ignore[call-arg]
         self._lock = asyncio.Lock()
         self._http: httpx.AsyncClient | None = None
-        self._client: CheckerAPIClient | None = None
+        self._client: PredicateAPIClient | None = None
 
     async def aclose(self) -> None:
         """Close the underlying `httpx.AsyncClient` (if any) and reset state."""
@@ -226,12 +226,12 @@ class CheckerAPIFactory:
             self._http = None
             self._client = None
 
-    async def get(self) -> CheckerAPIClient:
-        """Return a shared `CheckerAPIClient`, creating it if needed.
+    async def get(self) -> PredicateAPIClient:
+        """Return a shared `PredicateAPIClient`, creating it if needed.
 
         Returns
         -------
-        CheckerAPIClient
+        PredicateAPIClient
             A client backed by a shared `httpx.AsyncClient` connection pool.
         """
 
@@ -264,29 +264,29 @@ class CheckerAPIFactory:
                         keepalive_expiry=s.keepalive_expiry,
                     ),
                 )
-                self._client = CheckerAPIClient(self._http, settings=s)
+                self._client = PredicateAPIClient(self._http, settings=s)
 
             if self._client is None:
-                raise RuntimeError("CheckerAPIFactory failed to initialize")
+                raise RuntimeError("PredicateAPIFactory failed to initialize")
 
             return self._client
 
 
 # Module-level default client helpers
-_default_factory: CheckerAPIFactory | None = None
+_default_factory: PredicateAPIFactory | None = None
 
 
-async def get_checker_api_client() -> CheckerAPIClient:
-    """Return a process-wide shared CheckerAPIClient (lazy init)."""
+async def get_predicate_api_client() -> PredicateAPIClient:
+    """Return a process-wide shared PredicateAPIClient (lazy init)."""
 
     global _default_factory
     if _default_factory is None:
-        _default_factory = CheckerAPIFactory()
+        _default_factory = PredicateAPIFactory()
     return await _default_factory.get()
 
 
 # TODO: fix leaking client. httpx closes TCP on idle, but still not cool
-async def close_checker_api_client() -> None:
+async def close_predicate_api_client() -> None:
     """Close the shared client pool and reset the default factory."""
 
     global _default_factory
