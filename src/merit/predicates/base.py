@@ -1,4 +1,4 @@
-"""Base check classes and result types."""
+"""Base predicate classes and result types."""
 
 import inspect
 import logging
@@ -10,14 +10,14 @@ from pydantic import BaseModel, field_serializer, SerializationInfo, Field
 
 logger = logging.getLogger(__name__)
 
-# Protocols for checking callables
+# Protocols for predicate callables
 
-class SyncChecker(Protocol):
-    """Callable protocol for check functions.
+class SyncPredicate(Protocol):
+    """Callable protocol for predicate functions.
 
-    A `Checker` compares an ``actual`` value to a ``reference`` value, optionally
+    A `Predicate` compares an ``actual`` value to a ``reference`` value, optionally
     using additional ``context`` and configuration flags, and returns a
-    :class:`~merit.checkers.base.CheckerResult`.
+    :class:`~merit.predicates.base.PredicateResult`.
 
     Parameters
     ----------
@@ -29,13 +29,13 @@ class SyncChecker(Protocol):
         Optional context string to help interpret the comparison (e.g. prompt,
         instructions, domain constraints).
     strict
-        Whether to enforce strict comparison semantics (checker-specific).
+        Whether to enforce strict comparison semantics (predicate-specific).
     metrics
         Optional list used to accumulate metric objects produced during the check.
 
     Returns
     -------
-    CheckerResult
+    PredicateResult
         The check outcome and metadata.
     """
 
@@ -47,15 +47,15 @@ class SyncChecker(Protocol):
         strict: bool = True,
         metrics: list | None = None,
         case_id: UUID | None = None,
-    ) -> "CheckerResult": ...
+    ) -> "PredicateResult": ...
 
 
-class AsyncChecker(Protocol):
-    """Callable protocol for check functions.
+class AsyncPredicate(Protocol):
+    """Callable protocol for predicate functions.
 
-    A `Checker` compares an ``actual`` value to a ``reference`` value, optionally
+    A `Predicate` compares an ``actual`` value to a ``reference`` value, optionally
     using additional ``context`` and configuration flags, and returns a
-    :class:`~merit.checkers.base.CheckerResult`.
+    :class:`~merit.predicates.base.PredicateResult`.
 
     Parameters
     ----------
@@ -67,13 +67,13 @@ class AsyncChecker(Protocol):
         Optional context string to help interpret the comparison (e.g. prompt,
         instructions, domain constraints).
     strict
-        Whether to enforce strict comparison semantics (checker-specific).
+        Whether to enforce strict comparison semantics (predicate-specific).
     metrics
         Optional list used to accumulate metric objects produced during the check.
 
     Returns
     -------
-    CheckerResult
+    PredicateResult
         The check outcome and metadata.
     """
 
@@ -85,22 +85,22 @@ class AsyncChecker(Protocol):
         strict: bool = True,
         metrics: list | None = None,
         case_id: UUID | None = None,
-    ) -> "CheckerResult": ...
+    ) -> "PredicateResult": ...
 
-Checker = AsyncChecker | SyncChecker
+Predicate = AsyncPredicate | SyncPredicate
 
 
 # Models for metadata and result
 
-class CheckerMetadata(BaseModel):
-    """Metadata describing how a check was executed.
+class PredicateMetadata(BaseModel):
+    """Metadata describing how a predicate was executed.
 
-    This model is attached to :class:`~merit.checkers.base.CheckerResult` and is
+    This model is attached to :class:`~merit.predicates.base.PredicateResult` and is
     intended to make results self-describing and debuggable.
 
     Notes
     -----
-    - If ``checker_name`` / ``merit_name`` are not provided, they may be
+    - If ``predicate_name`` / ``merit_name`` are not provided, they may be
       auto-filled in :meth:`model_post_init` by inspecting the call stack.
 
     Attributes
@@ -112,9 +112,9 @@ class CheckerMetadata(BaseModel):
     context
         Optional context string used during the check.
     strict
-        Strictness flag forwarded to the checker implementation.
-    checker_name
-        Name of the checker callable (usually the function name).
+        Strictness flag forwarded to the predicate implementation.
+    predicate_name
+        Name of the predicate callable (usually the function name).
         Read-only.
     merit_name
         Name of the enclosing "merit" function, if available (e.g. ``merit_*``).
@@ -127,7 +127,7 @@ class CheckerMetadata(BaseModel):
     strict: bool = True
 
     # Auto-filled Identifiers
-    checker_name: str | None = None
+    predicate_name: str | None = None
     merit_name: str | None = None
 
     @field_serializer("actual", "reference")
@@ -140,15 +140,15 @@ class CheckerMetadata(BaseModel):
 
     def model_post_init(self, __context) -> None:
         """
-        Auto-fill the checker_name and merit_name fields if not provided.
+        Auto-fill the predicate_name and merit_name fields if not provided.
         """
-        if self.checker_name or self.merit_name:
+        if self.predicate_name or self.merit_name:
             return
 
         frame = inspect.currentframe()
 
         if frame is None:
-            logger.warning("No frame found for checker_name and merit_name")
+            logger.warning("No frame found for predicate_name and merit_name")
             return
 
         frame = frame.f_back
@@ -165,33 +165,33 @@ class CheckerMetadata(BaseModel):
                 frame = frame.f_back
                 continue
 
-            if self.checker_name is None:
-                self.checker_name = func_name
+            if self.predicate_name is None:
+                self.predicate_name = func_name
 
             if self.merit_name is None and func_name.startswith("merit_"):
                 self.merit_name = func_name
 
-            if self.checker_name and self.merit_name:
+            if self.predicate_name and self.merit_name:
                 break
 
             frame = frame.f_back
 
 
 
-class CheckerResult(BaseModel):
-    """Result of a single checker evaluation.
+class PredicateResult(BaseModel):
+    """Result of a single predicate evaluation.
 
     The result carries a boolean outcome (`value`), optional human-readable
-    details (`message`), and structured metadata about the check execution.
+    details (`message`), and structured metadata about the predicate execution.
 
     Attributes
     ----------
     id
         Unique identifier for this result instance.
-    checker
+    predicate
         Metadata describing inputs and configuration used for the check.
     confidence
-        Confidence score in ``[0, 1]`` (checker-specific semantics).
+        Confidence score in ``[0, 1]`` (predicate-specific semantics).
     value
         Boolean outcome of the check.
     message
@@ -206,7 +206,7 @@ class CheckerResult(BaseModel):
     # Metadata
     id: UUID = Field(default_factory=uuid4)
     case_id: UUID | None = None
-    checker_metadata: CheckerMetadata
+    predicate_metadata: PredicateMetadata
     confidence: float = 1.0
 
     # Result
@@ -236,29 +236,29 @@ def _filter_supported_kwargs(fn: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 @overload
-def checker(func: Callable[[Any, Any], Awaitable[bool]]) -> AsyncChecker: ...
+def predicate(func: Callable[[Any, Any], Awaitable[bool]]) -> AsyncPredicate: ...
 
 
 @overload
-def checker(func: Callable[[Any, Any], bool]) -> SyncChecker: ...
+def predicate(func: Callable[[Any, Any], bool]) -> SyncPredicate: ...
 
 
-def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]]) -> Checker:
-    """Decorator to convert a simple comparison function into a full Checker.
+def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]]) -> Predicate:
+    """Decorator to convert a simple comparison function into a full Predicate.
     
     Wraps a function that takes (actual, reference) -> bool and converts it
-    to follow the Checker protocol, which includes optional context, strict,
-    and metrics parameters and returns a CheckerResult.
+    to follow the Predicate protocol, which includes optional context, strict,
+    and metrics parameters and returns a PredicateResult.
     
     Args:
         func: A function that takes (actual, reference) and returns bool.
               Can be sync or async.
         
     Returns:
-        A checker callable following the Checker protocol (SyncChecker or AsyncChecker).
+        A predicate callable following the Predicate protocol (SyncPredicate or AsyncPredicate).
         
     Example:
-        >>> @checker
+        >>> @predicate
         >>> def equals(actual, reference):
         >>>     return actual == reference
         >>>
@@ -274,7 +274,7 @@ def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bo
             strict: bool = True,
             metrics: list | None = None,
             case_id: UUID | None = None,
-        ) -> CheckerResult:
+        ) -> PredicateResult:
             extra = _filter_supported_kwargs(
                 func,
                 {
@@ -285,8 +285,8 @@ def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bo
                 },
             )
             result = await cast(Any, func)(actual, reference, **extra)
-            checker_result = CheckerResult(
-                checker_metadata=CheckerMetadata(
+            predicate_result = PredicateResult(
+                predicate_metadata=PredicateMetadata(
                     actual=str(actual),
                     reference=str(reference),
                     context=context,
@@ -295,9 +295,9 @@ def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bo
                 case_id=case_id,
                 value=bool(result),
             )
-            checker_result.checker_metadata.checker_name = func.__name__
-            return checker_result
-        return cast(AsyncChecker, async_wrapper)
+            predicate_result.predicate_metadata.predicate_name = func.__name__
+            return predicate_result
+        return cast(AsyncPredicate, async_wrapper)
     else:
         @wraps(func)
         def sync_wrapper(
@@ -307,7 +307,7 @@ def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bo
             strict: bool = True,
             metrics: list | None = None,
             case_id: UUID | None = None,
-        ) -> CheckerResult:
+        ) -> PredicateResult:
             extra = _filter_supported_kwargs(
                 func,
                 {
@@ -318,8 +318,8 @@ def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bo
                 },
             )
             result = cast(Any, func)(actual, reference, **extra)
-            checker_result = CheckerResult(
-                checker_metadata=CheckerMetadata(
+            predicate_result = PredicateResult(
+                predicate_metadata=PredicateMetadata(
                     actual=str(actual),
                     reference=str(reference),
                     context=context,
@@ -328,6 +328,6 @@ def checker(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bo
                 case_id=case_id,
                 value=bool(result),
             )
-            checker_result.checker_metadata.checker_name = func.__name__
-            return checker_result
-        return cast(SyncChecker, sync_wrapper)
+            predicate_result.predicate_metadata.predicate_name = func.__name__
+            return predicate_result
+        return cast(SyncPredicate, sync_wrapper)

@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 from opentelemetry.trace import StatusCode
 from rich.console import Console
 
-from merit.checkers import CheckerResult, close_checker_api_client
+from merit.predicates import PredicateResult, close_predicate_api_client
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, get_tracer, init_tracing
@@ -180,7 +180,7 @@ class TestResult:
     duration_ms: float
     error: Exception | None = None
     output: Any = None
-    checker_results: list[CheckerResult] = field(default_factory=list) # TODO: implement collecting and printing checker results
+    predicate_results: list[PredicateResult] = field(default_factory=list) # TODO: implement collecting and printing predicate results
 
 
 @dataclass
@@ -304,7 +304,7 @@ class Runner:
 
         # Teardown all resources
         await resolver.teardown()
-        await close_checker_api_client()
+        await close_predicate_api_client()
 
         run_result.total_duration_ms = (time.perf_counter() - start) * 1000
         if run_result.environment:

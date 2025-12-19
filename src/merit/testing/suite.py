@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from merit.checkers.base import Checker, CheckerResult
+from merit.predicates.base import Predicate, PredicateResult
 from merit.testing.case import Case
 
 
@@ -16,32 +16,32 @@ class Suite:
         Name of the test suite
     cases : list[Case]
         Collection of test cases
-    assertions : list[Assertion]
-        Suite-level assertions to run on each case
+    assertions : list[Predicate]
+        Suite-level predicates to run on each case
     """
 
-    def __init__(self, name: str, cases: list[Case], assertions: list[Checker] | Checker | None = None):
+    def __init__(self, name: str, cases: list[Case], assertions: list[Predicate] | Predicate | None = None):
         """Args:
         name : str
             Name for this suite
         cases : list[Case]
             Collection of test cases to run
-        assertions : list[Assertion] | Assertion | None
-            Suite-level assertion(s) to evaluate on each case
+        assertions : list[Predicate] | Predicate | None
+            Suite-level predicate(s) to evaluate on each case
         """
         self.name = name
         self.cases = cases
         self.assertions = self._normalize_assertions(assertions)
 
-    def _normalize_assertions(self, assertions: list | Checker | None) -> list[Checker]:
+    def _normalize_assertions(self, assertions: list | Predicate | None) -> list[Predicate]:
         """Normalize assertions to list."""
         if assertions is None:
             return []
-        if isinstance(assertions, Checker):
+        if isinstance(assertions, Predicate):
             return [assertions]
         return list(assertions)
 
-    def run(self, system_under_test: Callable[[Any], Any]) -> list[CheckerResult]:
+    def run(self, system_under_test: Callable[[Any], Any]) -> list[PredicateResult]:
         """Run all test cases in the suite.
 
         Parameters
@@ -51,8 +51,8 @@ class Suite:
 
         Returns:
         -------
-        list[AssertionResult]
-            Results from all assertions on all cases
+        list[PredicateResult]
+            Results from all predicates on all cases
         """
         results = []
 
