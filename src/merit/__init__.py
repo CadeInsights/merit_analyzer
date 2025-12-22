@@ -2,7 +2,7 @@
 
 from .predicates import predicate, PredicateResult, PredicateMetadata, Predicate
 from .metrics import AverageScore, Metric, PassRate
-from .testing import Case, Suite, parametrize, resource, tag
+from .testing import Case, Suite, parametrize, repeat, resource, tag
 from .testing.sut import sut
 from .tracing import init_tracing, trace_step
 from .version import __version__
@@ -13,6 +13,7 @@ __all__ = [
     "Case",
     "Suite",
     "parametrize",
+    "repeat",
     "tag",
     "resource",
     "sut",

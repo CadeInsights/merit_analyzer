@@ -10,6 +10,7 @@ from types import ModuleType
 from typing import Any
 
 from merit.testing.parametrize import get_parameter_sets
+from merit.testing.repeat import get_repeat_data
 from merit.testing.tags import TagData, get_tag_data, merge_tag_data
 
 
@@ -31,6 +32,8 @@ class TestItem:
     skip_reason: str | None = None
     xfail_reason: str | None = None
     xfail_strict: bool = False
+    repeat_count: int = 1
+    repeat_min_passes: int | None = None
 
     @property
     def full_name(self) -> str:
@@ -99,6 +102,7 @@ def _build_items_for_callable(
 ) -> list[TestItem]:
     """Create TestItems for a callable, expanding parametrizations if present."""
     combined_tags = merge_tag_data(parent_tags, get_tag_data(fn))
+    repeat_data = get_repeat_data(fn)
 
     base_kwargs = dict(
         name=name,
@@ -110,6 +114,8 @@ def _build_items_for_callable(
         skip_reason=combined_tags.skip_reason,
         xfail_reason=combined_tags.xfail_reason,
         xfail_strict=combined_tags.xfail_strict,
+        repeat_count=repeat_data.count if repeat_data else 1,
+        repeat_min_passes=repeat_data.min_passes if repeat_data else None,
     )
 
     parameter_sets = get_parameter_sets(fn)
