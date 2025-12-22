@@ -9,7 +9,7 @@
 #     StartsWith,
 # )
 from .metrics import AverageScore, Metric, PassRate
-from .testing import Case, parametrize, resource, tag, iter_cases
+from .testing import Case, parametrize, resource, tag, iter_cases, valididate_cases_for_sut
 from .testing.sut import sut
 from .tracing import init_tracing, trace_step
 from .version import __version__
@@ -19,6 +19,7 @@ __all__ = [
     # Core testing
     "Case",
     "iter_cases",
+    "valididate_cases_for_sut",
     "parametrize",
     "tag",
     "resource",

@@ -1,12 +1,4 @@
 """Test case definitions and decorators.
-
-This module provides:
-
-- A :class:`~merit.testing.case.Case` model used to represent a single test case,
-  including tags and optional structured metadata.
-- A :func:`~merit.testing.case.iter_cases` decorator factory that attaches a list
-  of cases to a function and can optionally validate per-case SUT inputs against
-  the function's argument schema.
 """
 
 from __future__ import annotations
@@ -18,26 +10,28 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, TypeAdapter
 from pydantic_core import SchemaValidator
 
+from merit.testing.parametrize import parametrize
+
 
 RefsT = TypeVar("RefsT", default=dict[str, Any])
 
 
 class Case(BaseModel, Generic[RefsT]):
-    """Container for a single test case inputs and references.
+    """
+    Container for a single test case inputs and references.
 
-    Parameters
+    Attributes
     ----------
-    id:
-        UUID.
-    tags:
-        Labels for filtering or grouping cases.
-    metadata:
-        Extra scalar information about the case (e.g., "priority", "seed",
-        "expected_status"). Values are limited to JSON-like scalar types.
-    references:
-        Optional reference values required for assertions.
-    sut_input_values:
-        Optional input values for the SUT.
+    id : UUID
+        Unique identifier for the test case, defaults to a new UUID.
+    tags : set[str]
+        Set of tags for filtering or categorization of the test case.
+    metadata : dict[str, str | int | float | bool | None]
+        Arbitrary key-value pairs for additional context or reporting.
+    references : RefsT, optional
+        Reference data used for validation or comparison during testing.
+    sut_input_values : dict[str, Any]
+        Input arguments to be passed to the System Under Test (SUT).
     """
     id: UUID = Field(default_factory=uuid4)
     tags: set[str] = Field(default_factory=set)
@@ -46,34 +40,65 @@ class Case(BaseModel, Generic[RefsT]):
     sut_input_values: dict[str, Any] = Field(default_factory=dict)
 
 
-def iter_cases(
-    cases: Sequence[Case[RefsT]],
-    sut_for_inputs_validation: Callable[..., Any] | None = None
-    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Run decorated merit function for each case in the list.
+def valididate_cases_for_sut(
+    cases: Sequence[Case[RefsT]], 
+    sut: Callable[..., Any],
+    raise_on_error: bool = True
+    ) -> Sequence[Case[RefsT]]:
+    """
+    Validate that all cases match the signature of the System Under Test.
+
+    This function uses Pydantic to inspect the SUT's signature and ensures that
+    the `sut_input_values` in each case are compatible with what the SUT expects.
 
     Parameters
     ----------
-    cases:
-        List of :class:`~merit.testing.case.Case` objects to attach.
-    sut_for_inputs_validation:
-        Optional callable. If provided, all cases will be checked 
-        for validity against the callable's argument schema.
+    cases : Sequence[Case[RefsT]]
+        A collection of test cases to validate.
+    sut : Callable[..., Any], optional
+        The System Under Test to validate against.
+
+    Returns
+    -------
+    bool
+        True if all cases are valid for the given SUT.
+
+    Raises
+    ------
+    ValidationError
+        If any case's input values do not match the SUT's signature.
     """
-    if sut_for_inputs_validation:
-        schema = TypeAdapter(sut_for_inputs_validation).core_schema
-        arg_schema = schema.get('arguments_schema', None)
-        if arg_schema:
-            validator = SchemaValidator(arg_schema) # type: ignore[arg-type]
-            for case in cases:
-                input_values = case.sut_input_values or {}
+    valid_cases = []
+    schema = TypeAdapter(sut).core_schema
+    arg_schema = schema.get('arguments_schema', None)
+    if arg_schema:
+        validator = SchemaValidator(arg_schema) # type: ignore[arg-type]
+        for case in cases:
+            input_values = case.sut_input_values or {}
+            try:
                 validator.validate_python(input_values)
-        else:
-            raise ValueError("No arguments schema found for the function")
+                valid_cases.append(case)
+            except Exception as e:
+                if raise_on_error:
+                    raise e
+                else:
+                    continue
+    return valid_cases        
 
-    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-        # Keep runtime behavior stable: attach a concrete list copy.
-        fn.__merit_cases__ = list(cases)
-        return fn
 
-    return decorator
+def iter_cases(cases: Sequence[Case[RefsT]]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """
+    Decorator to run a test function for each case in the provided sequence.
+
+    Parameters
+    ----------
+    cases : Sequence[Case[RefsT]]
+        The sequence of test cases to iterate over.
+
+    Returns
+    -------
+    Callable
+        A decorator that applies parametrization to the target function.
+    """
+    ids = [str(c.id) for c in cases]
+    return parametrize("case", cases, ids=ids)

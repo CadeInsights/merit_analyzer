@@ -3,7 +3,7 @@
 Provides pytest-like test discovery and resource injection.
 """
 
-from .case import Case, iter_cases
+from .case import Case, iter_cases, valididate_cases_for_sut
 from .discovery import TestItem, collect
 from .parametrize import parametrize
 from .resources import ResourceResolver, Scope, resource
@@ -14,6 +14,7 @@ from .tags import tag
 __all__ = [
     "Case",
     "iter_cases",
+    "valididate_cases_for_sut",
     "ResourceResolver",
     "RunEnvironment",
     "RunResult",
