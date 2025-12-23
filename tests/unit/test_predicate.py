@@ -10,14 +10,28 @@ from merit.predicates.client import (
     PredicateAPISettings,
     close_predicate_api_client,
     get_predicate_api_client,
+    create_predicate_api_client,
+    PredicateType,
+)
+from merit.predicates.ai_predicates import (
+    has_conflicting_facts,
+    has_unsupported_facts,
+    has_facts,
+    has_topics,
+    matches_facts,
+    follows_policy,
+    matches_writing_layout,
+    matches_writing_style,
 )
 
 
-def simple_predicate(actual: str, reference: str, context: str | None = None, strict: bool = True, metrics: list | None = None) -> PredicateResult:
+def simple_predicate(
+    actual: str, reference: str, strict: bool = True, metrics: list | None = None
+) -> PredicateResult:
     return PredicateResult(
         value=actual == reference,
         message=None,
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, context=context, strict=strict),
+        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
         confidence=1.0,
     )
 
@@ -60,8 +74,14 @@ def test_predicate_actual_and_reference_truncated_in_repr():
     parsed_result_back_to_json = json.loads(repr(result))
 
     # Truncated actual and reference in repr
-    assert parsed_result_back_to_json["predicate_metadata"]["actual"] == long_string_actual[:50] + "..."
-    assert parsed_result_back_to_json["predicate_metadata"]["reference"] == long_string_reference[:50] + "..."
+    assert (
+        parsed_result_back_to_json["predicate_metadata"]["actual"]
+        == long_string_actual[:50] + "..."
+    )
+    assert (
+        parsed_result_back_to_json["predicate_metadata"]["reference"]
+        == long_string_reference[:50] + "..."
+    )
 
     # Original actual and reference are not truncated
     assert result.predicate_metadata.actual == long_string_actual
@@ -106,7 +126,7 @@ async def test_remote_predicate_client_check_posts_payload_and_parses_response()
         captured["json"] = json.loads(request.content.decode("utf-8"))
         return httpx.Response(
             status_code=200,
-            json={"passed": False, "confidence": 0.25, "message": "nope"},
+            json={"passed": False, "confidence": 0.25, "reasoning": "nope"},
         )
 
     transport = httpx.MockTransport(handler)
@@ -119,26 +139,31 @@ async def test_remote_predicate_client_check_posts_payload_and_parses_response()
         )
         client = PredicateAPIClient(http=http, settings=settings)
 
-        result = await client.check(
-            actual="actual",
-            reference="reference",
-            check="some-check",
-            strict=False,
-            context=None,
+        from merit.predicates.client import PredicateAPIRequest, PredicateType
+
+        result = await client.request_predicate(
+            PredicateAPIRequest(
+                actual="actual",
+                reference="reference",
+                assertion_type=PredicateType.FACTS_NOT_CONTRADICT,
+                strict=False,
+            )
         )
 
     assert captured["method"] == "POST"
-    assert captured["path"] == "/check"
+    assert captured["path"] == "/assertions/evaluate"
     assert captured["json"] == {
         "actual": "actual",
         "reference": "reference",
-        "check": "some-check",
+        "assertion_type": "facts_not_contradict",
         "strict": False,
+        "enable_reasoning": False,
+        "request_id": None,
     }
 
     assert result.passed is False
     assert result.confidence == 0.25
-    assert result.message == "nope"
+    assert result.reasoning == "nope"
 
 
 @pytest.mark.asyncio
@@ -146,12 +171,20 @@ async def test_module_level_get_and_close_work(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("MERIT_API_BASE_URL", "https://example.com")
     monkeypatch.setenv("MERIT_API_KEY", "secret")
 
+    # Should raise error before initialization
+    with pytest.raises(RuntimeError, match="not initialized"):
+        await get_predicate_api_client()
+
+    create_predicate_api_client()
+
     client1 = await get_predicate_api_client()
     client2 = await get_predicate_api_client()
     assert client1 is client2
 
     await close_predicate_api_client()
 
+    # Still initialized but internal httpx client is closed
+    # get() should recreate it
     client3 = await get_predicate_api_client()
     assert client3 is not client1
 
@@ -179,3 +212,77 @@ def test_predicate_decorator_supports_optional_kwargs_with_case_id():
     result = equals("test", "test", case_id=UUID("123e4567-e89b-12d3-a456-426614174000"))
 
     assert result.case_id == UUID("123e4567-e89b-12d3-a456-426614174000")
+
+
+@pytest.mark.asyncio
+async def test_ai_predicates_call_api_correctly(monkeypatch) -> None:
+    captured_payloads = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content.decode("utf-8"))
+        captured_payloads.append(payload)
+
+        # Default response: passed=True for most, but we can customize logic if needed
+        return httpx.Response(
+            status_code=200,
+            json={"passed": True, "confidence": 0.9, "reasoning": "all good"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(base_url="https://example.com/", transport=transport) as http:
+        settings = PredicateAPISettings.model_validate(
+            {"MERIT_API_BASE_URL": "https://example.com", "MERIT_API_KEY": "secret"}
+        )
+        client = PredicateAPIClient(http=http, settings=settings)
+
+        # Use monkeypatch to return our mocked client
+        import merit.predicates.ai_predicates as ai_p
+
+        async def mock_get_client():
+            return client
+
+        monkeypatch.setattr(ai_p, "get_predicate_api_client", mock_get_client)
+
+        # 1. has_conflicting_facts (value = not resp.passed)
+        # If passed=True (no contradictions), value should be False
+        res = await has_conflicting_facts("actual text", "reference text", strict=False)
+        assert res.value is False
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.FACTS_NOT_CONTRADICT
+        assert captured_payloads[-1]["actual"] == "actual text"
+        assert captured_payloads[-1]["reference"] == "reference text"
+        assert captured_payloads[-1]["strict"] is False
+
+        # 2. has_unsupported_facts (value = not resp.passed)
+        res = await has_unsupported_facts("a", "r")
+        assert res.value is False
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.FACTS_SUPPORTED
+
+        # 3. matches_facts (value = resp.passed)
+        res = await matches_facts("a", "r")
+        assert res.value is True
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.FACTS_FULL_MATCH
+
+        # 4. follows_policy (value = resp.passed)
+        res = await follows_policy("a", "r")
+        assert res.value is True
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.CONDITIONS_MET
+
+        # 5. matches_writing_layout (value = resp.passed)
+        res = await matches_writing_layout("a", "r")
+        assert res.value is True
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.STRUCTURE_MATCH
+
+        # 6. matches_writing_style (value = resp.passed)
+        res = await matches_writing_style("a", "r")
+        assert res.value is True
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.STYLE_MATCH
+
+        # 7. has_facts (value = resp.passed)
+        res = await has_facts("a", "r")
+        assert res.value is True
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.FACTS_NOT_MISSING
+
+        # 8. has_topics (value = resp.passed)
+        res = await has_topics("a", "r")
+        assert res.value is True
+        assert captured_payloads[-1]["assertion_type"] == PredicateType.HAS_TOPICS

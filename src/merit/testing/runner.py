@@ -17,7 +17,11 @@ from uuid import UUID, uuid4
 from opentelemetry.trace import StatusCode
 from rich.console import Console
 
-from merit.predicates import PredicateResult, close_predicate_api_client
+from merit.predicates import (
+    PredicateResult,
+    close_predicate_api_client,
+    create_predicate_api_client,
+)
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, get_tracer, init_tracing
@@ -277,6 +281,9 @@ class Runner:
         """
         run_result = RunResult()
         run_result.environment = capture_environment()
+
+        # Initialize predicate client
+        create_predicate_api_client()
 
         # Initialize tracing if enabled
         if self.enable_tracing:

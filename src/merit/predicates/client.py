@@ -4,52 +4,46 @@ from __future__ import annotations
 
 import asyncio
 import random
+import logging
 
 import httpx
+from enum import Enum
 from pydantic import BaseModel, Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger(__name__)
+
+
+class PredicateType(str, Enum):
+    """Types of assertions that can be evaluated."""
+
+    FACTS_NOT_CONTRADICT = "facts_not_contradict"
+    FACTS_SUPPORTED = "facts_supported"
+    FACTS_FULL_MATCH = "facts_full_match"
+    FACTS_NOT_MISSING = "facts_not_missing"
+    CONDITIONS_MET = "conditions_met"
+    STYLE_MATCH = "style_match"
+    STRUCTURE_MATCH = "structure_match"
+    HAS_TOPICS = "has_topics"
+
 
 class PredicateAPIRequest(BaseModel):
-    """Request payload sent to the remote predicate service.
+    """Request payload sent to the remote predicate service."""
 
-    Parameters
-    ----------
-    actual
-        Model output to validate.
-    reference
-        Reference output / expected content.
-    check
-        Check identifier understood by the remote API.
-    strict
-        Whether to enforce strict checking semantics.
-    context
-        Optional extra context provided to the predicate.
-    """
-
+    assertion_type: PredicateType
     actual: str
     reference: str
-    check: str  # TODO: build enum when API design is finalized
     strict: bool = True
-    context: str | None = None
+    enable_reasoning: bool = False
+    request_id: str | None = None
 
 
 class PredicateAPIResponse(BaseModel):
-    """Response payload returned by the remote predicate service.
-
-    Attributes
-    ----------
-    passed
-        Whether the check succeeded.
-    confidence
-        Confidence score in the range provided by the service.
-    message
-        Optional human-readable explanation.
-    """
+    """Response payload returned by the remote predicate service."""
 
     passed: bool
     confidence: float
-    message: str | None = None
+    reasoning: str | None = None
 
 
 class PredicateAPISettings(BaseSettings):
@@ -82,6 +76,7 @@ class PredicateAPISettings(BaseSettings):
 
     base_url: HttpUrl = Field(validation_alias="MERIT_API_BASE_URL")
     api_key: SecretStr = Field(validation_alias="MERIT_API_KEY")
+    debugging_mode: bool = Field(default=False, validation_alias="MERIT_DEBUGGING_MODE")
     connect_timeout: float = 5.0
     read_timeout: float = 30.0
     write_timeout: float = 30.0
@@ -119,14 +114,7 @@ class PredicateAPIClient:
         self._http = http
         self._settings = settings
 
-    async def check(
-        self,
-        actual: str,
-        reference: str,
-        check: str,
-        strict: bool = True,
-        context: str | None = None,
-    ) -> PredicateAPIResponse:
+    async def request_predicate(self, request: PredicateAPIRequest) -> PredicateAPIResponse:
         """Run a remote check against the configured service.
 
         Parameters
@@ -139,8 +127,6 @@ class PredicateAPIClient:
             Check identifier understood by the remote API.
         strict
             Whether to enforce strict checking semantics.
-        context
-            Optional extra context provided to the predicate.
 
         Returns
         -------
@@ -153,25 +139,22 @@ class PredicateAPIClient:
             If the request ultimately fails or returns a non-success status.
         """
 
-        payload = PredicateAPIRequest(
-            actual=actual,
-            reference=reference,
-            check=check,
-            strict=strict,
-            context=context,
-        ).model_dump(exclude_none=True)
-
         s = self._settings
+
+        if s.debugging_mode:
+            request.enable_reasoning = True
+
+        payload = request.model_dump()
 
         for attempt in range(s.retry_max_attempts):
             try:
-                resp = await self._http.post("check", json=payload)
+                resp = await self._http.post("assertions/evaluate", json=payload)
             except (httpx.TimeoutException, httpx.TransportError):
                 if attempt == s.retry_max_attempts - 1:
                     raise
-                delay_s = min(s.retry_max_delay_s, s.retry_base_delay_s * (2**attempt)) + random.uniform(
-                    0, s.retry_jitter_s
-                )
+                delay_s = min(
+                    s.retry_max_delay_s, s.retry_base_delay_s * (2**attempt)
+                ) + random.uniform(0, s.retry_jitter_s)
                 await asyncio.sleep(delay_s)
                 continue
 
@@ -183,14 +166,19 @@ class PredicateAPIClient:
                     await resp.aread()
                     resp.raise_for_status()
                 await resp.aread()
-                delay_s = min(s.retry_max_delay_s, s.retry_base_delay_s * (2**attempt)) + random.uniform(
-                    0, s.retry_jitter_s
-                )
+                delay_s = min(
+                    s.retry_max_delay_s, s.retry_base_delay_s * (2**attempt)
+                ) + random.uniform(0, s.retry_jitter_s)
                 await asyncio.sleep(delay_s)
                 continue
 
             resp.raise_for_status()
-            return PredicateAPIResponse.model_validate(resp.json())
+            final_response = PredicateAPIResponse.model_validate(resp.json())
+
+            if s.debugging_mode:
+                logger.info(f"Predicate response: {resp.json()}")
+
+            return final_response
 
         raise RuntimeError("PredicateAPIClient.check exhausted retries")
 
@@ -276,21 +264,26 @@ class PredicateAPIFactory:
 _default_factory: PredicateAPIFactory | None = None
 
 
-async def get_predicate_api_client() -> PredicateAPIClient:
-    """Return a process-wide shared PredicateAPIClient (lazy init)."""
+def create_predicate_api_client(settings: PredicateAPISettings | None = None) -> None:
+    """Initialize the global PredicateAPIClient factory."""
 
     global _default_factory
+    _default_factory = PredicateAPIFactory(settings=settings)
+
+
+async def get_predicate_api_client() -> PredicateAPIClient:
+    """Return a process-wide shared PredicateAPIClient."""
+
     if _default_factory is None:
-        _default_factory = PredicateAPIFactory()
+        raise RuntimeError(
+            "Predicate API client not initialized. Call create_predicate_api_client() first."
+        )
     return await _default_factory.get()
 
 
-# TODO: fix leaking client. httpx closes TCP on idle, but still not cool
 async def close_predicate_api_client() -> None:
-    """Close the shared client pool and reset the default factory."""
+    """Close the shared client pool."""
 
-    global _default_factory
     if _default_factory is None:
         return
     await _default_factory.aclose()
-    _default_factory = None

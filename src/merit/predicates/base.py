@@ -12,11 +12,12 @@ logger = logging.getLogger(__name__)
 
 # Protocols for predicate callables
 
+
 class SyncPredicate(Protocol):
     """Callable protocol for predicate functions.
 
     A `Predicate` compares an ``actual`` value to a ``reference`` value, optionally
-    using additional ``context`` and configuration flags, and returns a
+    using configuration flags, and returns a
     :class:`~merit.predicates.base.PredicateResult`.
 
     Parameters
@@ -25,9 +26,6 @@ class SyncPredicate(Protocol):
         Observed value produced by the system under test.
     reference
         Predefined value to compare against.
-    context
-        Optional context string to help interpret the comparison (e.g. prompt,
-        instructions, domain constraints).
     strict
         Whether to enforce strict comparison semantics (predicate-specific).
     metrics
@@ -43,8 +41,7 @@ class SyncPredicate(Protocol):
         self,
         actual: Any,
         reference: Any,
-        context: str | None = None,
-        strict: bool = True,
+        strict: bool = False,
         metrics: list | None = None,
         case_id: UUID | None = None,
     ) -> "PredicateResult": ...
@@ -54,7 +51,7 @@ class AsyncPredicate(Protocol):
     """Callable protocol for predicate functions.
 
     A `Predicate` compares an ``actual`` value to a ``reference`` value, optionally
-    using additional ``context`` and configuration flags, and returns a
+    using configuration flags, and returns a
     :class:`~merit.predicates.base.PredicateResult`.
 
     Parameters
@@ -63,9 +60,6 @@ class AsyncPredicate(Protocol):
         Observed value produced by the system under test.
     reference
         Predefined value to compare against.
-    context
-        Optional context string to help interpret the comparison (e.g. prompt,
-        instructions, domain constraints).
     strict
         Whether to enforce strict comparison semantics (predicate-specific).
     metrics
@@ -81,16 +75,17 @@ class AsyncPredicate(Protocol):
         self,
         actual: Any,
         reference: Any,
-        context: str | None = None,
-        strict: bool = True,
+        strict: bool = False,
         metrics: list | None = None,
         case_id: UUID | None = None,
     ) -> "PredicateResult": ...
+
 
 Predicate = AsyncPredicate | SyncPredicate
 
 
 # Models for metadata and result
+
 
 class PredicateMetadata(BaseModel):
     """Metadata describing how a predicate was executed.
@@ -109,8 +104,6 @@ class PredicateMetadata(BaseModel):
         String representation of the observed value.
     reference
         String representation of the expected/ground-truth value.
-    context
-        Optional context string used during the check.
     strict
         Strictness flag forwarded to the predicate implementation.
     predicate_name
@@ -120,10 +113,10 @@ class PredicateMetadata(BaseModel):
         Name of the enclosing "merit" function, if available (e.g. ``merit_*``).
         Read-only.
     """
+
     # Inputs
     actual: str
     reference: str
-    context: str | None = None
     strict: bool = True
 
     # Auto-filled Identifiers
@@ -177,7 +170,6 @@ class PredicateMetadata(BaseModel):
             frame = frame.f_back
 
 
-
 class PredicateResult(BaseModel):
     """Result of a single predicate evaluation.
 
@@ -203,6 +195,7 @@ class PredicateResult(BaseModel):
     - ``repr(result)`` returns JSON with ``None`` fields excluded and
       truncation enabled for long ``actual`` / ``reference`` strings.
     """
+
     # Metadata
     id: UUID = Field(default_factory=uuid4)
     case_id: UUID | None = None
@@ -243,20 +236,22 @@ def predicate(func: Callable[[Any, Any], Awaitable[bool]]) -> AsyncPredicate: ..
 def predicate(func: Callable[[Any, Any], bool]) -> SyncPredicate: ...
 
 
-def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]]) -> Predicate:
+def predicate(
+    func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]],
+) -> Predicate:
     """Decorator to convert a simple comparison function into a full Predicate.
-    
+
     Wraps a function that takes (actual, reference) -> bool and converts it
-    to follow the Predicate protocol, which includes optional context, strict,
+    to follow the Predicate protocol, which includes optional strict,
     and metrics parameters and returns a PredicateResult.
-    
+
     Args:
         func: A function that takes (actual, reference) and returns bool.
               Can be sync or async.
-        
+
     Returns:
         A predicate callable following the Predicate protocol (SyncPredicate or AsyncPredicate).
-        
+
     Example:
         >>> @predicate
         >>> def equals(actual, reference):
@@ -266,19 +261,18 @@ def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[
         >>> assert result.value is True
     """
     if inspect.iscoroutinefunction(func):
+
         @wraps(func)
         async def async_wrapper(
             actual: Any,
             reference: Any,
-            context: str | None = None,
-            strict: bool = True,
+            strict: bool = False,
             metrics: list | None = None,
             case_id: UUID | None = None,
         ) -> PredicateResult:
             extra = _filter_supported_kwargs(
                 func,
                 {
-                    "context": context,
                     "strict": strict,
                     "metrics": metrics,
                     "case_id": case_id,
@@ -289,7 +283,6 @@ def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[
                 predicate_metadata=PredicateMetadata(
                     actual=str(actual),
                     reference=str(reference),
-                    context=context,
                     strict=strict,
                 ),
                 case_id=case_id,
@@ -297,21 +290,21 @@ def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[
             )
             predicate_result.predicate_metadata.predicate_name = func.__name__
             return predicate_result
+
         return cast(AsyncPredicate, async_wrapper)
     else:
+
         @wraps(func)
         def sync_wrapper(
             actual: Any,
             reference: Any,
-            context: str | None = None,
-            strict: bool = True,
+            strict: bool = False,
             metrics: list | None = None,
             case_id: UUID | None = None,
         ) -> PredicateResult:
             extra = _filter_supported_kwargs(
                 func,
                 {
-                    "context": context,
                     "strict": strict,
                     "metrics": metrics,
                     "case_id": case_id,
@@ -322,7 +315,6 @@ def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[
                 predicate_metadata=PredicateMetadata(
                     actual=str(actual),
                     reference=str(reference),
-                    context=context,
                     strict=strict,
                 ),
                 case_id=case_id,
@@ -330,4 +322,5 @@ def predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[
             )
             predicate_result.predicate_metadata.predicate_name = func.__name__
             return predicate_result
+
         return cast(SyncPredicate, sync_wrapper)
