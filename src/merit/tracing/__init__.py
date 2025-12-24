@@ -1,5 +1,8 @@
+from merit.tracing.context import TraceContext
 from merit.tracing.lifecycle import (
+    InMemorySpanCollector,
     clear_traces,
+    get_span_collector,
     get_tracer,
     init_tracing,
     set_trace_output_path,
@@ -7,7 +10,10 @@ from merit.tracing.lifecycle import (
 )
 
 __all__ = [
+    "InMemorySpanCollector",
+    "TraceContext",
     "clear_traces",
+    "get_span_collector",
     "get_tracer",
     "init_tracing",
     "set_trace_output_path",

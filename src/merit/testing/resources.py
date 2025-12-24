@@ -214,3 +214,24 @@ class ResourceResolver:
         keys_to_remove = [k for k in self._cache if k[0] == scope]
         for key in keys_to_remove:
             del self._cache[key]
+
+
+# Built-in resources
+
+
+@resource(scope=Scope.CASE)
+def trace_context():
+    """Provide access to trace data for the current test.
+
+    Yields a TraceContext that allows querying child spans, LLM calls,
+    and setting custom attributes on the test span.
+
+    Automatically clears captured spans on teardown.
+    """
+    from merit.tracing import TraceContext, get_span_collector
+
+    collector = get_span_collector()
+    ctx = TraceContext.from_current(collector)
+    yield ctx
+    if collector:
+        collector.clear(ctx.trace_id)

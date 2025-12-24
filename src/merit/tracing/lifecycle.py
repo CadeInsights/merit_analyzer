@@ -10,21 +10,57 @@ convenience context manager `trace_step`.
 # instrumentation, and tracing helpers).
 
 import os
+from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from threading import Lock
+from typing import Any, Sequence
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace import TracerProvider, ReadableSpan
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
 
 from merit.tracing.exporters import StreamingFileSpanExporter
 from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 
 
+class InMemorySpanCollector(SpanExporter):
+    """Span exporter that stores spans in memory by trace_id for querying."""
+
+    def __init__(self) -> None:
+        self._spans: dict[str, list[ReadableSpan]] = defaultdict(list)
+        self._lock = Lock()
+
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
+        with self._lock:
+            for span in spans:
+                trace_id = format(span.context.trace_id, "032x")
+                self._spans[trace_id].append(span)
+        return SpanExportResult.SUCCESS
+
+    def get_spans(self, trace_id: str) -> list[ReadableSpan]:
+        with self._lock:
+            return list(self._spans.get(trace_id, []))
+
+    def clear(self, trace_id: str) -> None:
+        with self._lock:
+            self._spans.pop(trace_id, None)
+
+    def clear_all(self) -> None:
+        with self._lock:
+            self._spans.clear()
+
+    def shutdown(self) -> None:
+        self.clear_all()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
+
+
 _exporter: StreamingFileSpanExporter | None = None
+_collector: InMemorySpanCollector | None = None
 _initialized = False
 
 
@@ -39,7 +75,7 @@ def init_tracing(
     Must be called before any LLM clients are instantiated to ensure
     instrumentation captures all calls.
     """
-    global _exporter, _initialized
+    global _exporter, _collector, _initialized
 
     if _initialized:
         return
@@ -50,15 +86,22 @@ def init_tracing(
 
     # Set up streaming exporter
     _exporter = StreamingFileSpanExporter(output_path)
+    _collector = InMemorySpanCollector()
     resource = Resource.create({"service.name": service_name})
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(SimpleSpanProcessor(_exporter))
+    provider.add_span_processor(SimpleSpanProcessor(_collector))
     trace.set_tracer_provider(provider)
 
     # Instrument LLM clients via OpenLLMetry
     _instrument_llm_clients()
 
     _initialized = True
+
+
+def get_span_collector() -> InMemorySpanCollector | None:
+    """Get the in-memory span collector for querying trace data."""
+    return _collector
 
 
 def set_trace_output_path(output_path: Path | str) -> None:

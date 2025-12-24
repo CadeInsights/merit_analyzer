@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -473,30 +474,41 @@ class Runner:
 
         expect_failure = item.xfail_reason is not None
 
-        # Resolve resources for this test's parameters
-        kwargs = {}
-        if item.param_values:
-            kwargs.update(item.param_values)
+        # Create span BEFORE resource resolution so trace_context can access it
+        tracer = get_tracer() if self.enable_tracing else None
+        span_ctx = tracer.start_as_current_span(f"test.{item.full_name}") if tracer else nullcontext()
 
-        for param in item.params:
-            if param in kwargs:
-                continue
-            try:
-                kwargs[param] = await resolver.resolve(param)
-            except ValueError:
-                # Unknown resource - might be a non-resource param
-                pass
+        with span_ctx as span:
+            if span:
+                span.set_attribute("test.name", item.name)
+                span.set_attribute("test.module", str(item.module_path))
+                if item.tags:
+                    span.set_attribute("test.tags", list(item.tags))
 
-        # For class methods, instantiate the class
-        instance = None
-        if item.class_name:
-            # Get the class from the function's globals
-            cls = item.fn.__globals__.get(item.class_name)
-            if cls:
-                instance = cls()
+            # Resolve resources for this test's parameters
+            kwargs = {}
+            if item.param_values:
+                kwargs.update(item.param_values)
 
-        # Execute test, optionally wrapped in a trace span
-        return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+            for param in item.params:
+                if param in kwargs:
+                    continue
+                try:
+                    kwargs[param] = await resolver.resolve(param)
+                except ValueError:
+                    # Unknown resource - might be a non-resource param
+                    pass
+
+            # For class methods, instantiate the class
+            instance = None
+            if item.class_name:
+                # Get the class from the function's globals
+                cls = item.fn.__globals__.get(item.class_name)
+                if cls:
+                    instance = cls()
+
+            # Execute test body
+            return await self._execute_test_body(item, instance, kwargs, start, expect_failure, span)
 
     async def _execute_test_body(
         self,
@@ -505,19 +517,10 @@ class Runner:
         kwargs: dict[str, Any],
         start: float,
         expect_failure: bool,
+        span: Any = None,
     ) -> TestResult:
-        """Execute the test body, optionally wrapped in a trace span."""
-        tracer = get_tracer() if self.enable_tracing else None
-        span_context = tracer.start_as_current_span(f"test.{item.full_name}") if tracer else None
-
+        """Execute the test body within the active span context."""
         try:
-            if span_context:
-                span = span_context.__enter__()
-                span.set_attribute("test.name", item.name)
-                span.set_attribute("test.module", str(item.module_path))
-                if item.tags:
-                    span.set_attribute("test.tags", list(item.tags))
-
             if instance:
                 if item.is_async:
                     await item.fn(instance, **kwargs)
@@ -530,7 +533,7 @@ class Runner:
 
             duration = (time.perf_counter() - start) * 1000
 
-            if span_context:
+            if span:
                 span.set_attribute("test.status", "passed")
                 span.set_attribute("test.duration_ms", duration)
 
@@ -544,7 +547,7 @@ class Runner:
         except AssertionError as e:
             duration = (time.perf_counter() - start) * 1000
 
-            if span_context:
+            if span:
                 span.set_attribute("test.status", "failed")
                 span.set_attribute("test.duration_ms", duration)
                 span.set_status(StatusCode.ERROR, str(e))
@@ -565,7 +568,7 @@ class Runner:
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
 
-            if span_context:
+            if span:
                 span.set_attribute("test.status", "error")
                 span.set_attribute("test.duration_ms", duration)
                 span.set_status(StatusCode.ERROR, str(e))
@@ -575,10 +578,6 @@ class Runner:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err)
             return TestResult(item=item, status=TestStatus.ERROR, duration_ms=duration, error=e)
-
-        finally:
-            if span_context:
-                span_context.__exit__(None, None, None)
 
     def _print_result(self, result: TestResult) -> None:
         """Print a single test result."""
