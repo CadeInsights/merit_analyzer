@@ -35,7 +35,7 @@ class ResourceDef:
     is_async_generator: bool
     dependencies: list[str] = field(default_factory=list)
     on_resolve: Callable[[Any], Any] | None = None
-    on_teardown: Callable[[Any], None] | None = None
+    on_teardown: Callable[[Any], Any] | None = None
 
 
 _registry: dict[str, ResourceDef] = {}
@@ -46,7 +46,7 @@ def resource(
     *,
     scope: Scope | str = Scope.CASE,
     on_resolve: Callable[[Any], Any] | None = None,
-    on_teardown: Callable[[Any], None] | None = None,
+    on_teardown: Callable[[Any], Any] | None = None,
 ) -> Callable[P, T] | Callable[[Callable[P, T]], Callable[P, T]]:
     """Register a function as a resource for dependency injection.
 
@@ -175,7 +175,14 @@ class ResourceResolver:
             value = defn.fn(**kwargs)
 
         if defn.on_resolve:
-            value = defn.on_resolve(value)
+            try:
+                result = defn.on_resolve(value)
+                if inspect.iscoroutine(result):
+                    value = await result
+                else:
+                    value = result
+            except Exception as e:
+                raise RuntimeError(f"Hook {defn.on_resolve.__name__} failed for resource '{name}': {e}") from e
 
         self._cache[cache_key] = value
         # Sync cache to parent for SUITE/SESSION scopes
@@ -189,7 +196,7 @@ class ResourceResolver:
 
     async def teardown(self) -> None:
         """Run teardown for all generator-based resources (LIFO order)."""
-        for scope, name, gen in reversed(self._teardowns):
+        for s, name, gen in reversed(self._teardowns):
             if isinstance(gen, AsyncGenerator):
                 try:
                     await gen.__anext__()
@@ -203,9 +210,15 @@ class ResourceResolver:
 
             defn = self._registry.get(name)
             if defn and defn.on_teardown:
-                cached_value = self._cache.get((scope, name))
-                if cached_value is not None:
-                    defn.on_teardown(cached_value)
+                cache_key = (s, name)
+                if cache_key in self._cache:
+                    try:
+                        result = defn.on_teardown(self._cache[cache_key])
+                        if inspect.iscoroutine(result):
+                            await result
+                    except Exception as e:
+                        raise RuntimeError(f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}") from e
+
         self._teardowns.clear()
 
     async def teardown_scope(self, scope: Scope) -> None:
@@ -226,9 +239,14 @@ class ResourceResolver:
 
                 defn = self._registry.get(name)
                 if defn and defn.on_teardown:
-                    cached_value = self._cache.get((s, name))
-                    if cached_value is not None:
-                        defn.on_teardown(cached_value)
+                    cache_key = (s, name)
+                    if cache_key in self._cache:
+                        try:
+                            result = defn.on_teardown(self._cache[cache_key])
+                            if inspect.iscoroutine(result):
+                                await result
+                        except Exception as e:
+                            raise RuntimeError(f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}") from e
             else:
                 remaining.append((s, name, gen))
 
