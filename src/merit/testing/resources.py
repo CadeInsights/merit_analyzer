@@ -153,13 +153,20 @@ class ResourceResolver:
         cache_key = (defn.scope, name)
 
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            value = self._cache[cache_key]
+            if defn.on_resolve:
+                try:
+                    result = defn.on_resolve(value, context)
+                    if inspect.iscoroutine(result):
+                        await result
+                except Exception as e:
+                    raise RuntimeError(f"Hook {defn.on_resolve.__name__} failed for resource '{name}': {e}") from e
+            return result
 
         # Resolve dependencies first
         kwargs = {}
-        res_ctx = {"consumer_name": name}
         for dep in defn.dependencies:
-            kwargs[dep] = await self.resolve(dep, res_ctx)
+            kwargs[dep] = await self.resolve(dep, {"consumer_name": name})
 
         # Call the factory
         if defn.is_async_generator:
