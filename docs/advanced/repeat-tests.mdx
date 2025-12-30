@@ -1,0 +1,247 @@
+---
+title: "Repeat Tests"
+description: "Test reliability, flakiness, and probabilistic behaviors"
+---
+
+## What is @repeat?
+
+The `@merit.repeat` decorator runs a test multiple times to:
+
+- Detect flaky tests
+- Test probabilistic systems
+- Verify reliability under repeated execution
+- Stress test with multiple iterations
+
+## Basic Repeat
+
+Run a test multiple times:
+
+```python
+import merit
+
+@merit.repeat(count=10)
+def merit_consistency():
+    """Runs 10 times - all must pass."""
+    result = chatbot("Hello")
+    assert "hello" in result.lower()
+```
+
+If any iteration fails, the test fails.
+
+## Minimum Pass Threshold
+
+Allow some failures for probabilistic systems:
+
+```python
+@merit.repeat(count=100, min_passes=95)
+async def merit_probabilistic_model():
+    """Must pass at least 95 out of 100 times."""
+    response = await llm_call("Classify: positive or negative", text)
+    # LLM might be inconsistent, but should mostly get it right
+    assert response in ["positive", "negative"]
+```
+
+This is useful when testing:
+- LLM outputs with inherent randomness
+- Systems with acceptable error rates
+- Network calls with occasional failures
+
+## Detecting Flakiness
+
+Find unreliable tests:
+
+```python
+@merit.repeat(count=50)
+async def merit_check_stability():
+    """If this fails sometimes, it's flaky."""
+    result = await potentially_flaky_function()
+    assert result.success
+```
+
+If this test fails occasionally, you've found a flaky test that needs fixing.
+
+## With Parametrization
+
+Combine repeat with parameters:
+
+```python
+@merit.repeat(count=5)
+@merit.parametrize(
+    "temperature",
+    [0.0, 0.5, 1.0],
+)
+async def merit_temperature_stability(temperature: float):
+    """Each parameter set runs 5 times = 15 total tests."""
+    response = await llm_call(temperature=temperature, prompt="Say hello")
+    assert len(response) > 0
+```
+
+## Stress Testing
+
+Test under load:
+
+```python
+@merit.repeat(count=100)
+async def merit_rate_limiting():
+    """Verify rate limiting handles repeated requests."""
+    response = await api.call()
+    assert response.status in [200, 429]  # Success or rate limited
+```
+
+## Probabilistic Assertions
+
+Test systems with randomness:
+
+```python
+import random
+
+@merit.repeat(count=1000, min_passes=950)
+def merit_random_selection():
+    """Random selection should be roughly uniform."""
+    options = ["A", "B", "C", "D"]
+    selected = random.choice(options)
+    
+    # Over 1000 iterations, each option should appear ~250 times
+    # We accept 950/1000 passes as reasonable variance
+    assert selected in options
+```
+
+## Real-World Examples
+
+### Testing LLM Consistency
+
+```python
+@merit.repeat(count=10)
+async def merit_llm_format_consistency():
+    """LLM should consistently return valid JSON."""
+    response = await llm_call("Return JSON: {name, age, city}")
+    
+    # Parse should never fail
+    data = json.loads(response)
+    assert "name" in data
+    assert "age" in data
+    assert "city" in data
+```
+
+### Testing Cache Reliability
+
+```python
+@merit.repeat(count=100)
+async def merit_cache_consistency():
+    """Cache should always return same value for same key."""
+    key = "test_key"
+    expected = "test_value"
+    
+    # Set once
+    await cache.set(key, expected)
+    
+    # Read many times - should always match
+    actual = await cache.get(key)
+    assert actual == expected
+```
+
+### Testing Concurrent Access
+
+```python
+import asyncio
+
+@merit.repeat(count=50)
+async def merit_concurrent_safety():
+    """Test concurrent database access."""
+    async def increment():
+        current = await db.get("counter")
+        await db.set("counter", current + 1)
+    
+    # Reset counter
+    await db.set("counter", 0)
+    
+    # Run 10 concurrent increments
+    await asyncio.gather(*[increment() for _ in range(10)])
+    
+    # Should be exactly 10 (if properly synchronized)
+    final = await db.get("counter")
+    assert final == 10
+```
+
+### Testing Model Accuracy Threshold
+
+```python
+@merit.repeat(count=100, min_passes=90)
+async def merit_classification_accuracy():
+    """Model should be >90% accurate on test set."""
+    sample = get_random_test_sample()
+    prediction = await model.predict(sample.input)
+    assert prediction == sample.expected_label
+```
+
+## When to Use Repeat
+
+Use `@merit.repeat` when:
+
+- ✅ Testing probabilistic or random systems
+- ✅ Detecting flaky tests
+- ✅ Verifying consistency across iterations
+- ✅ Testing reliability under repeated load
+- ✅ Validating systems with acceptable error rates
+
+Don't use when:
+
+- ❌ Test is deterministic and fast
+- ❌ Each iteration is expensive (time/cost)
+- ❌ Test is already stable and proven
+
+## Repeat vs Parametrize
+
+**Repeat** - Same inputs, multiple executions:
+```python
+@merit.repeat(count=10)
+def merit_same_input():
+    assert process("test") == "result"
+    # Runs 10 times with identical inputs
+```
+
+**Parametrize** - Different inputs, one execution each:
+```python
+@merit.parametrize("input", ["test1", "test2", "test3"])
+def merit_different_inputs(input: str):
+    assert process(input) is not None
+    # Runs 3 times with different inputs
+```
+
+**Both together** - Different inputs, multiple executions:
+```python
+@merit.repeat(count=5)
+@merit.parametrize("input", ["test1", "test2"])
+def merit_comprehensive(input: str):
+    assert process(input) is not None
+    # Runs 10 times total (5 × 2)
+```
+
+## Configuration (TODO)
+
+TODO: Document repeat configuration options
+
+Expected options:
+- Parallel execution of iterations
+- Stop on first failure vs run all
+- Reporting individual iteration results
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Tracing"
+    icon="chart-network"
+    href="/advanced/tracing"
+  >
+    Track test execution and debugging
+  </Card>
+  <Card
+    title="Test Cases"
+    icon="list-check"
+    href="/core/test-cases"
+  >
+    Structured test scenarios
+  </Card>
+</CardGroup>
+

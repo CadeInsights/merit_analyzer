@@ -1,0 +1,354 @@
+---
+title: "Style & Structure Predicates"
+description: "Match writing style and document structure"
+---
+
+## Overview
+
+- `matches_writing_style` - Verify writing style consistency
+- `matches_writing_layout` - Check document structure
+
+<Note>
+Style and structure predicates focus on **how** content is written, not **what** it says. The semantic meaning can be completely different.
+</Note>
+
+## matches_writing_style
+
+**Writing Style Consistency** - Check if two texts have similar writing style, tone, and voice.
+
+*Maps to service assertion: `style_match`*
+
+```python
+from merit.predicates import matches_writing_style
+
+async def merit_consistent_style():
+    style_example = """
+    Welcome! We're so excited you're here. Our product makes
+    your life easier - no complicated setup, just simple,
+    straightforward solutions. Let's get started!
+    """
+    
+    generated_text = chatbot("Write about our service")
+    
+    # Check style matches (friendly, casual, enthusiastic)
+    assert await matches_writing_style(generated_text, style_example)
+```
+
+### What It Checks
+
+- Sentence length and complexity
+- Vocabulary level (formal vs casual)
+- Use of contractions, exclamations
+- Active vs passive voice
+- Tone (professional, friendly, technical)
+- Punctuation patterns
+- Stylistic devices and rhetoric
+
+**Note:** Semantic meaning is ignored - only HOW it's written matters.
+
+### When to Use
+
+- ✅ Maintain brand voice consistency
+- ✅ Match tone across content
+- ✅ Ensure style guide compliance
+- ✅ Verify reformulation preserves style
+- ✅ Check AI maintains consistent voice
+
+### Example: Brand Voice
+
+```python
+async def merit_brand_voice():
+    # Brand voice example
+    brand_voice = """
+    Let's dive in. Our platform is built for teams who move fast
+    and think big. No fluff, no complexity - just powerful tools
+    that get the job done. Ready to see what's possible?
+    """
+    
+    # Generated content should match this style
+    content = generate_landing_page()
+    
+    # Check style consistency
+    assert await matches_writing_style(content, brand_voice)
+    
+    # Content meaning can be completely different!
+    # We're only checking HOW it's written, not WHAT it says
+```
+
+### Example: Tone Adaptation
+
+```python
+async def merit_tone_matching():
+    # Different tones for different audiences
+    
+    # Casual, friendly tone
+    casual_example = "Hey! Thanks for reaching out. I'd love to help you with that."
+    casual_response = chatbot_casual("Customer question")
+    assert await matches_writing_style(casual_response, casual_example)
+    
+    # Formal, professional tone
+    formal_example = "Thank you for your inquiry. I would be pleased to assist you."
+    formal_response = chatbot_formal("Customer question")
+    assert await matches_writing_style(formal_response, formal_example)
+```
+
+## matches_writing_layout
+
+**Organizational Structure Matching** - Check if two texts have similar document structure and organization.
+
+*Maps to service assertion: `structure_match`*
+
+```python
+from merit.predicates import matches_writing_layout
+
+async def merit_structure_match():
+    template = """
+    # Product Name
+    
+    ## Overview
+    Brief description here.
+    
+    ## Features
+    - Feature 1
+    - Feature 2
+    - Feature 3
+    
+    ## Pricing
+    Pricing details here.
+    
+    ## Get Started
+    Call to action here.
+    """
+    
+    generated_doc = generate_product_page()
+    
+    # Check structure matches (sections, hierarchy, formatting)
+    assert await matches_writing_layout(generated_doc, template)
+```
+
+### What It Checks
+
+- Heading structure (H1, H2, H3, etc.)
+- Section organization and hierarchy
+- List formatting (bullet vs numbered)
+- Paragraph structure and breaks
+- Markdown/formatting elements
+- Document flow and organization
+- Presence and order of sections
+
+**Note:** Semantic meaning is ignored - only document structure matters.
+
+### When to Use
+
+- ✅ Enforce document templates
+- ✅ Verify consistent formatting
+- ✅ Check section organization
+- ✅ Ensure proper hierarchy
+- ✅ Validate generated documentation structure
+
+### Example: Report Template
+
+```python
+async def merit_report_structure():
+    required_structure = """
+    # Executive Summary
+    Overview paragraph.
+    
+    # Methodology
+    ## Data Collection
+    Details here.
+    ## Analysis Process
+    Details here.
+    
+    # Results
+    ## Key Findings
+    - Finding 1
+    - Finding 2
+    ## Detailed Analysis
+    Analysis content.
+    
+    # Recommendations
+    Recommendations list.
+    
+    # Conclusion
+    Final thoughts.
+    """
+    
+    report = generate_quarterly_report(data)
+    
+    # Verify report follows structure
+    assert await matches_writing_layout(report, required_structure)
+```
+
+### Example: Documentation Consistency
+
+```python
+async def merit_doc_consistency():
+    # Standard API documentation structure
+    doc_template = """
+    # Endpoint Name
+    
+    ## Description
+    What this endpoint does.
+    
+    ## Parameters
+    | Name | Type | Description |
+    |------|------|-------------|
+    | param1 | string | Description |
+    
+    ## Example Request
+    ```
+    Code example
+    ```
+    
+    ## Example Response
+    ```
+    Response example
+    ```
+    
+    ## Error Codes
+    List of possible errors.
+    """
+    
+    generated_docs = generate_api_docs(endpoint)
+    
+    # All docs should follow same structure
+    assert await matches_writing_layout(generated_docs, doc_template)
+```
+
+## Combining Style and Structure
+
+```python
+async def merit_complete_formatting():
+    # Style example (tone, voice, language)
+    style_guide = """
+    We use conversational language. Short sentences. Active voice.
+    We speak directly to you, the reader. Clear and friendly.
+    """
+    
+    # Structure example (organization, hierarchy)
+    structure_template = """
+    # Title
+    
+    ## Introduction
+    Opening paragraph.
+    
+    ## Main Content
+    ### Subsection 1
+    Content here.
+    ### Subsection 2
+    Content here.
+    
+    ## Conclusion
+    Closing paragraph.
+    """
+    
+    generated = generate_blog_post(topic)
+    
+    # Check both style and structure
+    assert await matches_writing_style(generated, style_guide)
+    assert await matches_writing_layout(generated, structure_template)
+```
+
+## Real-World Example: Documentation Generator
+
+```python
+from merit.predicates import matches_writing_style, matches_writing_layout
+
+async def merit_generated_documentation():
+    # Style guide for all docs
+    doc_style = """
+    Use clear, concise language. Write in second person (you, your).
+    Prefer active voice. One idea per sentence. Technical but accessible.
+    """
+    
+    # Required structure for tutorials
+    tutorial_structure = """
+    # Tutorial Title
+    
+    ## Prerequisites
+    - Requirement 1
+    - Requirement 2
+    
+    ## Step-by-Step Guide
+    ### Step 1: Title
+    Instructions.
+    ### Step 2: Title
+    Instructions.
+    ### Step 3: Title
+    Instructions.
+    
+    ## Troubleshooting
+    Common issues and solutions.
+    
+    ## Next Steps
+    What to learn next.
+    """
+    
+    # Generate documentation
+    tutorial = generate_tutorial("Getting Started with API")
+    
+    # Verify style consistency across all docs
+    assert await matches_writing_style(tutorial, doc_style)
+    
+    # Verify structure follows template
+    assert await matches_writing_layout(tutorial, tutorial_structure)
+    
+    # Regular checks too
+    assert len(tutorial) > 500
+    assert "## Prerequisites" in tutorial
+```
+
+## Tips for Examples
+
+### Style Examples
+
+```python
+# ✅ Good - shows clear style patterns
+style = """
+We're changing the game. No complicated processes.
+No hidden fees. Just straightforward solutions that work.
+"""
+
+# ❌ Too short - not enough style signals
+style = "We provide solutions."
+```
+
+### Structure Examples
+
+```python
+# ✅ Good - shows clear organizational pattern
+structure = """
+# Main Title
+## Section 1
+Content here.
+## Section 2
+### Subsection A
+Details.
+### Subsection B
+Details.
+"""
+
+# ❌ Too vague - unclear structure
+structure = "Title\nSome content\nMore content"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Fact Checking"
+    icon="check-double"
+    href="/predicates/fact-checking"
+  >
+    Verify facts and detect hallucinations
+  </Card>
+  <Card
+    title="Topics & Policy"
+    icon="list-check"
+    href="/predicates/topics-policy"
+  >
+    Check topical coverage and policy compliance
+  </Card>
+</CardGroup>
+

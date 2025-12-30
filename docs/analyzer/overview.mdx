@@ -1,0 +1,144 @@
+---
+title: "Merit Analyzer Overview"
+description: "Automatically analyze test failures and find root causes"
+---
+
+## What is Merit Analyzer?
+
+Merit Analyzer is a tool that helps you understand test failures at scale. It:
+
+- **Clusters similar errors** - Groups related failures together
+- **Identifies patterns** - Finds common error patterns
+- **Locates problematic code** - Points to likely root causes
+- **Generates insights** - Provides actionable recommendations
+
+## When to Use It
+
+Use Merit Analyzer when you have:
+
+- ✅ Many test failures to understand
+- ✅ Recurring error patterns
+- ✅ Need to prioritize fixes
+- ✅ Want to identify systemic issues
+
+## How It Works
+
+```
+Test Results (CSV) → Merit Analyzer → HTML Report
+```
+
+1. **Export test results** - Run tests and export to CSV
+2. **Run analyzer** - Process failures with LLM
+3. **Review report** - Interactive HTML with insights
+
+## Quick Example
+
+```bash
+# Run your Merit tests and export results
+merit --export-results results.csv
+
+# Analyze the failures
+merit-analyzer analyze results.csv
+
+# Open the generated report
+open merit_report.html
+```
+
+## What You Get
+
+The analyzer generates an interactive HTML report with:
+
+### Error Clusters
+
+Similar errors are grouped together:
+- Cluster name and pattern
+- Number of affected tests
+- Common characteristics
+
+### Code Analysis
+
+For each cluster:
+- Likely problematic code locations
+- Suggested fixes
+- Related test cases
+
+### Interactive Exploration
+
+- Clickable file:// URLs to code
+- Filterable test results
+- Detailed error messages
+- Pattern visualizations
+
+## Example Report Structure
+
+```
+Merit Analysis Report
+├── Summary
+│   ├── Total tests: 100
+│   ├── Failed: 25
+│   └── Error clusters: 5
+│
+├── Cluster 1: "API Timeout Errors"
+│   ├── Pattern: "Request to .* timed out after"
+│   ├── Affected tests: 12
+│   ├── Problematic code: api_client.py:45
+│   ├── Recommendation: "Increase timeout or add retry logic"
+│   └── Related tests: [test_api_call, test_slow_endpoint, ...]
+│
+├── Cluster 2: "Hallucination in Summaries"
+│   ├── Pattern: "Unsupported facts in generated summary"
+│   ├── Affected tests: 8
+│   ├── Problematic code: summarizer.py:23
+│   ├── Recommendation: "Add fact-checking step to summarization"
+│   └── Related tests: [...]
+│
+└── ...
+```
+
+## Supported Data Format
+
+Merit Analyzer requires a CSV file with these columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `case_input` | any | Test input/prompt |
+| `reference_value` | any | Expected output |
+| `output_for_assertions` | any | Actual output |
+| `passed` | bool | Test passed (true/false) |
+| `error_message` | str | Error message if failed |
+
+Example CSV:
+
+```csv
+case_input,reference_value,output_for_assertions,passed,error_message
+"Tell me about Paris","Paris is capital of France","Paris is a city",false,"Expected facts not found"
+"Hello","Hi there","Hello!",false,"Response format incorrect"
+```
+
+## Requirements
+
+Merit Analyzer uses LLMs for clustering and analysis. You need:
+
+- API key from OpenAI or Anthropic
+- Environment variables configured
+- CSV file with test results
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Running Analyzer"
+    icon="play"
+    href="/analyzer/running-analyzer"
+  >
+    Step-by-step guide to using the analyzer
+  </Card>
+  <Card
+    title="Understanding Reports"
+    icon="file-chart-line"
+    href="/analyzer/reports"
+  >
+    How to interpret analysis reports
+  </Card>
+</CardGroup>
+

@@ -1,0 +1,416 @@
+---
+title: "Predicates API Reference"
+description: "AI-powered assertion functions"
+---
+
+## Fact Checking Predicates
+
+### has_facts
+
+Check if actual text contains all facts from reference.
+
+```python
+async def has_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `reference` - Facts that should be present
+- `strict` - Require explicit statements (default: False)
+
+**Returns:**
+- `True` if all reference facts are in actual, `False` otherwise
+
+**Example:**
+
+```python
+async def merit_contains_facts():
+    response = "Paris is the capital of France."
+    assert await has_facts(response, "Paris is the capital of France")
+```
+
+---
+
+### has_unsupported_facts
+
+Detect hallucinations - facts in actual not supported by reference.
+
+```python
+async def has_unsupported_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check for unsupported facts
+- `reference` - Source of truth
+- `strict` - Require explicit statements (default: False)
+
+**Returns:**
+- `True` if actual contains unsupported facts, `False` otherwise
+
+**Example:**
+
+```python
+async def merit_no_hallucinations():
+    response = "Paris has 50 million people."
+    reference = "Paris has about 2 million residents."
+    
+    # Should detect the hallucination
+    assert await has_unsupported_facts(response, reference)
+```
+
+---
+
+### has_conflicting_facts
+
+Check if actual text contradicts reference.
+
+```python
+async def has_conflicting_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `reference` - Source of truth
+- `strict` - Require explicit statements (default: False)
+
+**Returns:**
+- `True` if actual contradicts reference, `False` otherwise
+
+**Example:**
+
+```python
+async def merit_no_contradictions():
+    response = "Paris is the capital of Germany."
+    reference = "Paris is the capital of France."
+    
+    # Should detect the contradiction
+    assert await has_conflicting_facts(response, reference)
+```
+
+---
+
+### matches_facts
+
+Bidirectional fact matching - both texts should have same facts.
+
+```python
+async def matches_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `reference` - Expected facts
+- `strict` - Require explicit statements (default: False)
+
+**Returns:**
+- `True` if both texts contain same facts, `False` otherwise
+
+**Example:**
+
+```python
+async def merit_fact_equivalence():
+    summary = "Capital: Paris. Country: France."
+    reference = "Paris is the capital of France."
+    
+    assert await matches_facts(summary, reference)
+```
+
+## Topics & Policy Predicates
+
+### has_topics
+
+Check if text discusses all required topics.
+
+```python
+async def has_topics(
+    actual: str,
+    topics: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `topics` - Comma-separated list of required topics
+- `strict` - Require explicit mentions (default: False)
+
+**Returns:**
+- `True` if all topics are covered, `False` otherwise
+
+**Example:**
+
+```python
+async def merit_topic_coverage():
+    article = "Paris offers hotels, metro transport, and museums."
+    
+    assert await has_topics(
+        article,
+        "accommodation, transportation, attractions"
+    )
+```
+
+---
+
+### follows_policy
+
+Check if text complies with specified policies.
+
+```python
+async def follows_policy(
+    actual: str,
+    policy: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `policy` - Policy requirements (natural language)
+- `strict` - Require strict compliance (default: False)
+
+**Returns:**
+- `True` if text follows policy, `False` otherwise
+
+**Example:**
+
+```python
+async def merit_policy_compliance():
+    response = chatbot("Tell me about your product")
+    
+    assert await follows_policy(
+        response,
+        "Must be professional, avoid promises, include disclaimer"
+    )
+```
+
+## Style & Structure Predicates
+
+### matches_writing_style
+
+Check if two texts have similar writing style.
+
+```python
+async def matches_writing_style(
+    actual: str,
+    reference: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `reference` - Style example
+- `strict` - Require close match (default: False)
+
+**Returns:**
+- `True` if styles match, `False` otherwise
+
+**Note:** Semantic meaning is ignored; only style matters.
+
+**Example:**
+
+```python
+async def merit_consistent_style():
+    brand_voice = "We're excited! Let's make this happen. Simple and fast."
+    content = generate_marketing_copy()
+    
+    assert await matches_writing_style(content, brand_voice)
+```
+
+---
+
+### matches_writing_layout
+
+Check if two texts have similar document structure.
+
+```python
+async def matches_writing_layout(
+    actual: str,
+    reference: str,
+    strict: bool = False
+) -> bool
+```
+
+**Parameters:**
+- `actual` - Text to check
+- `reference` - Structure template
+- `strict` - Require exact structure (default: False)
+
+**Returns:**
+- `True` if structures match, `False` otherwise
+
+**Note:** Semantic meaning is ignored; only structure matters.
+
+**Example:**
+
+```python
+async def merit_document_structure():
+    template = """
+    # Title
+    ## Section 1
+    Content here.
+    ## Section 2
+    Content here.
+    """
+    
+    generated = generate_document()
+    assert await matches_writing_layout(generated, template)
+```
+
+## Predicate Base Classes
+
+### Predicate
+
+Base class for custom predicates.
+
+```python
+class Predicate:
+    async def __call__(
+        self,
+        actual: Any,
+        case: Case
+    ) -> PredicateResult:
+        pass
+```
+
+**Example:**
+
+```python
+from merit import Predicate, PredicateResult
+
+class ContainsKeyword(Predicate):
+    def __init__(self, keyword: str):
+        self.keyword = keyword
+    
+    async def __call__(self, actual: str, case: Case) -> PredicateResult:
+        passed = self.keyword in actual
+        return PredicateResult(
+            passed=passed,
+            score=1.0 if passed else 0.0,
+            confidence=1.0,
+            message=None if passed else f"Missing: {self.keyword}"
+        )
+```
+
+---
+
+### PredicateResult
+
+Result object from predicate evaluation.
+
+```python
+class PredicateResult:
+    passed: bool
+    score: float  # 0.0 to 1.0
+    confidence: float  # 0.0 to 1.0
+    message: str | None
+    reasoning: str | None
+```
+
+**Attributes:**
+- `passed` - Whether assertion passed
+- `score` - Numerical score (0.0-1.0)
+- `confidence` - Confidence in evaluation
+- `message` - Error message if failed
+- `reasoning` - Explanation (if enabled)
+
+---
+
+### @predicate decorator
+
+Create custom predicates from functions.
+
+```python
+@predicate
+async def custom_check(actual: str, **kwargs) -> bool:
+    # Your logic here
+    return True
+```
+
+**Example:**
+
+```python
+from merit import predicate
+
+@predicate
+async def has_greeting(actual: str) -> bool:
+    """Check if text has a greeting."""
+    greetings = ["hello", "hi", "hey", "greetings"]
+    return any(g in actual.lower() for g in greetings)
+
+# Use in tests
+async def merit_chatbot_greets():
+    response = chatbot("Start conversation")
+    assert await has_greeting(response)
+```
+
+## Client Functions
+
+### create_predicate_api_client
+
+Create API client for predicate evaluations.
+
+```python
+create_predicate_api_client(
+    base_url: str,
+    api_key: str | None = None
+)
+```
+
+**Note:** Usually handled automatically; manual creation rarely needed.
+
+---
+
+### get_predicate_api_client
+
+Get the current API client (creates if needed).
+
+```python
+get_predicate_api_client()
+```
+
+---
+
+### close_predicate_api_client
+
+Close and cleanup API client.
+
+```python
+async def close_predicate_api_client()
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Metrics API"
+    icon="chart-line"
+    href="/api-reference/metrics"
+  >
+    Test metrics and scoring
+  </Card>
+  <Card
+    title="Testing API"
+    icon="flask"
+    href="/api-reference/testing"
+  >
+    Core testing functions
+  </Card>
+</CardGroup>
+

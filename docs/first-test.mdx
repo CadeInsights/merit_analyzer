@@ -1,0 +1,177 @@
+---
+title: "Your First Test"
+description: "Write and run your first Merit test"
+---
+
+## Create a Test File
+
+Create a file called `test_example.py`:
+
+```python test_example.py
+import merit
+
+def greet(name: str) -> str:
+    """Simple function to test."""
+    return f"Hello, {name}!"
+
+def merit_greeting_works():
+    """Test that greeting function works."""
+    result = greet("World")
+    assert result == "Hello, World!"
+    assert "Hello" in result
+```
+
+## Run the Test
+
+```bash
+merit
+```
+
+Output:
+
+```
+Merit Test Runner
+=================
+
+Collected 1 test
+
+test_example.py::merit_greeting_works ✓
+
+==================== 1 passed in 0.08s ====================
+```
+
+## Test Discovery
+
+Merit automatically discovers tests in your project:
+
+- **Test files**: Files starting with `test_` or ending with `_test.py`
+- **Test functions**: Functions starting with `merit_`
+- **Test classes**: Classes starting with `Merit`
+
+Example test structure:
+
+```python
+# All of these will be discovered:
+
+def merit_simple_test():
+    """Standalone test function."""
+    pass
+
+class MeritCalculator:
+    """Test class."""
+    
+    def merit_addition(self):
+        """Test method."""
+        assert 2 + 2 == 4
+    
+    def merit_subtraction(self):
+        """Another test method."""
+        assert 5 - 3 == 2
+```
+
+## Add an Async Test
+
+Merit supports async tests for testing async code:
+
+```python test_async.py
+import merit
+import asyncio
+
+async def async_chatbot(prompt: str) -> str:
+    """Simulated async chatbot."""
+    await asyncio.sleep(0.1)  # Simulate API call
+    return f"Response to: {prompt}"
+
+async def merit_async_chatbot():
+    """Test async function."""
+    result = await async_chatbot("Hello")
+    assert "Response to: Hello" in result
+```
+
+## Test a Real AI System
+
+Let's test a simple AI function:
+
+```python test_ai.py
+import merit
+
+def summarize(text: str) -> str:
+    """Summarize text (simplified example)."""
+    sentences = text.split(". ")
+    return sentences[0] + "."
+
+def merit_summarization():
+    """Test summarization."""
+    long_text = "Paris is the capital of France. It has many museums. The Eiffel Tower is there."
+    summary = summarize(long_text)
+    
+    # Basic assertions
+    assert len(summary) < len(long_text)
+    assert "Paris" in summary
+```
+
+## Add AI Assertions
+
+Now add LLM-as-a-Judge assertions (requires API key):
+
+```python test_ai_advanced.py
+import merit
+from merit.predicates import has_facts, has_unsupported_facts
+
+def chatbot(prompt: str) -> str:
+    """Simple chatbot."""
+    return "Paris is the capital of France and home to the Eiffel Tower."
+
+async def merit_chatbot_accuracy():
+    """Test with AI-powered assertions."""
+    response = chatbot("Tell me about Paris")
+    
+    # Check facts are present
+    assert await has_facts(response, "Paris is the capital of France")
+    
+    # Check no hallucinations
+    assert not await has_unsupported_facts(
+        response,
+        "Paris is the capital of France. The Eiffel Tower is in Paris."
+    )
+```
+
+## Run Specific Tests
+
+Run all tests:
+
+```bash
+merit
+```
+
+Run specific file:
+
+```bash
+merit test_ai.py
+```
+
+Run tests matching pattern:
+
+```bash
+merit -k chatbot
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Writing Tests"
+    icon="code"
+    href="/core/writing-tests"
+  >
+    Learn about resources and test structure
+  </Card>
+  <Card
+    title="AI Predicates"
+    icon="brain"
+    href="/predicates/overview"
+  >
+    Explore LLM-as-a-Judge assertions
+  </Card>
+</CardGroup>
+

@@ -1,0 +1,231 @@
+---
+title: "AI Predicates Overview"
+description: "LLM-as-a-Judge assertions for AI testing"
+---
+
+## What are AI Predicates?
+
+AI Predicates are special async assertions that use LLMs to evaluate complex criteria that traditional assertions can't handle:
+
+- ✅ **Semantic fact checking** - Not just string matching
+- ✅ **Hallucination detection** - Find unsupported claims
+- ✅ **Style and structure matching** - Beyond regex
+- ✅ **Policy compliance** - Natural language rules
+
+## Quick Example
+
+```python
+from merit.predicates import has_facts, has_unsupported_facts
+
+async def merit_chatbot_accuracy():
+    response = chatbot("Tell me about Paris")
+    
+    # Check facts are present (semantic matching)
+    assert await has_facts(response, "Paris is the capital of France")
+    
+    # Check no hallucinations
+    assert not await has_unsupported_facts(
+        response,
+        "Paris is the capital of France. The Eiffel Tower is located in Paris."
+    )
+```
+
+## Available Predicates
+
+### Fact Checking
+
+- [`has_facts`](/predicates/fact-checking#has-facts) - Check if text contains specific facts
+- [`has_unsupported_facts`](/predicates/fact-checking#has-unsupported-facts) - Detect hallucinations
+- [`has_conflicting_facts`](/predicates/fact-checking#has-conflicting-facts) - Find contradictions
+- [`matches_facts`](/predicates/fact-checking#matches-facts) - Bidirectional fact matching
+
+### Topics & Policy
+
+- [`has_topics`](/predicates/topics-policy#has-topics) - Check topical coverage
+- [`follows_policy`](/predicates/topics-policy#follows-policy) - Verify policy compliance
+
+### Style & Structure
+
+- [`matches_writing_style`](/predicates/style-structure#matches-writing-style) - Check writing style consistency
+- [`matches_writing_layout`](/predicates/style-structure#matches-writing-layout) - Verify document structure
+
+## Setup
+
+AI Predicates call the Merit cloud service for evaluation. You need to configure:
+
+1. **Merit API credentials** (for predicate evaluation)
+2. **LLM provider credentials** (used by the Merit service)
+
+### Merit API Configuration
+
+Set these environment variables:
+
+```bash .env
+# Required
+MERIT_API_BASE_URL=https://api.appmerit.com
+MERIT_API_KEY=your_merit_api_key_here
+
+# Optional - for debugging
+MERIT_DEBUGGING_MODE=false
+```
+
+### Get API Access
+
+[Contact us](mailto:daniel@appmerit.com) to get your Merit API key.
+
+Merit automatically loads `.env` files from your project directory.
+
+<Note>
+**How it works:** You call Merit's API with your API key. The Merit service handles all LLM provider interactions internally - you don't need your own OpenAI/Anthropic keys for predicates.
+</Note>
+
+### For Error Analyzer (Different Setup)
+
+If you're using Merit Analyzer (not predicates), see the [Analyzer documentation](/analyzer/running-analyzer) - it uses your own LLM credentials (bring your own key).
+
+## How It Works
+
+When you call an AI predicate:
+
+1. **Request** - Merit sends the actual and reference text to the Merit API
+2. **Evaluation** - An LLM evaluates based on the predicate type
+3. **Response** - Returns a boolean result with confidence score
+4. **Assertion** - Use in standard Python `assert` statements
+
+```python
+async def merit_example():
+    # Makes API call to evaluate
+    result = await has_facts(actual, reference)
+    
+    # Returns boolean for assertion
+    assert result  # True or False
+```
+
+## Predicate Results
+
+Predicates return boolean values for assertions, but you can access detailed results:
+
+```python
+from merit.predicates import has_facts
+
+async def merit_detailed_results():
+    response = chatbot("Tell me about Paris")
+    
+    # Get detailed result
+    result = await has_facts(response, "Paris is capital of France")
+    
+    # Access metadata (when using predicates directly)
+    print(f"Passed: {result.passed}")
+    print(f"Confidence: {result.confidence}")
+    print(f"Reasoning: {result.reasoning}")
+```
+
+<Note>
+When used in assertions, predicates return simple boolean values. Access `PredicateResult` objects directly for detailed information.
+</Note>
+
+## Async Context
+
+All AI predicates are async and must be called with `await`:
+
+```python
+# ✅ Correct - async test with await
+async def merit_correct():
+    assert await has_facts(text, reference)
+
+# ❌ Wrong - missing async/await
+def merit_wrong():
+    assert has_facts(text, reference)  # Error!
+```
+
+## Cost Considerations
+
+AI predicates make LLM API calls:
+
+- **~1-2 cents per assertion** (depending on provider and model)
+- Use strategically for complex checks
+- Regular assertions are free and instant
+
+Example strategy:
+
+```python
+async def merit_chatbot_comprehensive():
+    response = chatbot("Tell me about Paris")
+    
+    # Free, fast assertions first
+    assert len(response) > 10
+    assert "Paris" in response
+    assert response.isupper() == False
+    
+    # AI assertions for complex checks
+    assert await has_facts(response, "Paris is the capital of France")
+```
+
+## Combining Predicates
+
+Use multiple predicates together:
+
+```python
+async def merit_comprehensive_check():
+    response = generate_article("Paris travel guide")
+    
+    # Must contain key facts
+    assert await has_facts(response, "Paris is the capital of France")
+    
+    # Must not hallucinate
+    assert not await has_unsupported_facts(response, source_text)
+    
+    # Must cover required topics
+    assert await has_topics(response, "accommodation, transportation, attractions")
+    
+    # Must follow style guide
+    assert await matches_writing_style(response, style_guide_example)
+```
+
+## Error Handling
+
+TODO: Document error handling for API failures
+
+Expected behavior:
+```python
+async def merit_with_error_handling():
+    try:
+        assert await has_facts(response, reference)
+    except APIError as e:
+        # Handle API failures
+        pass
+```
+
+## Performance Tips
+
+1. **Cache results** - Don't re-evaluate the same text
+2. **Batch tests** - Run multiple tests together
+3. **Use strict mode wisely** - Lenient mode is faster
+4. **Regular assertions first** - Filter obvious failures cheaply
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Fact Checking"
+    icon="check-double"
+    href="/predicates/fact-checking"
+  >
+    Verify facts and detect hallucinations
+  </Card>
+  <Card
+    title="Topics & Policy"
+    icon="list-check"
+    href="/predicates/topics-policy"
+  >
+    Check topical coverage and policy compliance
+  </Card>
+  <Card
+    title="Style & Structure"
+    icon="pen-fancy"
+    href="/predicates/style-structure"
+  >
+    Match writing style and document structure
+  </Card>
+</CardGroup>
+

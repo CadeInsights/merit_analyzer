@@ -1,0 +1,279 @@
+---
+title: "Running Merit Analyzer"
+description: "Step-by-step guide to analyzing test failures"
+---
+
+## Prerequisites
+
+1. **Test results in CSV format** with required columns
+2. **Anthropic API key** (direct or via AWS Bedrock)
+3. **Merit Analyzer installed** (`pip install git+https://github.com/appMerit/merit.git`)
+
+## Step 1: Prepare Test Results
+
+Create or export a CSV file with your test results:
+
+```csv results.csv
+case_input,reference_value,output_for_assertions,passed,error_message
+"What is the capital of France?","Paris","Paris is the capital",true,
+"Tell me about Berlin","Berlin is in Germany","Berlin is in France",false,"Incorrect fact: Berlin location"
+"Sum 2+2","4","5",false,"Expected 4, got 5"
+```
+
+Required columns:
+- `case_input` - Test input
+- `reference_value` - Expected output
+- `output_for_assertions` - Actual output
+- `passed` - Boolean (true/false)
+- `error_message` - Error description (can be empty for passing tests)
+
+## Step 2: Configure API Keys
+
+Set up your Anthropic credentials:
+
+<CodeGroup>
+
+```bash Anthropic (Direct)
+export ANTHROPIC_API_KEY=sk-ant-...
+export MODEL_VENDOR=anthropic
+export INFERENCE_VENDOR=anthropic
+```
+
+```bash AWS Bedrock
+export MODEL_VENDOR=anthropic
+export INFERENCE_VENDOR=aws
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+```
+
+</CodeGroup>
+
+Or create a `.env` file:
+
+```bash .env
+ANTHROPIC_API_KEY=sk-ant-...
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=anthropic
+```
+
+## Step 3: Run the Analyzer
+
+Basic usage:
+
+```bash
+merit-analyzer analyze results.csv
+```
+
+This will:
+1. Read your CSV file
+2. Cluster similar errors
+3. Analyze problematic code
+4. Generate `merit_report.html`
+
+### Custom Output Location
+
+Specify a custom report path:
+
+```bash
+merit-analyzer analyze results.csv --report my_analysis.html
+```
+
+### Override Provider Settings
+
+Override environment variables via CLI:
+
+```bash
+merit-analyzer analyze results.csv \
+  --model-vendor anthropic \
+  --inference-vendor anthropic \
+  --report analysis_anthropic.html
+```
+
+## Step 4: View the Report
+
+Open the generated HTML report:
+
+```bash
+# macOS
+open merit_report.html
+
+# Linux
+xdg-open merit_report.html
+
+# Windows
+start merit_report.html
+```
+
+The report opens in your browser with interactive visualizations.
+
+## Complete Example
+
+```bash
+# 1. Set up environment
+cat > .env << EOF
+ANTHROPIC_API_KEY=sk-ant-...
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=anthropic
+EOF
+
+# 2. Prepare test results (or export from Merit)
+# results.csv already exists
+
+# 3. Run analyzer
+merit-analyzer analyze results.csv --report my_report.html
+
+# 4. View results
+open my_report.html
+```
+
+## Integration with Merit Tests (TODO)
+
+TODO: Document direct export from Merit test runner
+
+Expected workflow:
+```bash
+# Run tests and auto-export failures
+merit --export-failures failures.csv
+
+# Or export all results
+merit --export-results all_results.csv
+
+# Then analyze
+merit-analyzer analyze failures.csv
+```
+
+## Large Datasets
+
+For large CSV files with many failures:
+
+```bash
+# The analyzer handles large files efficiently
+merit-analyzer analyze large_results.csv
+```
+
+Tips:
+- Analyzer processes failures only (ignores passing tests)
+- Clustering is optimized for performance
+- LLM calls are batched when possible
+
+## CI/CD Integration
+
+Run analyzer in CI/CD pipelines:
+
+```yaml .github/workflows/analyze.yml
+name: Analyze Test Failures
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types:
+      - completed
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install Merit Analyzer
+        run: pip install merit-analyzer
+      
+      - name: Download test results
+        uses: actions/download-artifact@v3
+        with:
+          name: test-results
+      
+      - name: Run Analyzer
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODEL_VENDOR: anthropic
+          INFERENCE_VENDOR: anthropic
+        run: |
+          merit-analyzer analyze results.csv --report analysis.html
+      
+      - name: Upload Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: merit-analysis
+          path: analysis.html
+```
+
+## Troubleshooting
+
+### Missing Columns Error
+
+```
+Error: CSV missing required columns
+```
+
+**Solution**: Ensure CSV has all required columns:
+- `case_input`
+- `reference_value`
+- `output_for_assertions`
+- `passed`
+- `error_message`
+
+### API Key Not Found
+
+```
+Error: API key not configured
+```
+
+**Solution**: Set environment variables:
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export MODEL_VENDOR=anthropic
+export INFERENCE_VENDOR=anthropic
+```
+
+### Empty Error Messages
+
+The analyzer can generate error messages if they're missing:
+
+```csv
+case_input,reference_value,output_for_assertions,passed,error_message
+"Test input","Expected","Actual",false,
+```
+
+If `error_message` is empty for a failed test, the analyzer will use an LLM to generate a descriptive error message.
+
+## Cost Considerations
+
+Merit Analyzer makes Anthropic API calls:
+
+- **Clustering**: ~$0.10-0.50 per 100 failures
+- **Code analysis**: ~$0.05-0.20 per cluster
+- **Total**: Typically < $5 for most test suites
+
+Costs depend on:
+- Number of failures
+- Model used
+- Provider (Direct Anthropic vs AWS Bedrock pricing)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Understanding Reports"
+    icon="file-chart-line"
+    href="/analyzer/reports"
+  >
+    Learn how to interpret analysis results
+  </Card>
+  <Card
+    title="Back to Testing"
+    icon="flask"
+    href="/core/writing-tests"
+  >
+    Return to writing Merit tests
+  </Card>
+</CardGroup>
+

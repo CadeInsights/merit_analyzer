@@ -1,0 +1,240 @@
+---
+title: "Environment Variables"
+description: "Complete guide to configuring Merit"
+---
+
+## Overview
+
+Merit uses environment variables for different features. Here's what you need for each:
+
+| Feature | Required Variables | Get Access |
+|---------|-------------------|------------|
+| **Basic Testing** | None | Built-in |
+| **AI Predicates** | `MERIT_API_KEY` | [Contact us](mailto:daniel@appmerit.com) |
+| **Error Analyzer** | Your own LLM keys | Direct from provider |
+
+## AI Predicates (LLM-as-a-Judge)
+
+AI predicates (`has_facts`, `has_topics`, etc.) call the Merit cloud service.
+
+### Required
+
+```bash .env
+MERIT_API_BASE_URL=https://api.appmerit.com
+MERIT_API_KEY=your_merit_api_key_here
+```
+
+### Optional
+
+```bash .env
+# Enable debugging mode (includes reasoning in responses)
+MERIT_DEBUGGING_MODE=true
+
+# Advanced: Customize connection pooling
+MERIT_API_KEEPALIVE_EXPIRY=30
+```
+
+### Get API Access
+
+[Contact us](mailto:daniel@appmerit.com) to get your Merit API key.
+
+## Error Analyzer (Bring Your Own Key)
+
+Merit Analyzer uses your LLM provider credentials directly. Currently supports Anthropic models via direct API or AWS Bedrock.
+
+### Anthropic (Direct)
+
+```bash .env
+ANTHROPIC_API_KEY=sk-ant-...
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=anthropic
+```
+
+Get your key: [console.anthropic.com](https://console.anthropic.com/)
+
+### AWS Bedrock (Anthropic)
+
+```bash .env
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=aws
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+```
+
+Configure AWS credentials: [AWS Documentation](https://docs.aws.amazon.com/bedrock/)
+
+## Loading Environment Variables
+
+Merit automatically loads `.env` files from:
+1. Current working directory
+2. Project root (if different)
+
+### .env File
+
+Create a `.env` file in your project root:
+
+```bash .env
+# AI Predicates
+MERIT_API_BASE_URL=https://api.appmerit.com
+MERIT_API_KEY=your_merit_api_key_here
+
+# Error Analyzer (choose one provider)
+ANTHROPIC_API_KEY=sk-ant-...
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=anthropic
+```
+
+### Shell Export
+
+Or export directly in your shell:
+
+```bash
+export MERIT_API_KEY=your_merit_api_key_here
+export MERIT_API_BASE_URL=https://api.appmerit.com
+```
+
+### CI/CD
+
+Store as secrets in your CI/CD platform:
+
+**GitHub Actions:**
+```yaml
+env:
+  MERIT_API_KEY: ${{ secrets.MERIT_API_KEY }}
+  MERIT_API_BASE_URL: https://api.appmerit.com
+```
+
+**GitLab CI:**
+```yaml
+variables:
+  MERIT_API_BASE_URL: "https://api.appmerit.com"
+  MERIT_API_KEY: $MERIT_API_KEY  # From CI/CD variables
+```
+
+## Quick Reference
+
+### I want to use AI predicates in my tests
+
+```bash .env
+MERIT_API_BASE_URL=https://api.appmerit.com
+MERIT_API_KEY=your_merit_api_key_here
+```
+
+[Get API key →](mailto:daniel@appmerit.com)
+
+### I want to run the error analyzer
+
+<CodeGroup>
+
+```bash Anthropic (Direct)
+ANTHROPIC_API_KEY=sk-ant-...
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=anthropic
+```
+
+```bash AWS Bedrock
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=aws
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+```
+
+</CodeGroup>
+
+### I want both features
+
+```bash .env
+# For AI predicates
+MERIT_API_BASE_URL=https://api.appmerit.com
+MERIT_API_KEY=your_merit_api_key_here
+
+# For error analyzer
+ANTHROPIC_API_KEY=sk-ant-...
+MODEL_VENDOR=anthropic
+INFERENCE_VENDOR=anthropic
+```
+
+## Troubleshooting
+
+### "MERIT_API_KEY not configured"
+
+You need Merit API credentials to use AI predicates:
+1. [Contact us](mailto:daniel@appmerit.com) to get an API key
+2. Add to `.env` file:
+   ```
+   MERIT_API_KEY=your_key_here
+   MERIT_API_BASE_URL=https://api.appmerit.com
+   ```
+
+### "API key not configured" (Analyzer)
+
+The analyzer needs LLM provider credentials:
+1. Get API key from your provider (OpenAI, Anthropic, etc.)
+2. Add to `.env` file:
+   ```
+   OPENAI_API_KEY=sk-...
+   MODEL_VENDOR=openai
+   INFERENCE_VENDOR=openai
+   ```
+
+### Variables not loading
+
+- ✅ Check `.env` file is in project root
+- ✅ Check file is named exactly `.env` (not `.env.txt`)
+- ✅ Restart terminal/IDE after creating `.env`
+- ✅ Check for typos in variable names
+
+## Security Best Practices
+
+<Warning>
+Never commit API keys to version control!
+</Warning>
+
+### Add to .gitignore
+
+```bash .gitignore
+.env
+.env.local
+.env.*.local
+```
+
+### Use Different Keys Per Environment
+
+```bash
+# Development
+.env
+
+# Production
+.env.production
+
+# CI/CD
+# Store in CI/CD secrets, not in files
+```
+
+### Rotate Keys Regularly
+
+- Change keys periodically
+- Revoke compromised keys immediately
+- Use separate keys for dev/staging/production
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get started with Merit in 2 minutes
+  </Card>
+  <Card
+    title="AI Predicates"
+    icon="brain"
+    href="/predicates/overview"
+  >
+    Learn about LLM-as-a-Judge assertions
+  </Card>
+</CardGroup>
+

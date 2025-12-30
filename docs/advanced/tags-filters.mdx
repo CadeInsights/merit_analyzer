@@ -1,0 +1,328 @@
+---
+title: "Tags & Filters"
+description: "Organize and filter tests with tags"
+---
+
+## What are Tags?
+
+Tags let you organize and categorize tests. Use them to:
+
+- Mark test categories (smoke, integration, slow)
+- Filter tests during execution
+- Skip or mark expected failures
+- Organize test suites
+
+## Basic Tags
+
+Add tags to tests with `@merit.tag`:
+
+```python
+import merit
+
+@merit.tag("smoke")
+def merit_basic_functionality():
+    """Quick smoke test."""
+    assert chatbot("Hello") is not None
+
+@merit.tag("smoke", "fast")
+def merit_another_quick_test():
+    """Multiple tags on one test."""
+    assert 2 + 2 == 4
+```
+
+## Tags on Classes
+
+Tag entire test classes:
+
+```python
+@merit.tag("integration", "api")
+class MeritAPITests:
+    """All methods inherit the tags."""
+    
+    def merit_get_users(self):
+        assert api.get("/users").status == 200
+    
+    def merit_create_user(self):
+        assert api.post("/users", data).status == 201
+```
+
+## Common Tag Patterns
+
+### Test Categories
+
+```python
+@merit.tag("unit")
+def merit_pure_logic():
+    """Fast, isolated unit test."""
+    assert calculate(2, 2) == 4
+
+@merit.tag("integration")
+def merit_with_database():
+    """Tests with external dependencies."""
+    assert db.query("SELECT 1") is not None
+
+@merit.tag("e2e")
+async def merit_full_workflow():
+    """End-to-end test."""
+    result = await complete_user_journey()
+    assert result.success
+```
+
+### Speed Categories
+
+```python
+@merit.tag("fast")
+def merit_quick_check():
+    """Completes in < 1 second."""
+    assert True
+
+@merit.tag("slow")
+async def merit_expensive_operation():
+    """Takes several seconds."""
+    result = await train_ml_model()
+    assert result.accuracy > 0.8
+```
+
+### Feature Areas
+
+```python
+@merit.tag("authentication")
+def merit_login():
+    assert login("user", "pass").success
+
+@merit.tag("payment")
+def merit_process_payment():
+    assert process_payment(amount=100).success
+
+@merit.tag("chatbot", "nlp")
+async def merit_chatbot_understanding():
+    response = await chatbot("Hello")
+    assert response is not None
+```
+
+## Skipping Tests
+
+Mark tests to skip:
+
+```python
+@merit.tag.skip(reason="Feature not implemented yet")
+def merit_future_feature():
+    """This test won't run."""
+    assert new_feature() == "expected"
+
+@merit.tag.skip(reason="Waiting for API access")
+async def merit_external_api():
+    """Skipped until API is available."""
+    result = await external_api.call()
+    assert result.status == 200
+```
+
+## Expected Failures
+
+Mark tests that are expected to fail:
+
+```python
+@merit.tag.xfail(reason="Known bug #123")
+def merit_known_issue():
+    """Test runs, failure is expected."""
+    assert buggy_function() == "correct"  # Will fail, marked as xfail
+
+@merit.tag.xfail(reason="Works on some systems only")
+def merit_flaky_behavior():
+    """Expected to fail on some environments."""
+    assert system_dependent_function() == "result"
+
+@merit.tag.xfail(reason="Known issue #456", strict=True)
+def merit_strict_xfail():
+    """If this passes unexpectedly, it counts as a failure."""
+    assert buggy_function() == "broken"
+```
+
+**Strict Mode:**
+- `strict=False` (default): Passing unexpectedly shows as XPASS (not a failure)
+- `strict=True`: Passing unexpectedly is treated as a test failure
+
+## Combining Tags and Parametrization
+
+```python
+@merit.tag("integration", "database")
+@merit.parametrize(
+    "query,expected_rows",
+    [
+        ("SELECT * FROM users", 10),
+        ("SELECT * FROM posts", 50),
+    ],
+)
+def merit_database_queries(query: str, expected_rows: int):
+    """Tagged parametrized test."""
+    result = db.execute(query)
+    assert len(result) == expected_rows
+```
+
+## Filtering Tests
+
+Run tests by tag via CLI:
+
+```bash
+# Run only smoke tests
+merit test -t smoke
+
+# Run tests with multiple tags (all must match)
+merit test -t smoke -t fast
+
+# Exclude tests with a tag
+merit test --skip-tag slow
+
+# Combine include and exclude
+merit test -t integration --skip-tag flaky --skip-tag experimental
+
+# Use configuration file for defaults
+# merit.toml:
+# include-tags = ["smoke"]
+# exclude-tags = ["slow", "flaky"]
+```
+
+**Note:** Multiple `-t` flags require ALL tags to match (AND logic). To match ANY tag (OR logic), use keyword filtering:
+
+```bash
+# Match tests with smoke OR fast tag
+merit test -k "smoke or fast"
+```
+
+## Conditional Skipping (TODO)
+
+TODO: Document conditional skip decorators
+
+Expected usage:
+```python
+import sys
+
+@merit.tag.skipif(
+    sys.platform == "win32",
+    reason="Unix-specific test"
+)
+def merit_unix_only():
+    assert unix_specific_function() == "result"
+
+@merit.tag.skipif(
+    not has_api_key(),
+    reason="Requires API key"
+)
+async def merit_requires_api():
+    result = await api_call()
+    assert result.success
+```
+
+## Real-World Example
+
+```python
+import merit
+
+# Smoke tests - fast, critical path
+@merit.tag("smoke", "fast")
+def merit_app_starts():
+    """Basic smoke test."""
+    assert app.initialize().success
+
+@merit.tag("smoke", "fast")
+def merit_critical_endpoints():
+    """Check critical APIs are up."""
+    assert api.health_check().status == "ok"
+
+# Integration tests - slower, more comprehensive
+@merit.tag("integration", "database")
+def merit_user_crud():
+    """Full CRUD test."""
+    user = db.create_user(name="Test")
+    assert db.get_user(user.id).name == "Test"
+
+@merit.tag("integration", "ai")
+async def merit_chatbot_flow():
+    """End-to-end chatbot test."""
+    response = await chatbot("Tell me about Paris")
+    assert await has_facts(response, "Paris is capital of France")
+
+# Slow tests - expensive operations
+@merit.tag("slow", "ml")
+@merit.tag.skip(reason="Skip in CI, run nightly")
+async def merit_model_training():
+    """Train and evaluate model."""
+    model = await train_model(dataset)
+    assert model.accuracy > 0.9
+
+# Known issues
+@merit.tag("bug", "flaky")
+@merit.tag.xfail(reason="Investigating issue #456")
+def merit_intermittent_failure():
+    """Sometimes fails, tracking in ticket."""
+    result = unreliable_function()
+    assert result.success
+```
+
+## Test Organization Strategy
+
+### Recommended Tag Structure
+
+```python
+# Priority levels
+"critical"  # Must pass, blocks release
+"high"      # Important, should pass
+"low"       # Nice to have
+
+# Test types
+"unit"         # Fast, isolated
+"integration"  # With dependencies
+"e2e"         # Full workflows
+
+# Speed
+"fast"   # < 1 second
+"medium" # 1-10 seconds
+"slow"   # > 10 seconds
+
+# Features
+"auth", "payment", "chatbot", "search", etc.
+
+# Stability
+"stable"   # Reliable
+"flaky"    # Sometimes fails
+"wip"      # Work in progress
+```
+
+### Example Suite
+
+```python
+# Critical smoke tests - run first
+@merit.tag("critical", "smoke", "fast")
+def merit_app_boots():
+    pass
+
+# Feature tests
+@merit.tag("auth", "integration")
+def merit_authentication():
+    pass
+
+# Slow tests - run last or in separate job
+@merit.tag("slow", "ml", "low")
+async def merit_model_evaluation():
+    pass
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Repeat Tests"
+    icon="rotate"
+    href="/advanced/repeat-tests"
+  >
+    Test reliability and flakiness
+  </Card>
+  <Card
+    title="Tracing"
+    icon="chart-network"
+    href="/advanced/tracing"
+  >
+    Track test execution with OpenTelemetry
+  </Card>
+</CardGroup>
+

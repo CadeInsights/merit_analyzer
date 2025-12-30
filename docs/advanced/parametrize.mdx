@@ -1,0 +1,287 @@
+---
+title: "Parametrization"
+description: "Run the same test with multiple inputs"
+---
+
+## What is Parametrization?
+
+Parametrization lets you run the same test logic with different inputs. Instead of writing repetitive tests, write one test that runs multiple times with different parameter sets.
+
+## Basic Parametrization
+
+```python
+import merit
+
+def chatbot(name: str) -> str:
+    return f"Hello, {name}!"
+
+@merit.parametrize(
+    "name,expected",
+    [
+        ("World", "Hello, World!"),
+        ("Alice", "Hello, Alice!"),
+        ("Bob", "Hello, Bob!"),
+    ],
+)
+def merit_greeting(name: str, expected: str):
+    """Runs 3 times, once per parameter set."""
+    result = chatbot(name)
+    assert result == expected
+```
+
+This creates 3 separate tests:
+- `merit_greeting[World-Hello, World!]`
+- `merit_greeting[Alice-Hello, Alice!]`
+- `merit_greeting[Bob-Hello, Bob!]`
+
+## Custom Test IDs
+
+Make test names more readable with custom IDs:
+
+```python
+@merit.parametrize(
+    "city,country",
+    [
+        ("Paris", "France"),
+        ("Berlin", "Germany"),
+        ("London", "UK"),
+    ],
+    ids=["french-capital", "german-capital", "uk-capital"],
+)
+def merit_capitals(city: str, country: str):
+    """Test IDs make output clearer."""
+    result = get_capital(country)
+    assert result == city
+```
+
+Output:
+```
+merit_capitals[french-capital] ✓
+merit_capitals[german-capital] ✓
+merit_capitals[uk-capital] ✓
+```
+
+## Multiple Parameters
+
+Parametrize with many parameters:
+
+```python
+@merit.parametrize(
+    "input_text,expected_length,expected_tone,should_contain",
+    [
+        ("Write a haiku", 17, "poetic", ["syllables", "nature"]),
+        ("Write a joke", 50, "humorous", ["punchline"]),
+        ("Write a greeting", 20, "friendly", ["hello", "welcome"]),
+    ],
+    ids=["haiku", "joke", "greeting"],
+)
+def merit_text_generation(
+    input_text: str,
+    expected_length: int,
+    expected_tone: str,
+    should_contain: list[str]
+):
+    result = generate_text(input_text)
+    
+    assert len(result) <= expected_length
+    assert any(word in result.lower() for word in should_contain)
+```
+
+## Async Tests
+
+Parametrization works with async tests:
+
+```python
+@merit.parametrize(
+    "query,must_include",
+    [
+        ("Paris facts", "capital"),
+        ("Berlin facts", "Germany"),
+        ("London facts", "England"),
+    ],
+)
+async def merit_async_facts(query: str, must_include: str):
+    """Async parametrized test."""
+    result = await async_chatbot(query)
+    assert must_include.lower() in result.lower()
+```
+
+## Combining with Resources
+
+Parametrized tests can use resources:
+
+```python
+@merit.resource
+def api_client():
+    return create_client()
+
+@merit.parametrize(
+    "endpoint,expected_status",
+    [
+        ("/users", 200),
+        ("/posts", 200),
+        ("/admin", 401),
+    ],
+)
+def merit_api_endpoints(endpoint: str, expected_status: int, api_client):
+    """Uses both parameters and resources."""
+    response = api_client.get(endpoint)
+    assert response.status_code == expected_status
+```
+
+## Parametrize vs iter_cases
+
+When to use `@merit.parametrize`:
+- ✅ Simple, flat parameter lists
+- ✅ Few parameters (2-4)
+- ✅ Quick test variations
+
+When to use `@merit.iter_cases`:
+- ✅ Complex, structured test data
+- ✅ Many parameters or nested data
+- ✅ Need metadata, tags, or type safety
+- ✅ Reusable test cases across multiple tests
+
+### Example Comparison
+
+**Using parametrize:**
+```python
+@merit.parametrize(
+    "prompt,expected",
+    [
+        ("Hello", "Hi there!"),
+        ("Goodbye", "See you!"),
+    ],
+)
+def merit_simple(prompt: str, expected: str):
+    assert chatbot(prompt) == expected
+```
+
+**Using iter_cases:**
+```python
+from merit import Case
+
+cases = [
+    Case(
+        tags={"greeting"},
+        metadata={"priority": "high"},
+        sut_input_values={"prompt": "Hello"},
+        references={"expected": "Hi there!"}
+    ),
+    Case(
+        tags={"farewell"},
+        metadata={"priority": "low"},
+        sut_input_values={"prompt": "Goodbye"},
+        references={"expected": "See you!"}
+    ),
+]
+
+@merit.iter_cases(cases)
+def merit_structured(case: Case):
+    result = chatbot(**case.sut_input_values)
+    assert result == case.references["expected"]
+```
+
+## Real-World Examples
+
+### Testing Multiple Models
+
+```python
+@merit.parametrize(
+    "model,max_tokens",
+    [
+        ("gpt-4", 8000),
+        ("gpt-3.5-turbo", 4000),
+        ("claude-3", 100000),
+    ],
+    ids=["gpt4", "gpt35", "claude"],
+)
+async def merit_model_comparison(model: str, max_tokens: int):
+    """Test same prompt across different models."""
+    response = await llm_call(model=model, prompt="Explain quantum physics")
+    
+    assert len(response) > 100
+    assert len(response.split()) < max_tokens
+```
+
+### Testing Edge Cases
+
+```python
+@merit.parametrize(
+    "input_text,should_fail",
+    [
+        ("", True),  # Empty
+        ("a" * 10000, True),  # Too long
+        ("Normal text", False),  # Valid
+        ("Text with émojis 🎉", False),  # Unicode
+        (None, True),  # None
+    ],
+    ids=["empty", "too-long", "normal", "unicode", "none"],
+)
+def merit_input_validation(input_text: str, should_fail: bool):
+    """Test edge cases."""
+    if should_fail:
+        with pytest.raises(ValueError):
+            process_text(input_text)
+    else:
+        result = process_text(input_text)
+        assert result is not None
+```
+
+### Testing Translations
+
+```python
+@merit.parametrize(
+    "lang,greeting",
+    [
+        ("es", "Hola"),
+        ("fr", "Bonjour"),
+        ("de", "Guten Tag"),
+        ("it", "Ciao"),
+        ("pt", "Olá"),
+    ],
+)
+async def merit_translations(lang: str, greeting: str):
+    """Test translations across languages."""
+    result = await translate("Hello", target_lang=lang)
+    assert greeting.lower() in result.lower()
+```
+
+## Skipping Individual Parameters
+
+TODO: Document parameter-level skipping
+
+Expected usage:
+```python
+@merit.parametrize(
+    "value",
+    [
+        1,
+        2,
+        merit.param(3, marks=merit.mark.skip(reason="Not implemented")),
+        4,
+    ],
+)
+def merit_with_skip(value: int):
+    assert process(value) > 0
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Tags & Filters"
+    icon="tags"
+    href="/advanced/tags-filters"
+  >
+    Organize and filter tests with tags
+  </Card>
+  <Card
+    title="Repeat Tests"
+    icon="rotate"
+    href="/advanced/repeat-tests"
+  >
+    Test flakiness and reliability
+  </Card>
+</CardGroup>
+

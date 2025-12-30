@@ -1,0 +1,296 @@
+---
+title: "Understanding Analysis Reports"
+description: "How to interpret Merit Analyzer reports"
+---
+
+## Report Structure
+
+Merit Analyzer generates an interactive HTML report with three main sections:
+
+1. **Summary** - High-level overview
+2. **Error Clusters** - Grouped failures
+3. **Test Details** - Individual test results
+
+## Summary Section
+
+The top of the report shows:
+
+```
+Merit Analysis Report
+─────────────────────────────────────
+Total Tests:     150
+Passed:          125
+Failed:          25
+Error Clusters:  5
+Analysis Date:   2024-12-26 14:30:15
+```
+
+This gives you a quick snapshot of test health.
+
+## Error Clusters
+
+Each cluster represents a group of similar failures:
+
+### Cluster Header
+
+```
+Cluster 1: API Timeout Errors (12 failures)
+Pattern: "Request to .* timed out after \d+ seconds"
+```
+
+- **Name**: Descriptive cluster name
+- **Count**: Number of tests in this cluster
+- **Pattern**: Common error pattern (regex)
+
+### Problematic Code
+
+For each cluster, the analyzer identifies likely root causes:
+
+```
+Problematic Code:
+─────────────────
+File: src/api_client.py
+Lines: 45-52
+
+Suggested Issue:
+HTTP timeout set too low (5 seconds) for slow endpoints.
+
+Recommendation:
+- Increase default timeout to 30 seconds
+- Add configurable timeout per endpoint
+- Implement retry logic with exponential backoff
+```
+
+The report provides:
+- **File and line numbers** - Where the issue likely originates
+- **Issue description** - What's probably wrong
+- **Recommendations** - How to fix it
+
+### Affected Tests
+
+List of tests in this cluster:
+
+```
+Affected Tests:
+- test_api_slow_endpoint (line 23 in test_api.py)
+- test_api_large_payload (line 45 in test_api.py)
+- test_api_concurrent_calls (line 67 in test_integration.py)
+```
+
+Click file:// links to jump directly to the code.
+
+## Example Clusters
+
+### Cluster: "Hallucination in Summaries"
+
+```
+Cluster 2: Hallucination in Summaries (8 failures)
+─────────────────────────────────────────────────
+
+Pattern: "Unsupported facts found in summary"
+
+Problematic Behavior:
+Generated summaries contain information not present in
+the source documents. The model is adding facts that
+aren't grounded in the provided context.
+
+Problematic Code:
+File: src/summarizer.py
+Lines: 23-35
+
+def generate_summary(text: str) -> str:
+    # Issue: No fact-checking step
+    prompt = f"Summarize: {text}"
+    return llm_call(prompt)
+
+Recommendation:
+1. Add fact-checking step after summarization
+2. Use has_unsupported_facts() predicate
+3. Implement RAG pattern with source attribution
+4. Lower temperature to reduce creativity
+
+Affected Tests:
+✗ test_article_summary (test_summarizer.py:12)
+  Input: "Paris is the capital of France"
+  Output: "Paris, France's capital, has 50 million people"
+  Issue: Population is hallucinated
+
+✗ test_news_summary (test_summarizer.py:28)
+  Input: "Tech company announces new product"
+  Output: "Company announces product and plans IPO next month"
+  Issue: IPO information is hallucinated
+```
+
+### Cluster: "JSON Parsing Failures"
+
+```
+Cluster 3: JSON Parsing Failures (15 failures)
+──────────────────────────────────────────────
+
+Pattern: "JSONDecodeError.*line \d+ column \d+"
+
+Problematic Behavior:
+LLM returns invalid JSON format. Missing quotes, trailing
+commas, or malformed structure.
+
+Problematic Code:
+File: src/json_generator.py
+Lines: 18-22
+
+prompt = "Return JSON with name and age"
+response = llm_call(prompt)
+data = json.loads(response)  # Fails here
+
+Recommendation:
+1. Add JSON validation prompt:
+   "Return ONLY valid JSON, no markdown, no explanations"
+2. Use JSON mode in API call (if supported)
+3. Add retry with format correction
+4. Consider structured output libraries
+
+Affected Tests:
+✗ test_user_json (test_json.py:15)
+  Output: "```json\n{name: 'John'}\n```"
+  Issue: Markdown wrapper and unquoted keys
+
+✗ test_profile_json (test_json.py:30)
+  Output: "{name: \"Jane\", age: 25,}"
+  Issue: Trailing comma
+```
+
+## Interactive Features
+
+### Clickable Links
+
+File paths are clickable file:// URLs:
+
+```
+File: src/api_client.py:45
+```
+
+Click to open in your editor (if configured).
+
+### Filtering (TODO)
+
+TODO: Document filtering controls once implemented
+
+Expected features:
+- Filter by cluster
+- Filter by test file
+- Search test names
+- Show/hide passed tests
+
+### Sorting (TODO)
+
+TODO: Document sorting options
+
+Expected options:
+- Sort by failure count
+- Sort by severity
+- Sort by file location
+- Sort by test name
+
+## Using the Report
+
+### 1. Start with High-Impact Clusters
+
+Focus on clusters with most failures:
+
+```
+Cluster 1: API Timeouts (12 failures)    ← Fix this first
+Cluster 2: Hallucinations (8 failures)
+Cluster 3: JSON Errors (3 failures)       ← Then this
+```
+
+### 2. Review Recommendations
+
+Each cluster has specific, actionable recommendations:
+
+```
+Recommendation:
+1. Increase timeout to 30 seconds
+2. Add retry logic
+3. Implement circuit breaker pattern
+```
+
+### 3. Click Through to Code
+
+Use file:// links to examine problematic code:
+
+```
+Problematic Code:
+File: src/api.py:45    ← Click to open
+```
+
+### 4. Verify Fixes
+
+After fixing:
+1. Re-run failed tests
+2. Generate new report
+3. Verify cluster is resolved
+
+## Report Best Practices
+
+### Share with Team
+
+The HTML report is self-contained:
+
+```bash
+# Share via email, Slack, or store in S3
+merit-analyzer analyze results.csv --report team_report.html
+```
+
+### Track Over Time
+
+Generate reports regularly:
+
+```bash
+# Add timestamp to filename
+DATE=$(date +%Y%m%d_%H%M%S)
+merit-analyzer analyze results.csv --report "report_${DATE}.html"
+```
+
+Compare reports to track improvement.
+
+### Include in CI/CD
+
+Upload reports as artifacts:
+
+```yaml
+- name: Upload Analysis
+  uses: actions/upload-artifact@v3
+  with:
+    name: merit-analysis
+    path: merit_report.html
+```
+
+## Example Workflow
+
+1. **Tests fail** - CI run fails with 25 errors
+2. **Export results** - Save results.csv
+3. **Run analyzer** - `merit-analyzer analyze results.csv`
+4. **Review report** - Open merit_report.html
+5. **Identify patterns** - See 5 error clusters
+6. **Fix root cause** - Address top cluster (12 failures)
+7. **Re-run tests** - Verify fixes
+8. **Repeat** - Handle remaining clusters
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Running Analyzer"
+    icon="play"
+    href="/analyzer/running-analyzer"
+  >
+    Learn how to run the analyzer
+  </Card>
+  <Card
+    title="Back to Testing"
+    icon="flask"
+    href="/core/writing-tests"
+  >
+    Return to writing Merit tests
+  </Card>
+</CardGroup>
+

@@ -1,0 +1,240 @@
+---
+title: "Merit"
+description: "Testing framework for AI systems"
+---
+
+## Stop Guessing. Start Testing Your AI.
+
+Merit is the **first testing framework built specifically for LLMs and AI agents**. Go beyond string matching with semantic assertions that understand what your AI actually says.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Write your first test in 2 minutes
+  </Card>
+  <Card
+    title="View on GitHub"
+    icon="github"
+    href="https://github.com/appMerit/merit"
+  >
+    Open source and production-ready
+  </Card>
+</CardGroup>
+
+## The Problem with Testing AI
+
+Traditional testing tools weren't built for AI systems:
+
+- ❌ **String matching fails** - "Paris is France's capital" ≠ "The capital of France is Paris"
+- ❌ **Can't detect hallucinations** - Your LLM adds made-up facts, tests still pass
+- ❌ **Manual verification** - Checking 100s of outputs by hand isn't scalable
+- ❌ **No root cause analysis** - 50 test failures, but what's actually broken?
+
+## Merit Solves This
+
+<CardGroup cols={2}>
+  <Card
+    title="Semantic Assertions"
+    icon="brain"
+    href="/predicates/overview"
+  >
+    **LLM-as-a-Judge checks facts, not strings.** Detects hallucinations, missing info, and contradictions automatically.
+  </Card>
+  <Card
+    title="Familiar Syntax"
+    icon="flask"
+    href="/core/writing-tests"
+  >
+    **Pytest-like interface.** If you know pytest, you know Merit. Resources, parametrization, async support.
+  </Card>
+  <Card
+    title="Intelligent Analysis"
+    icon="magnifying-glass-chart"
+    href="/analyzer/overview"
+  >
+    **Auto-cluster failures.** Find root causes fast. 50 failures → 3 actual issues to fix.
+  </Card>
+  <Card
+    title="Production-Ready"
+    icon="shield-check"
+    href="/configuration"
+  >
+    **Built for scale.** Concurrent testing, tracing, CI/CD integration. Test 1000s of cases in minutes.
+  </Card>
+</CardGroup>
+
+## See It In Action
+
+Test your chatbot with semantic assertions:
+
+```python
+import merit
+from merit.predicates import has_facts, has_unsupported_facts
+
+def chatbot(prompt: str) -> str:
+    """Your AI system"""
+    return "Paris is the capital of France and home to the Eiffel Tower."
+
+async def merit_chatbot_accuracy():
+    response = chatbot("What is the capital of France?")
+    
+    # ✓ Semantic fact checking (not string matching)
+    assert await has_facts(response, "Paris is the capital of France")
+    
+    # ✓ Hallucination detection
+    assert not await has_unsupported_facts(
+        response, 
+        "Paris is the capital of France. Famous landmarks include the Eiffel Tower."
+    )
+```
+
+Run it:
+
+```bash
+merit test
+```
+
+**That's it.** Merit handles the complexity of semantic evaluation for you.
+
+## What You Can Test
+
+Merit's LLM-as-a-Judge assertions understand **meaning**, not just text:
+
+### Catch Every Failure Mode
+
+<AccordionGroup>
+  <Accordion title="✓ Hallucinations" icon="sparkles">
+    `has_unsupported_facts` - Detects when your LLM invents information not in the source.
+    
+    **Example:** Source says "2 million residents" but LLM outputs "50 million" ❌
+  </Accordion>
+  
+  <Accordion title="✓ Missing Information" icon="circle-xmark">
+    `has_facts` - Catches incomplete responses that skip critical details.
+    
+    **Example:** Asked for capital, population, and language. Only mentions capital. ❌
+  </Accordion>
+  
+  <Accordion title="✓ Wrong Information" icon="triangle-exclamation">
+    `has_conflicting_facts` - Finds contradictions with your source material.
+    
+    **Example:** Source says "Paris" but LLM says "Berlin is the capital of France" ❌
+  </Accordion>
+  
+  <Accordion title="✓ Missing Topics" icon="list-check">
+    `has_topics` - Ensures all required subjects are covered.
+    
+    **Example:** Travel guide must cover hotels, transport, and attractions. ✓
+  </Accordion>
+  
+  <Accordion title="✓ Policy Violations" icon="shield">
+    `follows_policy` - Validates compliance with brand guidelines and requirements.
+    
+    **Example:** Must include disclaimer, use professional tone, avoid promises. ✓
+  </Accordion>
+  
+  <Accordion title="✓ Wrong Style" icon="pen-fancy">
+    `matches_writing_style` - Checks tone, voice, and writing patterns match your brand.
+    
+    **Example:** Casual brand voice vs formal corporate-speak. ✓
+  </Accordion>
+</AccordionGroup>
+
+[See all 8 predicates →](/predicates/overview)
+
+## Scale from 1 to 1,000,000 Tests
+
+Real-world AI testing means **lots of test cases**. Merit makes it manageable:
+
+```python
+# Test 1000 cases concurrently
+merit test --concurrency 10
+
+# Auto-analyze failures to find root causes  
+merit-analyzer analyze failures.csv
+```
+
+**Merit Analyzer** turns 100 failures into actionable insights:
+- Groups similar errors automatically
+- Identifies problematic code
+- Suggests fixes
+- Generates interactive HTML reports
+
+[Learn about error analysis →](/analyzer/overview)
+
+## Who Uses Merit?
+
+<CardGroup cols={3}>
+  <Card icon="comments">
+    **Chatbot Developers**
+    
+    Test response accuracy, detect hallucinations, ensure brand voice consistency
+  </Card>
+  <Card icon="file-contract">
+    **Document AI**
+    
+    Verify summaries, check extractions, validate transformations at scale
+  </Card>
+  <Card icon="robot">
+    **AI Agent Teams**
+    
+    Test complex workflows, validate tool usage, ensure reliable behavior
+  </Card>
+  <Card icon="language">
+    **Content Generation**
+    
+    Check facts, verify style, ensure quality across 1000s of outputs
+  </Card>
+  <Card icon="magnifying-glass">
+    **RAG Systems**
+    
+    Validate groundedness, catch hallucinations, test retrieval quality
+  </Card>
+  <Card icon="graduation-cap">
+    **AI Researchers**
+    
+    Evaluate models, compare outputs, reproduce results reliably
+  </Card>
+</CardGroup>
+
+## Ready to Start Testing?
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Install Merit and write your first test in 2 minutes
+  </Card>
+  <Card
+    title="Example Tests"
+    icon="code"
+    href="/core/writing-tests"
+  >
+    See real-world testing patterns and best practices
+  </Card>
+  <Card
+    title="AI Predicates"
+    icon="brain"
+    href="/predicates/overview"
+  >
+    Learn about all 8 LLM-as-a-Judge assertions
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/configuration"
+  >
+    Set up API keys and environment variables
+  </Card>
+</CardGroup>
+
+---
+
+<Note>
+**Need help getting started?** [Join our community](https://github.com/appMerit/merit) or [contact us](mailto:daniel@appmerit.com) for support.
+</Note>

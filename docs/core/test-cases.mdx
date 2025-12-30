@@ -1,0 +1,271 @@
+---
+title: "Test Cases"
+description: "Structure complex test scenarios with typed cases"
+---
+
+## What are Test Cases?
+
+`Case` is Merit's way of structuring complex test scenarios with:
+- Input parameters
+- Expected outputs/references
+- Metadata and tags
+- Type safety with Pydantic
+
+Use cases when you have many similar tests with different inputs and expected outputs.
+
+## Basic Case
+
+Define a simple test case:
+
+```python
+from merit import Case
+
+# Define test case
+case = Case(
+    sut_input_values={"prompt": "What is 2+2?"},
+    references={"expected_answer": "4"}
+)
+
+# Use in test
+def system_under_test(prompt: str) -> str:
+    # Your AI system
+    return "The answer is 4"
+
+def merit_math_question():
+    response = system_under_test(**case.sut_input_values)
+    assert case.references["expected_answer"] in response
+```
+
+## Typed References
+
+Use Pydantic models for type-safe references:
+
+```python
+from pydantic import BaseModel
+from merit import Case
+
+class TestReferences(BaseModel):
+    expected: str
+    max_length: int
+    required_keywords: list[str]
+
+# Create typed case
+case = Case[TestReferences](
+    sut_input_values={"question": "Tell me about Paris"},
+    references=TestReferences(
+        expected="Paris is the capital of France",
+        max_length=500,
+        required_keywords=["Paris", "France", "capital"]
+    )
+)
+
+def merit_with_typed_case():
+    # IDE autocomplete and type checking work!
+    assert case.references.max_length == 500
+    assert "Paris" in case.references.required_keywords
+```
+
+## Iterating Over Cases
+
+Use `@merit.iter_cases` to run the same test logic on multiple cases:
+
+```python
+import merit
+from merit import Case
+
+# Define multiple cases
+cases = [
+    Case(
+        sut_input_values={"city": "Paris"},
+        references={"country": "France"}
+    ),
+    Case(
+        sut_input_values={"city": "Berlin"},
+        references={"country": "Germany"}
+    ),
+    Case(
+        sut_input_values={"city": "London"},
+        references={"country": "United Kingdom"}
+    ),
+]
+
+def get_country(city: str) -> str:
+    # Your system under test
+    return {"Paris": "France", "Berlin": "Germany", "London": "United Kingdom"}[city]
+
+@merit.iter_cases(cases)
+def merit_city_to_country(case: Case):
+    """Runs 3 times, once per case."""
+    result = get_country(**case.sut_input_values)
+    assert result == case.references["country"]
+```
+
+## Case Tags
+
+Add tags for filtering and organization:
+
+```python
+cases = [
+    Case(
+        tags={"geography", "europe"},
+        sut_input_values={"city": "Paris"},
+        references={"country": "France"}
+    ),
+    Case(
+        tags={"geography", "asia"},
+        sut_input_values={"city": "Tokyo"},
+        references={"country": "Japan"}
+    ),
+    Case(
+        tags={"music", "rock"},
+        sut_input_values={"query": "best rock band"},
+        references={"answer": "Metallica"}
+    ),
+]
+
+# Filter cases by tag
+europe_cases = [c for c in cases if "europe" in c.tags]
+
+@merit.iter_cases(europe_cases)
+def merit_european_cities(case: Case):
+    """Only tests European cities."""
+    pass
+```
+
+## Case Metadata
+
+Add arbitrary metadata for test context:
+
+```python
+cases = [
+    Case(
+        metadata={"difficulty": "easy", "category": "greeting"},
+        sut_input_values={"prompt": "Say hello"},
+        references={"must_contain": "hello"}
+    ),
+    Case(
+        metadata={"difficulty": "hard", "category": "reasoning"},
+        sut_input_values={"prompt": "Solve this riddle"},
+        references={"must_contain": "answer"}
+    ),
+]
+
+@merit.iter_cases(cases)
+def merit_with_metadata(case: Case):
+    """Access metadata in test."""
+    if case.metadata["difficulty"] == "hard":
+        # Apply stricter checks
+        pass
+```
+
+## Validating Cases
+
+Validate that cases match your function signature:
+
+```python
+from merit import valididate_cases_for_sut
+
+def chatbot(prompt: str, temperature: float) -> str:
+    return "response"
+
+cases = [
+    Case(sut_input_values={"prompt": "Hello", "temperature": 0.7}),
+    Case(sut_input_values={"prompt": "Hi", "temp": 0.5}),  # Wrong param name!
+]
+
+# Validate before running - fails early if mismatch
+@merit.iter_cases(valididate_cases_for_sut(cases, chatbot))
+def merit_validated_cases(case: Case):
+    response = chatbot(**case.sut_input_values)
+    assert response
+```
+
+This catches errors like wrong parameter names before tests run.
+
+## Complete Example
+
+```python
+from pydantic import BaseModel
+from merit import Case
+import merit
+
+# Define references model
+class ChatbotReferences(BaseModel):
+    expected_response: str
+    max_tokens: int
+    must_include: list[str]
+
+# Define test cases
+test_cases = [
+    Case[ChatbotReferences](
+        tags={"greeting", "simple"},
+        metadata={"priority": "high"},
+        sut_input_values={"prompt": "Say hello"},
+        references=ChatbotReferences(
+            expected_response="Hello!",
+            max_tokens=50,
+            must_include=["hello", "Hi"]
+        )
+    ),
+    Case[ChatbotReferences](
+        tags={"question", "math"},
+        metadata={"priority": "medium"},
+        sut_input_values={"prompt": "What is 2+2?"},
+        references=ChatbotReferences(
+            expected_response="4",
+            max_tokens=100,
+            must_include=["4", "four"]
+        )
+    ),
+]
+
+def chatbot(prompt: str) -> str:
+    """System under test."""
+    if "hello" in prompt.lower():
+        return "Hello there!"
+    elif "2+2" in prompt:
+        return "The answer is 4"
+    return "I don't understand"
+
+@merit.iter_cases(test_cases)
+def merit_chatbot_responses(case: Case[ChatbotReferences]):
+    """Test chatbot with structured cases."""
+    response = chatbot(**case.sut_input_values)
+    
+    # Use typed references
+    assert len(response) <= case.references.max_tokens
+    assert any(keyword in response for keyword in case.references.must_include)
+```
+
+## When to Use Cases
+
+Use `Case` when you have:
+- ✅ Many similar tests with different inputs
+- ✅ Complex test data that needs structure
+- ✅ Tests that need metadata or tags
+- ✅ Tests where type safety is important
+
+Use simple tests when:
+- ❌ Testing a single scenario
+- ❌ Test logic is very different between scenarios
+- ❌ Simple assertions are sufficient
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Parametrize"
+    icon="table"
+    href="/advanced/parametrize"
+  >
+    Alternative way to test multiple inputs
+  </Card>
+  <Card
+    title="Running Tests"
+    icon="play"
+    href="/core/running-tests"
+  >
+    Test execution and filtering
+  </Card>
+</CardGroup>
+

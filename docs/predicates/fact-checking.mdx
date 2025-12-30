@@ -1,0 +1,320 @@
+---
+title: "Fact Checking Predicates"
+description: "Verify facts, detect hallucinations, and check for contradictions"
+---
+
+## Overview
+
+Fact-checking predicates form a complete quality framework for verifying AI outputs. The first three work together to catch all major LLM failure modes:
+
+**The Complete Quality Framework:**
+
+1. **`has_facts`** - *Recall check*: Does output include all required information?
+   - Service name: `facts_not_missing`
+   - Catches: Omissions, incomplete responses, forgotten details
+   - Question: "Did you forget any critical information?"
+
+2. **`has_unsupported_facts`** - *Precision check*: Are all statements grounded in the source?
+   - Service name: `facts_supported` (returns opposite - we check if unsupported facts exist)
+   - Catches: Hallucinations, unsupported claims, made-up information
+   - Question: "Did you add anything that's not in the source?"
+
+3. **`has_conflicting_facts`** - *Consistency check*: Does output contradict the source?
+   - Service name: `facts_not_contradict` (returns opposite - we check if contradictions exist)
+   - Catches: Contradictions, incorrect values, conflicting statements
+   - Question: "Did you say anything wrong or conflicting?"
+
+**Together, these three catch all major LLM failure modes:**
+- ✓ Incompleteness (`has_facts`)
+- ✓ Hallucinations (`has_unsupported_facts`)
+- ✓ Inaccuracies (`has_conflicting_facts`)
+
+**Additional predicate:**
+- **`matches_facts`** - Bidirectional fact matching (combines recall + precision checks)
+  - Service name: `facts_full_match`
+
+## has_facts
+
+**Recall Check** - Verify the output includes all required information from the reference.
+
+*Maps to service assertion: `facts_not_missing`*
+
+```python
+from merit.predicates import has_facts
+
+async def merit_contains_facts():
+    response = "Paris is the capital of France and home to the Eiffel Tower."
+    reference = "Paris is the capital of France. The Eiffel Tower is in Paris."
+    
+    # Check all facts from reference are present in response
+    assert await has_facts(response, reference)
+```
+
+### What It Catches
+
+- ❌ Omissions - Missing critical information
+- ❌ Incomplete responses - Partial answers
+- ❌ Forgotten details - Skipped requirements
+
+### When to Use
+
+- ✅ Verify AI included key information
+- ✅ Check completeness of responses
+- ✅ Ensure critical facts aren't omitted
+- ✅ Validate summarization didn't lose key points
+
+### Strict vs Lenient Mode
+
+```python
+# Lenient mode (default) - allows semantic inference
+await has_facts(
+    "Paris, France's capital, has 2 million people",
+    "Paris is the capital of France"
+)  # True - semantically equivalent
+
+# Strict mode - requires explicit statements
+await has_facts(
+    "Paris, France's capital, has 2 million people",
+    "Paris is the capital of France",
+    strict=True
+)  # Depends on explicitness
+```
+
+## has_unsupported_facts
+
+**Precision Check** - Detect hallucinations by finding statements in the output that aren't supported by the source.
+
+*Maps to service assertion: `facts_supported` (we return the inverse - True if unsupported facts exist)*
+
+```python
+from merit.predicates import has_unsupported_facts
+
+async def merit_no_hallucinations():
+    response = "Paris is the capital of France and has a population of 50 million."
+    reference = "Paris is the capital of France. Paris has about 2 million residents."
+    
+    # This should detect the hallucination (50 million is wrong)
+    has_hallucination = await has_unsupported_facts(response, reference)
+    assert has_hallucination  # True - 50 million is unsupported
+```
+
+### What It Catches
+
+- ❌ Hallucinations - Made-up facts not in source
+- ❌ Unsupported claims - Statements without evidence
+- ❌ Confabulation - Plausible but false information
+
+### When to Use
+
+- ✅ Detect made-up information
+- ✅ Find claims without evidence
+- ✅ Verify groundedness in RAG systems
+- ✅ Check for confabulation
+- ✅ Ensure output stays within source boundaries
+
+### Example: RAG System
+
+```python
+async def merit_rag_grounding():
+    # User question
+    query = "What are the benefits of exercise?"
+    
+    # Retrieved documents
+    context = """
+    Regular exercise improves cardiovascular health.
+    Physical activity can reduce stress and anxiety.
+    Exercise helps maintain healthy weight.
+    """
+    
+    # AI generated response
+    response = rag_system(query, context)
+    
+    # Check response doesn't hallucinate beyond context
+    assert not await has_unsupported_facts(response, context)
+```
+
+## has_conflicting_facts
+
+**Consistency Check** - Find contradictions where the output directly conflicts with the source.
+
+*Maps to service assertion: `facts_not_contradict` (we return the inverse - True if contradictions exist)*
+
+```python
+from merit.predicates import has_conflicting_facts
+
+async def merit_no_contradictions():
+    response = "Paris is the capital of Germany."
+    reference = "Paris is the capital of France."
+    
+    # Should detect the contradiction
+    has_contradiction = await has_conflicting_facts(response, reference)
+    assert has_contradiction  # True - contradicts reference
+```
+
+### What It Catches
+
+- ❌ Contradictions - Direct conflicts with source
+- ❌ Incorrect values - Wrong numbers, dates, names
+- ❌ Conflicting statements - Incompatible claims
+
+### When to Use
+
+- ✅ Verify consistency with source material
+- ✅ Check for factual errors
+- ✅ Ensure AI doesn't contradict instructions
+- ✅ Validate accuracy of transformations
+
+### Example: Multi-turn Consistency
+
+```python
+async def merit_conversation_consistency():
+    context = "User is allergic to peanuts. User likes chocolate."
+    
+    response = chatbot("Recommend a dessert", context)
+    
+    # Response shouldn't contradict known facts
+    assert not await has_conflicting_facts(response, context)
+    
+    # Should not suggest peanut products
+    assert "peanut" not in response.lower()
+```
+
+## matches_facts
+
+**Bidirectional Fact Matching** - Ensures both texts contain the same set of facts (combines recall + precision checks).
+
+*Maps to service assertion: `facts_full_match`*
+
+```python
+from merit.predicates import matches_facts
+
+async def merit_exact_facts():
+    response = "Paris is the capital of France. It's known for the Eiffel Tower."
+    reference = "Capital of France: Paris. Famous landmark: Eiffel Tower."
+    
+    # Check facts match in both directions (no omissions, no additions)
+    assert await matches_facts(response, reference)
+```
+
+This is equivalent to checking:
+- `has_facts(response, reference)` - All reference facts are in response (recall)
+- NOT `has_unsupported_facts(response, reference)` - No hallucinations (precision)
+
+### When to Use
+
+- ✅ Verify summarization accuracy
+- ✅ Check reformulation correctness
+- ✅ Ensure translation preserves meaning
+- ✅ Validate paraphrasing maintains all information
+
+### Example: Summarization
+
+```python
+async def merit_summary_accuracy():
+    original = """
+    Python is a high-level programming language. It was created by Guido van Rossum
+    and first released in 1991. Python emphasizes code readability and uses
+    significant indentation. It supports multiple programming paradigms including
+    procedural, object-oriented, and functional programming.
+    """
+    
+    summary = summarize(original)
+    
+    # Summary should contain same core facts, just condensed
+    assert await matches_facts(summary, original)
+    assert len(summary) < len(original)  # But shorter
+```
+
+## Combining Fact Checks
+
+Use multiple predicates together for comprehensive verification:
+
+```python
+async def merit_comprehensive_fact_check():
+    context = """
+    Paris is the capital of France. Population is about 2 million.
+    The Eiffel Tower is 330 meters tall.
+    """
+    
+    response = generate_article("Paris facts", context)
+    
+    # Must contain key facts
+    assert await has_facts(
+        response,
+        "Paris is the capital of France. The Eiffel Tower is in Paris."
+    )
+    
+    # Must not add unsupported claims
+    assert not await has_unsupported_facts(response, context)
+    
+    # Must not contradict source
+    assert not await has_conflicting_facts(response, context)
+```
+
+## Real-World Example: Content Generation
+
+```python
+from merit.predicates import has_facts, has_unsupported_facts, has_conflicting_facts
+
+async def merit_product_description():
+    product_info = """
+    Product: EcoBottle
+    Material: Recycled stainless steel
+    Capacity: 750ml
+    Price: $29.99
+    Features: Insulated, BPA-free, Dishwasher safe
+    """
+    
+    description = generate_product_description(product_info)
+    
+    # Check all key facts are included
+    assert await has_facts(
+        description,
+        "750ml capacity, stainless steel, $29.99, insulated, dishwasher safe"
+    )
+    
+    # Check no fake features added
+    assert not await has_unsupported_facts(description, product_info)
+    
+    # Check no contradictions (like wrong price)
+    assert not await has_conflicting_facts(description, product_info)
+    
+    # Basic assertions too
+    assert len(description) > 50
+    assert "$29.99" in description
+```
+
+## Strict Mode Details
+
+TODO: Document exact strict mode behavior once finalized
+
+Expected behavior:
+- **Strict mode**: Requires explicit, direct statements
+- **Lenient mode**: Allows semantic inference and derivation
+
+## Performance Notes
+
+- Each predicate makes one API call
+- Typical latency: 1-3 seconds
+- Cost: ~$0.01-0.02 per check
+- Consider caching for repeated checks
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Topics & Policy"
+    icon="list-check"
+    href="/predicates/topics-policy"
+  >
+    Check topical coverage and policy compliance
+  </Card>
+  <Card
+    title="Style & Structure"
+    icon="pen-fancy"
+    href="/predicates/style-structure"
+  >
+    Match writing style and document structure
+  </Card>
+</CardGroup>
+

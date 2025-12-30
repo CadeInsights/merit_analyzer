@@ -1,0 +1,375 @@
+---
+title: "Testing API Reference"
+description: "Core testing functions and decorators"
+---
+
+## Test Decorators
+
+### @merit.parametrize
+
+Run a test with multiple parameter sets.
+
+```python
+@merit.parametrize(
+    argnames: str,
+    argvalues: list[tuple],
+    ids: list[str] | None = None
+)
+```
+
+**Parameters:**
+- `argnames` - Comma-separated parameter names
+- `argvalues` - List of parameter tuples
+- `ids` (optional) - Custom test IDs
+
+**Example:**
+
+```python
+@merit.parametrize(
+    "input,expected",
+    [
+        ("hello", "HELLO"),
+        ("world", "WORLD"),
+    ],
+    ids=["lowercase", "word"],
+)
+def merit_uppercase(input: str, expected: str):
+    assert input.upper() == expected
+```
+
+---
+
+### @merit.tag
+
+Add tags to tests for organization and filtering.
+
+```python
+@merit.tag(*tags: str)
+```
+
+**Parameters:**
+- `*tags` - One or more tag strings
+
+**Example:**
+
+```python
+@merit.tag("smoke", "fast")
+def merit_quick_check():
+    assert True
+```
+
+**Special tag methods:**
+
+```python
+@merit.tag.skip(reason: str)
+def merit_skipped_test():
+    """This test won't run."""
+    pass
+
+@merit.tag.xfail(reason: str)
+def merit_expected_failure():
+    """Runs but failure is expected."""
+    assert False
+```
+
+---
+
+### @merit.repeat
+
+Run a test multiple times.
+
+```python
+@merit.repeat(
+    count: int,
+    min_passes: int | None = None
+)
+```
+
+**Parameters:**
+- `count` - Number of times to run the test
+- `min_passes` (optional) - Minimum passes required for success
+
+**Example:**
+
+```python
+@merit.repeat(count=10)
+def merit_consistency():
+    """Must pass all 10 times."""
+    assert flaky_function() == "expected"
+
+@merit.repeat(count=100, min_passes=95)
+def merit_probabilistic():
+    """Must pass at least 95 out of 100 times."""
+    assert random_function() in valid_outputs
+```
+
+---
+
+### @merit.resource
+
+Define a reusable dependency (like pytest fixtures).
+
+```python
+@merit.resource(scope: str = "test")
+def resource_name():
+    # Setup
+    value = create_resource()
+    yield value  # Optional: use yield for teardown
+    # Teardown (optional)
+```
+
+**Parameters:**
+- `scope` - "test" (default) or "suite"
+
+**Example:**
+
+```python
+@merit.resource
+def api_client():
+    """Test-scoped resource."""
+    return create_client()
+
+@merit.resource(scope="suite")
+def expensive_model():
+    """Suite-scoped resource (shared across tests)."""
+    return load_model()
+
+@merit.resource
+async def database():
+    """Resource with teardown."""
+    db = await connect()
+    yield db
+    await db.close()  # Teardown
+```
+
+---
+
+### @merit.iter_cases
+
+Run the same test logic on multiple `Case` objects.
+
+```python
+@merit.iter_cases(cases: list[Case])
+def test_function(case: Case):
+    # Test logic using case.sut_input_values and case.references
+    pass
+```
+
+**Parameters:**
+- `cases` - List of `Case` objects
+
+**Example:**
+
+```python
+from merit import Case
+
+cases = [
+    Case(sut_input_values={"x": 1}, references={"y": 2}),
+    Case(sut_input_values={"x": 2}, references={"y": 4}),
+]
+
+@merit.iter_cases(cases)
+def merit_math(case: Case):
+    result = multiply(case.sut_input_values["x"], 2)
+    assert result == case.references["y"]
+```
+
+## Core Classes
+
+### Case
+
+Structured test case with input, references, metadata, and tags.
+
+```python
+Case[TReferences](
+    sut_input_values: dict[str, Any],
+    references: TReferences | dict | None = None,
+    tags: set[str] = set(),
+    metadata: dict[str, Any] = {}
+)
+```
+
+**Attributes:**
+- `sut_input_values` - Input parameters for system under test
+- `references` - Expected outputs or reference data
+- `tags` - Set of tags for filtering
+- `metadata` - Arbitrary metadata dictionary
+
+**Example:**
+
+```python
+from pydantic import BaseModel
+from merit import Case
+
+class References(BaseModel):
+    expected: str
+    max_length: int
+
+case = Case[References](
+    sut_input_values={"prompt": "Hello"},
+    references=References(expected="Hi", max_length=50),
+    tags={"greeting", "fast"},
+    metadata={"priority": "high"}
+)
+
+# Use in test
+response = chatbot(**case.sut_input_values)
+assert case.references.expected in response
+```
+
+## Utility Functions
+
+### valididate_cases_for_sut
+
+Validate that cases match function signature.
+
+```python
+valididate_cases_for_sut(
+    cases: list[Case],
+    sut: Callable
+) -> list[Case]
+```
+
+**Parameters:**
+- `cases` - List of cases to validate
+- `sut` - Function to validate against
+
+**Returns:**
+- Same list of cases (or raises error if invalid)
+
+**Example:**
+
+```python
+def chatbot(prompt: str, temperature: float) -> str:
+    return "response"
+
+cases = [
+    Case(sut_input_values={"prompt": "Hi", "temperature": 0.7}),
+    Case(sut_input_values={"prompt": "Hey", "temp": 0.5}),  # Wrong param!
+]
+
+# Raises error about mismatched parameters
+validated = valididate_cases_for_sut(cases, chatbot)
+```
+
+## System Under Test
+
+### @merit.sut
+
+Mark a function or class as a system under test for automatic tracing.
+
+```python
+@merit.sut
+def function_or_class():
+    pass
+```
+
+**Example - Function:**
+
+```python
+@merit.sut
+def chatbot(prompt: str) -> str:
+    """All calls are automatically traced."""
+    return generate_response(prompt)
+
+# Use as resource in tests
+def merit_test(chatbot):
+    response = chatbot("Hello")
+    assert response
+```
+
+**Example - Class:**
+
+```python
+@merit.sut
+class Pipeline:
+    """__call__ method is traced automatically."""
+    
+    def __call__(self, input: str) -> str:
+        return self.process(input)
+    
+    def process(self, input: str) -> str:
+        # Add custom trace steps
+        with merit.trace_step("processing"):
+            return f"Processed: {input}"
+```
+
+**Example - Async:**
+
+```python
+@merit.sut
+async def async_agent(task: str) -> str:
+    """Async functions work too."""
+    return await execute_task(task)
+```
+
+## Tracing
+
+### init_tracing
+
+Initialize OpenTelemetry tracing.
+
+```python
+init_tracing(service_name: str = "merit-tests")
+```
+
+**Parameters:**
+- `service_name` - Name for this service in traces
+
+**Example:**
+
+```python
+from merit import init_tracing
+
+init_tracing(service_name="my-ai-tests")
+
+# All subsequent tests and LLM calls will be traced
+```
+
+---
+
+### trace_step
+
+Create a custom trace span.
+
+```python
+trace_step(name: str)
+```
+
+**Parameters:**
+- `name` - Name of the trace span
+
+**Example:**
+
+```python
+from merit import trace_step
+
+async def merit_complex_flow():
+    with trace_step("Load data"):
+        data = await load_data()
+    
+    with trace_step("Process"):
+        result = await process(data)
+    
+    assert result is not None
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Predicates API"
+    icon="brain"
+    href="/api-reference/predicates"
+  >
+    AI predicate functions
+  </Card>
+  <Card
+    title="Metrics API"
+    icon="chart-line"
+    href="/api-reference/metrics"
+  >
+    Test metrics and reporting
+  </Card>
+</CardGroup>
+

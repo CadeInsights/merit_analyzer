@@ -1,0 +1,175 @@
+---
+title: "Writing Tests"
+description: "Learn how to write tests with Merit"
+---
+
+## Test Functions
+
+Merit uses a simple naming convention similar to pytest. Test functions must start with `merit_`:
+
+```python
+def merit_example_test():
+    """This will be discovered and run."""
+    assert 2 + 2 == 4
+
+def not_a_test():
+    """This will NOT be run (doesn't start with merit_)."""
+    pass
+```
+
+## Test Classes
+
+Group related tests in classes that start with `Merit`:
+
+```python
+class MeritChatbot:
+    """Group of chatbot tests."""
+    
+    def merit_responds_to_greeting(self):
+        response = chatbot("Hello")
+        assert "Hello" in response
+    
+    def merit_handles_questions(self):
+        response = chatbot("What is 2+2?")
+        assert "4" in response
+```
+
+## Async Tests
+
+Merit fully supports async/await:
+
+```python
+import asyncio
+
+async def merit_async_operation():
+    """Async test function."""
+    result = await some_async_function()
+    assert result is not None
+
+class MeritAsyncAPI:
+    async def merit_fetch_data(self):
+        """Async test method."""
+        data = await api.fetch()
+        assert len(data) > 0
+```
+
+## Test Discovery
+
+Merit discovers tests in files matching:
+- `test_*.py`
+- `*_test.py`
+
+Within those files, it runs:
+- Functions starting with `merit_`
+- Methods in classes starting with `Merit`
+
+Example project structure:
+
+```
+my_project/
+├── test_chatbot.py         # ✓ Discovered
+├── chatbot_test.py         # ✓ Discovered
+├── test_utils/
+│   ├── test_helpers.py     # ✓ Discovered
+│   └── utils.py            # ✗ Not a test file
+└── chatbot.py              # ✗ Not a test file
+```
+
+## Running Tests
+
+Run all tests in current directory:
+
+```bash
+merit
+```
+
+Run specific file:
+
+```bash
+merit test_chatbot.py
+```
+
+Run tests matching keyword:
+
+```bash
+merit -k greeting
+```
+
+Run tests in directory:
+
+```bash
+merit tests/
+```
+
+## Assertions
+
+Use standard Python `assert` statements:
+
+```python
+def merit_basic_assertions():
+    result = 2 + 2
+    
+    # Basic assertions
+    assert result == 4
+    assert result > 0
+    assert result != 5
+    
+    # With messages
+    assert result == 4, "Expected 2+2 to equal 4"
+    
+    # Multiple assertions
+    assert isinstance(result, int)
+    assert result in [4, 5, 6]
+```
+
+## AI-Powered Assertions
+
+Merit provides special async predicates for AI testing:
+
+```python
+from merit.predicates import has_facts, has_topics
+
+async def merit_ai_assertions():
+    response = chatbot("Tell me about Paris")
+    
+    # AI-powered checks
+    assert await has_facts(response, "Paris is the capital of France")
+    assert await has_topics(response, "geography, landmarks")
+```
+
+[Learn more about AI predicates →](/predicates/overview)
+
+## Test Lifecycle
+
+TODO: Document setup/teardown patterns when implemented
+
+## Command Line Options
+
+TODO: Document CLI flags when finalized
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Resources"
+    icon="box"
+    href="/core/resources"
+  >
+    Learn about dependency injection
+  </Card>
+  <Card
+    title="Test Cases"
+    icon="list-check"
+    href="/core/test-cases"
+  >
+    Structure complex test scenarios
+  </Card>
+  <Card
+    title="Running Tests"
+    icon="play"
+    href="/core/running-tests"
+  >
+    Advanced test running options
+  </Card>
+</CardGroup>
+

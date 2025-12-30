@@ -1,0 +1,241 @@
+---
+title: "Resources"
+description: "Dependency injection for tests (like pytest fixtures)"
+---
+
+## What are Resources?
+
+Resources in Merit are like pytest fixtures - they provide reusable dependencies for your tests. Use them for:
+
+- Database connections
+- API clients
+- Test data
+- Expensive model loading
+- Configuration
+
+## Basic Resource
+
+Define a resource with the `@merit.resource` decorator:
+
+```python
+import merit
+
+@merit.resource
+def api_config():
+    """Provides configuration for API tests."""
+    return {
+        "base_url": "https://api.example.com",
+        "timeout": 30
+    }
+
+def merit_uses_config(api_config):
+    """Test that uses the resource."""
+    assert api_config["base_url"].startswith("https://")
+    assert api_config["timeout"] > 0
+```
+
+Merit automatically injects resources by matching parameter names.
+
+## Resource Dependencies
+
+Resources can depend on other resources:
+
+```python
+@merit.resource
+def config():
+    return {"api_key": "secret", "url": "https://api.example.com"}
+
+@merit.resource
+def api_client(config):
+    """Resource that depends on config."""
+    return {
+        "url": config["url"],
+        "headers": {"Authorization": f"Bearer {config['api_key']}"}
+    }
+
+def merit_api_call(api_client):
+    """Test uses api_client, which uses config."""
+    assert "Authorization" in api_client["headers"]
+```
+
+## Async Resources
+
+Resources can be async:
+
+```python
+@merit.resource
+async def async_db():
+    """Async resource for database connection."""
+    db = await connect_to_db()
+    return db
+
+async def merit_db_query(async_db):
+    """Async test using async resource."""
+    result = await async_db.query("SELECT 1")
+    assert result is not None
+```
+
+## Resource Teardown
+
+Use `yield` for resources that need cleanup:
+
+```python
+@merit.resource
+async def database():
+    """Resource with setup and teardown."""
+    # Setup
+    db = await connect_to_db()
+    print("Database connected")
+    
+    # Provide resource
+    yield db
+    
+    # Teardown (runs after test completes)
+    await db.close()
+    print("Database closed")
+
+async def merit_db_operations(database):
+    """Database will be closed automatically after this test."""
+    await database.insert({"test": "data"})
+```
+
+## Resource Scope
+
+Control how often resources are created:
+
+```python
+@merit.resource(scope="suite")
+def expensive_model():
+    """
+    Loaded once per test file/suite.
+    Shared across all tests that use it.
+    """
+    print("Loading expensive model...")
+    return load_large_ml_model()
+
+@merit.resource(scope="test")
+def fresh_db():
+    """
+    Created fresh for each test (default behavior).
+    """
+    return create_empty_db()
+```
+
+Available scopes:
+- `"test"` (default) - New instance for each test
+- `"suite"` - One instance per test file
+
+## Multiple Resources
+
+Tests can use multiple resources:
+
+```python
+@merit.resource
+def config():
+    return {"env": "test"}
+
+@merit.resource
+def db_client(config):
+    return create_db_client(config["env"])
+
+@merit.resource
+def api_client(config):
+    return create_api_client(config["env"])
+
+def merit_integration_test(config, db_client, api_client):
+    """Test using three resources."""
+    assert config["env"] == "test"
+    assert db_client is not None
+    assert api_client is not None
+```
+
+## Resources in Test Classes
+
+Resources work in test classes too:
+
+```python
+@merit.resource
+def sample_data():
+    return [1, 2, 3, 4, 5]
+
+class MeritDataProcessing:
+    def merit_processes_data(self, sample_data):
+        """Class method using resource."""
+        result = sum(sample_data)
+        assert result == 15
+    
+    def merit_filters_data(self, sample_data):
+        """Another method using same resource."""
+        filtered = [x for x in sample_data if x > 2]
+        assert len(filtered) == 3
+```
+
+## Real-World Examples
+
+### Database Connection
+
+```python
+@merit.resource
+async def db_session():
+    """Production database connection."""
+    session = await create_session(
+        host="localhost",
+        database="test_db"
+    )
+    yield session
+    await session.close()
+```
+
+### AI Model
+
+```python
+@merit.resource(scope="suite")
+def llm_client():
+    """Expensive LLM client - load once."""
+    from openai import OpenAI
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+async def merit_llm_responds(llm_client):
+    response = llm_client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": "Say hello"}]
+    )
+    assert response.choices[0].message.content
+```
+
+### Test Data
+
+```python
+@merit.resource
+def sample_conversations():
+    """Test conversation data."""
+    return [
+        {"user": "Hello", "bot": "Hi there!"},
+        {"user": "How are you?", "bot": "I'm great!"},
+        {"user": "Goodbye", "bot": "See you later!"},
+    ]
+
+def merit_conversation_handling(sample_conversations):
+    assert len(sample_conversations) == 3
+    assert all("user" in conv for conv in sample_conversations)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Test Cases"
+    icon="list-check"
+    href="/core/test-cases"
+  >
+    Learn about structured test cases
+  </Card>
+  <Card
+    title="Running Tests"
+    icon="play"
+    href="/core/running-tests"
+  >
+    Advanced test execution options
+  </Card>
+</CardGroup>
+

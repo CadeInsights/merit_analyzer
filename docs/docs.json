@@ -1,0 +1,93 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Merit Documentation",
+  "colors": {
+    "primary": "#006B3E",
+    "light": "#0ADF35",
+    "dark": "#006B3E"
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/merit_logo_light.svg",
+    "dark": "/logo/merit_logo_dark.svg",
+    "height": 40
+  },
+  "topbar": {
+    "style": "default"
+  },
+  "feedback": {
+    "thumbsRating": true,
+    "suggestEdit": true,
+    "raiseIssue": true
+  },
+  "search": {
+    "prompt": "Search Merit documentation..."
+  },
+  "announcement": {
+    "title": "🎉 Merit Beta is now available!",
+    "href": "/quickstart"
+  },
+  "anchors": [
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/appMerit/merit"
+    },
+    {
+      "name": "Website",
+      "icon": "globe",
+      "url": "https://appmerit.com"
+    }
+  ],
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": ["index", "quickstart", "installation", "first-test", "configuration"]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": ["core/writing-tests", "core/resources", "core/test-cases", "core/running-tests"]
+      },
+      {
+        "group": "AI Predicates",
+        "pages": ["predicates/overview", "predicates/fact-checking", "predicates/topics-policy", "predicates/style-structure"]
+      },
+      {
+        "group": "Advanced Features",
+        "pages": ["advanced/parametrize", "advanced/tags-filters", "advanced/repeat-tests", "advanced/tracing"]
+      },
+      {
+        "group": "Error Analysis",
+        "pages": ["analyzer/overview", "analyzer/running-analyzer", "analyzer/reports"]
+      },
+      {
+        "group": "API Reference",
+        "pages": ["api-reference/testing", "api-reference/predicates", "api-reference/metrics"]
+      }
+    ]
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:daniel@appmerit.com"
+    }
+  ],
+  "topbarCtaButton": {
+    "type": "github",
+    "url": "https://github.com/appMerit/merit"
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "cursor"
+    ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/appMerit/merit"
+  }
+}

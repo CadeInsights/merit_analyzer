@@ -1,0 +1,281 @@
+---
+title: "Topics & Policy Predicates"
+description: "Check topical coverage and policy compliance"
+---
+
+## Overview
+
+- `has_topics` - Verify topical coverage
+- `follows_policy` - Check policy compliance
+
+## has_topics
+
+**Topical Coverage Check** - Verify the text discusses all required topics.
+
+*Maps to service assertion: `has_topics`*
+
+```python
+from merit.predicates import has_topics
+
+async def merit_covers_topics():
+    response = """
+    For your Paris trip, consider staying in the Marais district.
+    The metro is the best way to get around. Must-see attractions
+    include the Eiffel Tower, Louvre, and Notre-Dame.
+    """
+    
+    # Check response covers required topics
+    assert await has_topics(
+        response,
+        "accommodation, transportation, attractions"
+    )
+```
+
+### What It Checks
+
+- ✓ All specified topics are discussed
+- ✓ Content covers required subject areas
+- ✓ Each topic has meaningful coverage (not just mentioned)
+
+### When to Use
+
+- ✅ Verify comprehensive coverage
+- ✅ Check content completeness
+- ✅ Ensure all requirements addressed
+- ✅ Validate multi-section responses
+- ✅ Confirm article structure includes all sections
+
+### Example: Content Requirements
+
+```python
+async def merit_article_coverage():
+    article = generate_article("Python tutorial for beginners")
+    
+    # Must cover essential topics
+    assert await has_topics(
+        article,
+        "installation, syntax basics, variables, functions, loops"
+    )
+```
+
+### Example: Customer Support
+
+```python
+async def merit_support_response():
+    question = "I can't log in and my credit card was charged twice"
+    response = support_bot(question)
+    
+    # Must address both issues
+    assert await has_topics(
+        response,
+        "login issues, billing problems"
+    )
+```
+
+## follows_policy
+
+**Requirements Validation** - Check if text complies with specified policies or requirements.
+
+*Maps to service assertion: `conditions_met`*
+
+```python
+from merit.predicates import follows_policy
+
+async def merit_policy_compliance():
+    response = chatbot("Tell me about your company")
+    
+    # Check response follows policies
+    assert await follows_policy(
+        response,
+        "Must be professional, avoid making promises, include disclaimer"
+    )
+```
+
+### What It Checks
+
+- ✓ Compliance with stated requirements
+- ✓ Adherence to guidelines and rules
+- ✓ Meeting specified conditions
+- ✓ Following prescribed patterns
+
+### When to Use
+
+- ✅ Enforce content guidelines
+- ✅ Verify regulatory compliance
+- ✅ Check brand voice requirements
+- ✅ Ensure safety constraints
+- ✅ Validate formatting rules
+
+### Example: Brand Guidelines
+
+```python
+async def merit_brand_compliance():
+    response = marketing_bot("Write a product description")
+    
+    # Check brand guidelines
+    assert await follows_policy(
+        response,
+        """
+        - Use friendly, conversational tone
+        - Avoid technical jargon
+        - Include a call-to-action
+        - Maximum 3 sentences
+        """
+    )
+    
+    # Can combine with regular assertions
+    assert len(response.split(".")) <= 3
+```
+
+### Example: Safety Requirements
+
+```python
+async def merit_safety_check():
+    response = chatbot("How do I treat a serious injury?")
+    
+    # Must follow medical disclaimer policy
+    assert await follows_policy(
+        response,
+        "Must advise seeking professional medical help for serious conditions"
+    )
+```
+
+### Example: Regulatory Compliance
+
+```python
+async def merit_gdpr_compliance():
+    response = generate_privacy_statement()
+    
+    # Check GDPR requirements
+    assert await follows_policy(
+        response,
+        """
+        Must include:
+        - Right to access personal data
+        - Right to deletion
+        - Data retention period
+        - Contact information for data controller
+        """
+    )
+```
+
+## Combining Topics and Policy
+
+```python
+async def merit_comprehensive_requirements():
+    response = generate_report("Q4 Financial Results")
+    
+    # Check required topics are covered
+    assert await has_topics(
+        response,
+        "revenue, expenses, profit margin, future outlook"
+    )
+    
+    # Check compliance policies
+    assert await follows_policy(
+        response,
+        """
+        - Use formal business language
+        - Include specific numbers and percentages
+        - Avoid speculative statements
+        - Cite data sources
+        """
+    )
+```
+
+## Real-World Example: Email Generator
+
+```python
+from merit.predicates import has_topics, follows_policy
+
+async def merit_automated_email():
+    context = {
+        "customer": "Jane Smith",
+        "issue": "damaged product received",
+        "order_id": "12345"
+    }
+    
+    email = generate_support_email(context)
+    
+    # Must address all key topics
+    assert await has_topics(
+        email,
+        "apology, replacement offer, shipping details, timeline"
+    )
+    
+    # Must follow company policy
+    assert await follows_policy(
+        email,
+        """
+        - Start with personalized greeting
+        - Express empathy
+        - Offer clear resolution
+        - Professional and courteous tone
+        - Include order reference number
+        """
+    )
+    
+    # Regular assertions
+    assert context["customer"] in email
+    assert context["order_id"] in email
+    assert len(email) > 100
+```
+
+## Tips for Writing Policies
+
+### Good Policy Descriptions
+
+```python
+# ✅ Clear, specific, actionable
+await follows_policy(
+    text,
+    "Must use second-person perspective (you, your) and include at least one question"
+)
+
+# ✅ Structured list
+await follows_policy(
+    text,
+    """
+    Requirements:
+    - Start with a hook or question
+    - Use short paragraphs (max 3 sentences)
+    - End with call-to-action
+    """
+)
+```
+
+### Unclear Policy Descriptions
+
+```python
+# ❌ Too vague
+await follows_policy(text, "Be good")
+
+# ❌ Too subjective
+await follows_policy(text, "Sound professional")
+
+# Better:
+await follows_policy(
+    text,
+    "Use formal language, avoid contractions, address reader as 'you'"
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Fact Checking"
+    icon="check-double"
+    href="/predicates/fact-checking"
+  >
+    Verify facts and detect hallucinations
+  </Card>
+  <Card
+    title="Style & Structure"
+    icon="pen-fancy"
+    href="/predicates/style-structure"
+  >
+    Match writing style and document structure
+  </Card>
+</CardGroup>
+

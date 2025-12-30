@@ -1,0 +1,316 @@
+---
+title: "Tracing"
+description: "Track test execution with OpenTelemetry"
+---
+
+## What is Tracing?
+
+Merit includes OpenTelemetry tracing to help you:
+
+- Debug complex test flows
+- Track LLM calls and costs
+- Identify performance bottlenecks
+- Understand test execution paths
+
+## Enable Tracing
+
+Run tests with tracing enabled:
+
+```bash
+# Enable tracing via CLI
+merit --trace
+
+# Or initialize in code
+merit your_tests.py --trace
+```
+
+Traces are exported to `traces.json` at the end of the run.
+
+You can also initialize tracing programmatically:
+
+```python
+from merit import init_tracing
+
+# Enable tracing with default settings
+init_tracing()
+
+# Your tests here
+async def merit_chatbot():
+    response = await chatbot("Hello")
+    assert response is not None
+```
+
+## Custom Service Name
+
+Identify your tests with a custom service name:
+
+```python
+from merit import init_tracing
+
+init_tracing(service_name="my-ai-tests")
+```
+
+## @sut Decorator
+
+Mark your system under test for automatic tracing:
+
+```python
+import merit
+
+@merit.sut
+def chatbot(prompt: str) -> str:
+    """All calls to this function are automatically traced."""
+    # Your AI system
+    return generate_response(prompt)
+
+# Use as a resource
+def merit_chatbot_test(chatbot):
+    """chatbot is injected and traced automatically."""
+    response = chatbot("Hello")
+    assert response is not None
+```
+
+**Works with:**
+- Functions (sync and async)
+- Classes (traces `__call__` method)
+- Resources
+
+### Class-Based SUT
+
+```python
+@merit.sut
+class RAGPipeline:
+    """Class-based SUT with automatic tracing."""
+    
+    def __call__(self, query: str) -> str:
+        """Main entry point - traced automatically."""
+        docs = self._retrieve(query)
+        return self._generate(docs, query)
+    
+    def _retrieve(self, query: str) -> list[str]:
+        """Add custom trace steps for internal methods."""
+        with merit.trace_step("retrieve", {"query": query}):
+            return ["doc1", "doc2"]
+    
+    def _generate(self, docs: list[str], query: str) -> str:
+        with merit.trace_step("generate", {"doc_count": len(docs)}):
+            return f"Answer based on {len(docs)} docs"
+
+# Use in tests
+def merit_rag_pipeline(rag_pipeline):
+    """rag_pipeline is injected as a resource."""
+    result = rag_pipeline("What is Python?")
+    assert "Answer" in result
+```
+
+### Async SUT
+
+```python
+@merit.sut
+async def async_chatbot(prompt: str) -> str:
+    """Async SUT - works the same way."""
+    return await generate_async_response(prompt)
+
+async def merit_async_test(async_chatbot):
+    response = await async_chatbot("Hello")
+    assert response is not None
+```
+
+## Trace Steps
+
+Add custom trace spans to track specific operations:
+
+```python
+from merit import trace_step
+
+async def merit_complex_workflow():
+    with trace_step("Load context"):
+        context = await load_knowledge_base()
+    
+    with trace_step("Generate response"):
+        response = await llm_call(context)
+    
+    with trace_step("Validate output"):
+        assert await has_facts(response, expected_facts)
+```
+
+## Automatic Instrumentation
+
+Merit automatically traces:
+
+- **LLM calls** - OpenAI and Anthropic API calls
+- **Test execution** - Test start, duration, results
+- **Predicate evaluations** - AI assertion calls
+
+## What Gets Tracked
+
+### LLM Calls
+
+For each LLM API call, Merit records:
+- Model name
+- Token counts (input/output)
+- Cost estimates
+- Latency
+- Success/failure status
+
+### Test Execution
+
+For each test, Merit records:
+- Test name and location
+- Start time and duration
+- Pass/fail status
+- Error messages (if failed)
+
+### AI Predicates
+
+For each predicate call, Merit records:
+- Predicate type (`has_facts`, `has_topics`, etc.)
+- Input/reference text lengths
+- API latency
+- Result (passed/failed)
+- Confidence score
+
+## Example with Tracing
+
+```python
+from merit import init_tracing, trace_step
+from merit.predicates import has_facts, has_unsupported_facts
+
+# Enable tracing
+init_tracing(service_name="chatbot-tests")
+
+async def merit_chatbot_accuracy():
+    """All LLM calls and predicates are automatically traced."""
+    
+    with trace_step("Generate response"):
+        response = await chatbot("Tell me about Paris")
+    
+    with trace_step("Fact checking"):
+        # Automatically traced
+        assert await has_facts(response, "Paris is the capital of France")
+    
+    with trace_step("Hallucination detection"):
+        # Automatically traced
+        assert not await has_unsupported_facts(response, source_docs)
+```
+
+## Viewing Traces (TODO)
+
+TODO: Document trace viewing and export options
+
+Expected integrations:
+- Export to Jaeger
+- Export to Zipkin
+- Console output
+- JSON export for analysis
+
+## Cost Tracking
+
+Use tracing to track LLM costs:
+
+```python
+from merit import init_tracing
+
+init_tracing(service_name="cost-tracking")
+
+async def merit_expensive_test():
+    """Traces will show total cost of all LLM calls."""
+    
+    # Each call is tracked with cost estimate
+    response1 = await llm_call("Long prompt...")
+    response2 = await llm_call("Another call...")
+    
+    # Predicate calls are also tracked
+    assert await has_facts(response1, "...")
+```
+
+After running, check traces to see:
+- Total tokens used
+- Estimated cost per test
+- Most expensive operations
+
+## Performance Analysis
+
+Identify slow operations:
+
+```python
+from merit import trace_step
+
+async def merit_performance_check():
+    """Find bottlenecks in test execution."""
+    
+    with trace_step("Database query"):
+        # If this is slow, trace will show it
+        data = await db.query("SELECT * FROM users")
+    
+    with trace_step("LLM call"):
+        # Compare timing to other operations
+        response = await llm_call(prompt)
+    
+    with trace_step("AI predicate"):
+        # Predicate calls are usually 1-3 seconds
+        assert await has_facts(response, reference)
+```
+
+## Disabling Tracing
+
+Tracing has minimal overhead, but you can disable it:
+
+```python
+# Don't call init_tracing()
+
+async def merit_no_tracing():
+    """Runs without tracing."""
+    response = await chatbot("Hello")
+    assert response is not None
+```
+
+## Environment Configuration (TODO)
+
+TODO: Document environment variables for tracing
+
+Expected configuration:
+```bash
+# Enable tracing
+MERIT_TRACING_ENABLED=true
+
+# Set service name
+MERIT_SERVICE_NAME=my-tests
+
+# Export endpoint
+MERIT_OTLP_ENDPOINT=http://localhost:4318
+
+# Sampling rate (0.0 to 1.0)
+MERIT_TRACE_SAMPLE_RATE=1.0
+```
+
+## Integration with Observability Platforms (TODO)
+
+TODO: Document integration with observability tools
+
+Expected integrations:
+- Jaeger
+- Zipkin
+- Honeycomb
+- DataDog
+- New Relic
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Running Tests"
+    icon="play"
+    href="/core/running-tests"
+  >
+    Test execution and CLI options
+  </Card>
+  <Card
+    title="Error Analysis"
+    icon="magnifying-glass-chart"
+    href="/analyzer/overview"
+  >
+    Analyze test failures at scale
+  </Card>
+</CardGroup>
+

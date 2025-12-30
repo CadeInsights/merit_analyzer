@@ -1,0 +1,298 @@
+---
+title: "Metrics API Reference"
+description: "Test metrics and scoring functions"
+---
+
+## Overview
+
+Merit provides metric classes to aggregate and analyze test results.
+
+## Built-in Metrics
+
+### PassRate
+
+Calculate the percentage of tests that passed.
+
+```python
+class PassRate(Metric):
+    def __call__(self, results: list[TestResult]) -> float:
+        # Returns pass rate as float (0.0 to 1.0)
+        pass
+```
+
+**Example:**
+
+```python
+from merit import PassRate
+
+# Run tests
+results = suite.run(system_under_test)
+
+# Calculate pass rate
+pass_rate = PassRate()
+score = pass_rate(results)
+
+print(f"Pass rate: {score * 100:.1f}%")
+# Output: Pass rate: 85.0%
+```
+
+---
+
+### AverageScore
+
+Calculate the mean score across all test results.
+
+```python
+class AverageScore(Metric):
+    def __call__(self, results: list[TestResult]) -> float:
+        # Returns average score (0.0 to 1.0)
+        pass
+```
+
+**Example:**
+
+```python
+from merit import AverageScore
+
+results = suite.run(system_under_test)
+
+avg_score = AverageScore()
+score = avg_score(results)
+
+print(f"Average score: {score:.2f}")
+# Output: Average score: 0.87
+```
+
+## Custom Metrics
+
+### Metric Base Class
+
+Create custom metrics by inheriting from `Metric`:
+
+```python
+from merit import Metric
+
+class CustomMetric(Metric):
+    def __call__(self, results: list[TestResult]) -> float:
+        # Your metric logic
+        return computed_score
+```
+
+**Example: Weighted Accuracy**
+
+```python
+from merit import Metric
+
+class WeightedAccuracy(Metric):
+    """Calculate accuracy with weighted tests."""
+    
+    def __init__(self, weights: dict[str, float]):
+        self.weights = weights
+    
+    def __call__(self, results: list[TestResult]) -> float:
+        total_weight = 0.0
+        weighted_sum = 0.0
+        
+        for result in results:
+            weight = self.weights.get(result.test_name, 1.0)
+            total_weight += weight
+            if result.passed:
+                weighted_sum += weight
+        
+        return weighted_sum / total_weight if total_weight > 0 else 0.0
+
+# Usage
+weights = {
+    "test_critical_feature": 5.0,  # 5x weight
+    "test_nice_to_have": 1.0,      # Normal weight
+}
+
+metric = WeightedAccuracy(weights)
+score = metric(results)
+```
+
+**Example: Confidence-Weighted Score**
+
+```python
+from merit import Metric
+
+class ConfidenceWeightedScore(Metric):
+    """Weight scores by confidence."""
+    
+    def __call__(self, results: list[TestResult]) -> float:
+        if not results:
+            return 0.0
+        
+        weighted_sum = sum(
+            r.score * r.confidence 
+            for r in results 
+            if r.confidence is not None
+        )
+        
+        confidence_sum = sum(
+            r.confidence 
+            for r in results 
+            if r.confidence is not None
+        )
+        
+        return weighted_sum / confidence_sum if confidence_sum > 0 else 0.0
+```
+
+## Test Results
+
+### TestResult (TODO)
+
+TODO: Document TestResult structure once finalized
+
+Expected structure:
+```python
+class TestResult:
+    test_name: str
+    passed: bool
+    score: float
+    confidence: float | None
+    duration: float
+    error: str | None
+```
+
+## Metric Composition
+
+Combine multiple metrics:
+
+```python
+from merit import PassRate, AverageScore
+
+results = suite.run(system_under_test)
+
+# Multiple metrics
+pass_rate = PassRate()(results)
+avg_score = AverageScore()(results)
+
+print(f"Pass Rate: {pass_rate * 100:.1f}%")
+print(f"Avg Score: {avg_score:.2f}")
+```
+
+## Filtering Results
+
+Apply metrics to filtered results:
+
+```python
+from merit import PassRate
+
+results = suite.run(system_under_test)
+
+# Filter by tag
+critical_results = [r for r in results if "critical" in r.tags]
+
+# Metric on filtered results
+critical_pass_rate = PassRate()(critical_results)
+print(f"Critical tests: {critical_pass_rate * 100:.1f}%")
+```
+
+## Real-World Examples
+
+### Multi-Metric Dashboard
+
+```python
+from merit import PassRate, AverageScore, Metric
+
+class FailureRate(Metric):
+    def __call__(self, results: list[TestResult]) -> float:
+        if not results:
+            return 0.0
+        failed = sum(1 for r in results if not r.passed)
+        return failed / len(results)
+
+def print_dashboard(results: list[TestResult]):
+    """Display comprehensive test metrics."""
+    pass_rate = PassRate()(results)
+    avg_score = AverageScore()(results)
+    failure_rate = FailureRate()(results)
+    
+    print("=" * 40)
+    print("TEST METRICS DASHBOARD")
+    print("=" * 40)
+    print(f"Total Tests:    {len(results)}")
+    print(f"Pass Rate:      {pass_rate * 100:.1f}%")
+    print(f"Failure Rate:   {failure_rate * 100:.1f}%")
+    print(f"Average Score:  {avg_score:.2f}")
+    print("=" * 40)
+
+# Usage
+results = suite.run(system_under_test)
+print_dashboard(results)
+```
+
+### Category-Specific Metrics
+
+```python
+from merit import PassRate
+
+results = suite.run(system_under_test)
+
+# Metrics by category
+categories = {}
+for result in results:
+    category = result.tags[0] if result.tags else "uncategorized"
+    if category not in categories:
+        categories[category] = []
+    categories[category].append(result)
+
+# Print per-category metrics
+for category, cat_results in categories.items():
+    pass_rate = PassRate()(cat_results)
+    print(f"{category}: {pass_rate * 100:.1f}% ({len(cat_results)} tests)")
+
+# Output:
+# authentication: 95.0% (20 tests)
+# chatbot: 87.5% (40 tests)
+# payment: 100.0% (15 tests)
+```
+
+### Regression Detection
+
+```python
+from merit import PassRate
+
+class RegressionDetector:
+    """Detect if tests regressed compared to baseline."""
+    
+    def __init__(self, baseline_score: float, threshold: float = 0.05):
+        self.baseline = baseline_score
+        self.threshold = threshold
+    
+    def check(self, results: list[TestResult]) -> bool:
+        """Returns True if regressed."""
+        current_score = PassRate()(results)
+        return current_score < (self.baseline - self.threshold)
+
+# Usage
+baseline = 0.95  # 95% historical pass rate
+detector = RegressionDetector(baseline, threshold=0.05)
+
+results = suite.run(system_under_test)
+if detector.check(results):
+    print("⚠️ REGRESSION DETECTED")
+else:
+    print("✓ No regression")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Testing API"
+    icon="flask"
+    href="/api-reference/testing"
+  >
+    Core testing functions
+  </Card>
+  <Card
+    title="Predicates API"
+    icon="brain"
+    href="/api-reference/predicates"
+  >
+    AI predicate functions
+  </Card>
+</CardGroup>
+

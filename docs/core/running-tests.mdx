@@ -1,0 +1,349 @@
+---
+title: "Running Tests"
+description: "Execute and control your Merit tests"
+---
+
+## Basic Execution
+
+Run all tests in current directory:
+
+```bash
+merit test
+```
+
+<Note>
+Merit uses the `test` subcommand. Just `merit` without arguments will show help.
+</Note>
+
+## Run Specific Files
+
+Run a single test file:
+
+```bash
+merit test test_chatbot.py
+```
+
+Run multiple files:
+
+```bash
+merit test test_chatbot.py test_api.py
+```
+
+Run all tests in a directory:
+
+```bash
+merit test tests/
+```
+
+If no paths specified, Merit uses configured test paths (default: current directory).
+
+## Filter by Keyword
+
+Run tests matching a keyword (searches test names and paths):
+
+```bash
+merit test -k chatbot
+```
+
+Multiple keywords with boolean logic:
+
+```bash
+# OR logic
+merit test -k "chatbot or api"
+
+# AND logic
+merit test -k "chatbot and async"
+
+# NOT logic
+merit test -k "not slow"
+
+# Complex expressions
+merit test -k "(chatbot or api) and not slow"
+```
+
+## Filter by Tags
+
+Run tests with specific tags:
+
+```bash
+# Run tests with "smoke" tag
+merit test -t smoke
+
+# Multiple tags (all must match)
+merit test -t smoke -t fast
+
+# Exclude tests with tag
+merit test --skip-tag slow
+
+# Combine include and exclude
+merit test -t integration --skip-tag flaky
+```
+
+## Verbosity Levels
+
+Control output detail level:
+
+```bash
+# Quiet mode (minimal output)
+merit test -q
+
+# Very quiet
+merit test -qq
+
+# Verbose output (more details)
+merit test -v
+
+# Very verbose
+merit test -vv
+```
+
+## Stop on First Failure
+
+Stop early when tests fail:
+
+```bash
+# Stop after first failure
+merit test --maxfail=1
+
+# Stop after 3 failures
+merit test --maxfail=3
+```
+
+This is useful for:
+- Fail-fast in CI/CD
+- Stopping on first critical failure
+- Saving time when debugging
+
+## Parallel Execution
+
+Run tests concurrently to speed up execution:
+
+```bash
+# Run with 5 concurrent workers
+merit test --concurrency 5
+
+# Unlimited concurrency (capped at 10)
+merit test --concurrency 0
+
+# Sequential execution (default)
+merit test
+```
+
+**Performance Example:**
+
+```python
+# 6 tests that each take 0.5 seconds:
+
+# Sequential: ~3 seconds
+merit test test_slow_api.py
+
+# With concurrency: ~1.2 seconds  
+merit test test_slow_api.py --concurrency 5
+
+# Max concurrency: ~0.6 seconds
+merit test test_slow_api.py --concurrency 0
+```
+
+**When to Use:**
+- ✅ I/O-bound tests (API calls, database queries)
+- ✅ Independent tests without shared state
+- ✅ Async tests
+
+**When NOT to Use:**
+- ❌ Tests with shared mutable state
+- ❌ Tests that modify global resources
+- ❌ CPU-bound tests
+
+## Tracing
+
+Enable OpenTelemetry tracing:
+
+```bash
+# Enable tracing
+merit test --trace
+
+# Custom trace output file
+merit test --trace --trace-output my_traces.jsonl
+```
+
+Default trace output: `traces.jsonl`
+
+See [Tracing documentation](/advanced/tracing) for more details.
+
+## Export Results
+
+TODO: Document result export for analyzer
+
+Expected usage:
+```bash
+# Export results to CSV for analysis
+merit --export-results results.csv
+```
+
+## Configuration File
+
+Create a `merit.toml` or add to `pyproject.toml` to set default options.
+
+### merit.toml
+
+```toml merit.toml
+test-paths = ["tests", "integration_tests"]
+include-tags = ["smoke"]
+exclude-tags = ["slow", "flaky"]
+keyword = "not experimental"
+maxfail = 5
+verbosity = 1
+concurrency = 4
+addopts = ["-v", "--trace"]
+```
+
+### pyproject.toml
+
+```toml pyproject.toml
+[tool.merit]
+test-paths = ["tests"]
+include-tags = ["smoke"]
+exclude-tags = ["slow"]
+maxfail = 3
+verbosity = 0
+concurrency = 5
+```
+
+### Configuration Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `test-paths` | list[str] | Directories/files to search for tests |
+| `include-tags` | list[str] | Only run tests with these tags |
+| `exclude-tags` | list[str] | Skip tests with these tags |
+| `keyword` | str | Keyword filter expression |
+| `maxfail` | int | Stop after N failures |
+| `verbosity` | int | Output verbosity level |
+| `concurrency` | int | Number of concurrent workers (0=unlimited) |
+| `addopts` | list[str] | Additional CLI options to prepend |
+
+CLI arguments override configuration file values.
+
+## Environment Variables
+
+Set API keys for AI predicates:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY=sk-...
+
+# Anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Or use .env file
+echo "OPENAI_API_KEY=sk-..." >> .env
+```
+
+Merit automatically loads `.env` files in the current directory.
+
+## Exit Codes
+
+Merit uses standard exit codes:
+
+- `0` - All tests passed
+- `1` - One or more tests failed
+- `2` - Test execution was interrupted
+- `3` - Internal error
+
+Use in CI/CD:
+
+```bash
+#!/bin/bash
+merit
+if [ $? -eq 0 ]; then
+    echo "All tests passed!"
+else
+    echo "Tests failed!"
+    exit 1
+fi
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install merit-analyzer
+      
+      - name: Run tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: merit
+```
+
+### GitLab CI
+
+```yaml .gitlab-ci.yml
+test:
+  image: python:3.12
+  script:
+    - pip install merit-analyzer
+    - merit
+  variables:
+    OPENAI_API_KEY: $OPENAI_API_KEY
+```
+
+## Watch Mode
+
+TODO: Document watch mode for test-driven development
+
+Expected usage:
+```bash
+# Re-run tests on file changes
+merit --watch
+```
+
+## Coverage
+
+TODO: Document test coverage reporting
+
+Expected usage:
+```bash
+# Generate coverage report
+merit --coverage
+
+# HTML coverage report
+merit --coverage --coverage-html
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="AI Predicates"
+    icon="brain"
+    href="/predicates/overview"
+  >
+    Learn about LLM-as-a-Judge assertions
+  </Card>
+  <Card
+    title="Advanced Features"
+    icon="rocket"
+    href="/advanced/parametrize"
+  >
+    Parametrization, tags, and more
+  </Card>
+</CardGroup>
+
