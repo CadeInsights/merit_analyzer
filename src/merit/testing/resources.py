@@ -34,8 +34,8 @@ class ResourceDef:
     is_generator: bool
     is_async_generator: bool
     dependencies: list[str] = field(default_factory=list)
-    on_resolve: Callable[[Any], Any] | None = None
-    on_teardown: Callable[[Any], Any] | None = None
+    on_resolve: Callable[[Any, dict[str, Any] | None], Any] | None = None
+    on_teardown: Callable[[Any, dict[str, Any] | None], Any] | None = None
 
 
 _registry: dict[str, ResourceDef] = {}
@@ -45,8 +45,8 @@ def resource(
     fn: Callable[P, T] | None = None,
     *,
     scope: Scope | str = Scope.CASE,
-    on_resolve: Callable[[Any], Any] | None = None,
-    on_teardown: Callable[[Any], Any] | None = None,
+    on_resolve: Callable[[Any, dict[str, Any] | None], Any] | None = None,
+    on_teardown: Callable[[Any, dict[str, Any] | None], Any] | None = None,
 ) -> Callable[P, T] | Callable[[Callable[P, T]], Callable[P, T]]:
     """Register a function as a resource for dependency injection.
 
@@ -143,7 +143,7 @@ class ResourceResolver:
         else:
             self._teardowns.append((scope, name, gen))
 
-    async def resolve(self, name: str) -> Any:
+    async def resolve(self, name: str, context: dict[str, Any] | None = None) -> Any:
         """Resolve a resource by name, including its dependencies."""
         if name not in self._registry:
             msg = f"Unknown resource: {name}"
@@ -157,8 +157,9 @@ class ResourceResolver:
 
         # Resolve dependencies first
         kwargs = {}
+        res_ctx = {"consumer_name": name}
         for dep in defn.dependencies:
-            kwargs[dep] = await self.resolve(dep)
+            kwargs[dep] = await self.resolve(dep, res_ctx)
 
         # Call the factory
         if defn.is_async_generator:
@@ -176,7 +177,7 @@ class ResourceResolver:
 
         if defn.on_resolve:
             try:
-                result = defn.on_resolve(value)
+                result = defn.on_resolve(value, context)
                 if inspect.iscoroutine(result):
                     value = await result
                 else:
@@ -213,7 +214,7 @@ class ResourceResolver:
                 cache_key = (s, name)
                 if cache_key in self._cache:
                     try:
-                        result = defn.on_teardown(self._cache[cache_key])
+                        result = defn.on_teardown(self._cache[cache_key], None)
                         if inspect.iscoroutine(result):
                             await result
                     except Exception as e:
@@ -242,7 +243,7 @@ class ResourceResolver:
                     cache_key = (s, name)
                     if cache_key in self._cache:
                         try:
-                            result = defn.on_teardown(self._cache[cache_key])
+                            result = defn.on_teardown(self._cache[cache_key], None)
                             if inspect.iscoroutine(result):
                                 await result
                         except Exception as e:

@@ -478,11 +478,20 @@ class Runner:
         if item.param_values:
             kwargs.update(item.param_values)
 
+        test_item_context = {
+            "test_item_name": item.name,
+            "test_item_group_name": item.class_name,
+            "test_item_module_path": item.module_path,
+            "test_item_tags": list(item.tags),
+            "test_item_params": item.params,
+            "test_item_id_suffix": item.id_suffix,
+        }
+
         for param in item.params:
             if param in kwargs:
                 continue
             try:
-                kwargs[param] = await resolver.resolve(param)
+                kwargs[param] = await resolver.resolve(param, test_item_context)
             except ValueError:
                 # Unknown resource - might be a non-resource param
                 pass
