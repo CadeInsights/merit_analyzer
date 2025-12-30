@@ -1,11 +1,5 @@
-"""Metrics library for evaluating model performance."""
+"""Metrics module for aggregating predicate results."""
 
-from ._base import Metric
-from .basic import AverageScore, PassRate
+from .base import Metric, metric
 
-
-__all__ = [
-    "AverageScore",
-    "Metric",
-    "PassRate",
-]
+__all__ = ["Metric", "metric"]

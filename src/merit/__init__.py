@@ -1,7 +1,7 @@
 """Merit - Testing framework for AI agents."""
 
 from .predicates import predicate, PredicateResult, PredicateMetadata, Predicate
-from .metrics import AverageScore, Metric, PassRate
+from .metrics import Metric, metric
 from .testing import Case, parametrize, repeat, resource, tag, iter_cases, valididate_cases_for_sut
 from .testing.sut import sut
 from .tracing import init_tracing, trace_step
@@ -25,8 +25,7 @@ __all__ = [
     "Predicate",
     # Metrics
     "Metric",
-    "PassRate",
-    "AverageScore",
+    "metric",
     # Tracing
     "init_tracing",
     "trace_step",
