@@ -358,7 +358,7 @@ class TestResourceHooks:
     async def test_on_resolve_called(self):
         resolve_calls = []
 
-        def track_resolve(value):
+        def track_resolve(value, context):
             resolve_calls.append(value)
             return value
 
@@ -374,7 +374,7 @@ class TestResourceHooks:
 
     @pytest.mark.asyncio
     async def test_on_resolve_transforms_value(self):
-        @resource(on_resolve=lambda v: v * 2)
+        @resource(on_resolve=lambda v, context: v * 2)
         def doubled():
             return 10
 
@@ -387,7 +387,7 @@ class TestResourceHooks:
     async def test_on_teardown_called_after_generator_teardown(self):
         call_order = []
 
-        def on_teardown_hook(value):
+        def on_teardown_hook(value, context):
             call_order.append(("hook", value))
 
         @resource(on_teardown=on_teardown_hook)
@@ -405,7 +405,7 @@ class TestResourceHooks:
     async def test_on_teardown_with_teardown_scope(self):
         teardown_hook_called = False
 
-        def on_teardown_hook(value):
+        def on_teardown_hook(value, context):
             nonlocal teardown_hook_called
             teardown_hook_called = True
 
@@ -425,12 +425,12 @@ class TestResourceHooks:
         resolve_value = None
         teardown_value = None
 
-        def on_resolve_hook(value):
+        def on_resolve_hook(value, context):
             nonlocal resolve_value
             resolve_value = value
             return value
 
-        def on_teardown_hook(value):
+        def on_teardown_hook(value, context):
             nonlocal teardown_value
             teardown_value = value
 
@@ -446,3 +446,91 @@ class TestResourceHooks:
 
         await resolver.teardown()
         assert teardown_value == "async_value"
+
+    @pytest.mark.asyncio
+    async def test_on_resolve_receives_custom_context(self):
+        received_context = None
+
+        def hook(value, context):
+            nonlocal received_context
+            received_context = context
+            return value
+
+        @resource(on_resolve=hook)
+        def simple():
+            return 42
+
+        resolver = ResourceResolver(get_registry())
+        await resolver.resolve("simple", context={"request_id": "123"})
+        assert received_context == {"request_id": "123"}
+
+    @pytest.mark.asyncio
+    async def test_on_resolve_receives_consumer_name_for_dependencies(self):
+        contexts = {}
+
+        def hook(value, context):
+            # context might be None if not passed, but resolve() for deps always passes it
+            contexts[context.get("consumer_name")] = value
+            return value
+
+        @resource(on_resolve=hook)
+        def dependency():
+            return "dep_val"
+
+        @resource
+        def consumer(dependency):
+            return f"got {dependency}"
+
+        resolver = ResourceResolver(get_registry())
+        await resolver.resolve("consumer")
+
+        # dependency's hook should have been called with consumer_name="consumer"
+        assert contexts["consumer"] == "dep_val"
+
+    @pytest.mark.asyncio
+    async def test_nested_dependency_context(self):
+        history = []
+
+        def hook(value, context):
+            history.append((context.get("consumer_name") if context else None, value))
+            return value
+
+        @resource(on_resolve=hook)
+        def leaf():
+            return "leaf"
+
+        @resource(on_resolve=hook)
+        def middle(leaf):
+            return f"middle({leaf})"
+
+        @resource
+        def top(middle):
+            return f"top({middle})"
+
+        resolver = ResourceResolver(get_registry())
+        await resolver.resolve("top")
+
+        assert history == [
+            ("middle", "leaf"),
+            ("top", "middle(leaf)"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_on_resolve_not_called_for_cached_resource(self):
+        call_count = 0
+
+        def hook(value, context):
+            nonlocal call_count
+            call_count += 1
+            return value
+
+        @resource(on_resolve=hook)
+        def cached_res():
+            return "val"
+
+        resolver = ResourceResolver(get_registry())
+        await resolver.resolve("cached_res", context={"call": 1})
+        await resolver.resolve("cached_res", context={"call": 2})
+
+        # Hook only called once during initial resolution
+        assert call_count == 1
