@@ -19,6 +19,7 @@ from typing import Any, ParamSpec
 from pydantic import validate_call
 
 from merit.testing.resources import Scope, resource
+from merit.testing.context import RESOLVER_CONTEXT, TEST_CONTEXT
 
 
 P = ParamSpec("P")
@@ -155,6 +156,12 @@ class Metric:
             The value(s) to add to the metric.
         """
         with self._values_lock:
+            test_ctx = TEST_CONTEXT.get()
+            if item_name := test_ctx.test_item_name:
+                self.metadata.collected_from_merits.add(item_name)
+            if id_suffix := test_ctx.test_item_id_suffix:
+                self.metadata.collected_from_cases.add(id_suffix)
+
             if self.metadata.first_item_recorded_at is None:
                 self.metadata.first_item_recorded_at = datetime.now(UTC)
             self.metadata.last_item_recorded_at = datetime.now(UTC)
@@ -387,24 +394,21 @@ def metric(
 
     name = fn.__name__
 
-    def on_resolve_hook(metric: Metric, context: dict[str, Any] | None) -> Metric:
+    def on_resolve_hook(metric: Metric) -> Metric:
+        if not isinstance(metric, Metric):
+            raise ValueError(f"Metric {metric} is not a valid Metric instance.")
+
         metric.name = name
         metric.metadata.scope = scope if isinstance(scope, Scope) else Scope(scope)
         return metric
 
-    def on_injection_hook(metric: Metric, context: dict[str, Any] | None) -> Metric:
-        if context:
-            if merit_name := context.get("test_item_name", None):
-                metric.metadata.collected_from_merits.add(merit_name)
-            if case_id := context.get("test_item_id_suffix", None):
-                if "case" in context.get("test_item_params", []):
-                    metric.metadata.collected_from_cases.add(case_id)
-            if resource_name := context.get("consumer_name", None):
-                metric.metadata.collected_from_resources.add(resource_name)
-
+    def on_injection_hook(metric: Metric) -> Metric:
+        resolver_ctx = RESOLVER_CONTEXT.get()
+        if consumer_name := resolver_ctx.consumer_name:
+            metric.metadata.collected_from_resources.add(consumer_name)
         return metric
 
-    def on_teardown_hook(metric: Metric, context: dict[str, Any] | None) -> None:
+    def on_teardown_hook(metric: Metric) -> None:
         # TODO: implement pushing data to dashboard
         pass
 

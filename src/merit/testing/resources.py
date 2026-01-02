@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ParamSpec, TypeVar
 
+from merit.testing.context import ResolverContext, resolver_context_scope
+
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -34,9 +36,9 @@ class ResourceDef:
     is_generator: bool
     is_async_generator: bool
     dependencies: list[str] = field(default_factory=list)
-    on_resolve: Callable[[Any, dict[str, Any] | None], Any] | None = None
-    on_injection: Callable[[Any, dict[str, Any] | None], Any] | None = None
-    on_teardown: Callable[[Any, dict[str, Any] | None], Any] | None = None
+    on_resolve: Callable[[Any], Any] | None = None
+    on_injection: Callable[[Any], Any] | None = None
+    on_teardown: Callable[[Any], Any] | None = None
 
 
 _registry: dict[str, ResourceDef] = {}
@@ -46,10 +48,10 @@ def resource(
     fn: Callable[P, T] | None = None,
     *,
     scope: Scope | str = Scope.CASE,
-    on_resolve: Callable[[Any, dict[str, Any] | None], Any] | None = None,
-    on_injection: Callable[[Any, dict[str, Any] | None], Any] | None = None,
-    on_teardown: Callable[[Any, dict[str, Any] | None], Any] | None = None,
-) -> Callable[P, T] | Callable[[Callable[P, T]], Callable[P, T]]:
+    on_resolve: Callable[[Any], Any] | None = None,
+    on_injection: Callable[[Any], Any] | None = None,
+    on_teardown: Callable[[Any], Any] | None = None,
+) -> Any:
     """Register a function as a resource for dependency injection.
 
     Args:
@@ -71,7 +73,7 @@ def resource(
             await conn.close()
     """
 
-    def decorator(fn: Callable[P, T]) -> Callable[P, T]:
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         nonlocal scope
         if isinstance(scope, str):
             scope = Scope(scope)
@@ -147,7 +149,7 @@ class ResourceResolver:
         else:
             self._teardowns.append((scope, name, gen))
 
-    async def resolve(self, name: str, context: dict[str, Any] | None = None) -> Any:
+    async def resolve(self, name: str) -> Any:
         """Resolve a resource by name, including its dependencies."""
         if name not in self._registry:
             msg = f"Unknown resource: {name}"
@@ -162,7 +164,7 @@ class ResourceResolver:
             # hook returns updated value on resource injection from cache
             if defn.on_injection:
                 try:
-                    value = defn.on_injection(value, context)
+                    value = defn.on_injection(value)
                     if inspect.iscoroutine(value):
                         value = await value
                     return value
@@ -172,8 +174,12 @@ class ResourceResolver:
 
         # Resolve dependencies first
         kwargs = {}
-        for dep in defn.dependencies:
-            kwargs[dep] = await self.resolve(dep, {"consumer_name": name})
+        resolver_ctx = ResolverContext(
+            consumer_name=name,
+        )
+        with resolver_context_scope(resolver_ctx):
+            for dep in defn.dependencies:
+                kwargs[dep] = await self.resolve(dep)
 
         # Call the factory
         if defn.is_async_generator:
@@ -192,7 +198,7 @@ class ResourceResolver:
         # hook returns updated value on resource creation
         if defn.on_resolve:
             try:
-                value = defn.on_resolve(value, context)
+                value = defn.on_resolve(value)
                 if inspect.iscoroutine(value):
                     value = await value
             except Exception as e:
@@ -206,7 +212,7 @@ class ResourceResolver:
         # hook returns updated value on resource injection
         if defn.on_injection:
             try:
-                value = defn.on_injection(value, context)
+                value = defn.on_injection(value)
                 if inspect.iscoroutine(value):
                     value = await value
             except Exception as e:
@@ -237,7 +243,7 @@ class ResourceResolver:
                 cache_key = (s, name)
                 if cache_key in self._cache:
                     try:
-                        result = defn.on_teardown(self._cache[cache_key], None)
+                        result = defn.on_teardown(self._cache[cache_key])
                         if inspect.iscoroutine(result):
                             await result
                     except Exception as e:
@@ -266,7 +272,7 @@ class ResourceResolver:
                     cache_key = (s, name)
                     if cache_key in self._cache:
                         try:
-                            result = defn.on_teardown(self._cache[cache_key], None)
+                            result = defn.on_teardown(self._cache[cache_key])
                             if inspect.iscoroutine(result):
                                 await result
                         except Exception as e:

@@ -3,6 +3,12 @@ import math
 import statistics
 from merit.metrics.base import Metric, metric
 from merit.testing.resources import Scope, ResourceResolver, clear_registry
+from merit.testing.context import (
+    ResolverContext,
+    TestContext as Ctx,
+    resolver_context_scope,
+    test_context_scope as context_scope,
+)
 
 
 def test_metric_recording():
@@ -113,7 +119,7 @@ async def test_metric_decorator_no_args():
 
 @pytest.mark.asyncio
 async def test_metric_on_injection_hook_with_context():
-    """Test that metadata is updated during injection with context."""
+    """Merit/case attribution happens in add_record; resource attribution happens on injection."""
     clear_registry()
 
     @metric(scope=Scope.CASE)
@@ -121,24 +127,29 @@ async def test_metric_on_injection_hook_with_context():
         return Metric(name="ctx")
 
     resolver = ResourceResolver()
-    context = {
-        "test_item_name": "my_merit",
-        "test_item_id_suffix": "case_123",
-        "test_item_params": ["case"],
-        "consumer_name": "some_resource"
-    }
-    
-    m = await resolver.resolve("test_ctx_metric", context=context)
+    ctx = Ctx(
+        test_item_name="my_merit",
+        test_item_id_suffix="case_123",
+        test_item_params=["case"],
+    )
+    with context_scope(ctx):
+        with resolver_context_scope(ResolverContext(consumer_name="some_resource")):
+            m = await resolver.resolve("test_ctx_metric")
+            # injection hook attribution
+            assert "some_resource" in m.metadata.collected_from_resources
+            # test data attribution is delegated to add_record
+            assert "my_merit" not in m.metadata.collected_from_merits
+            assert "case_123" not in m.metadata.collected_from_cases
+            m.add_record(1)
     
     assert "my_merit" in m.metadata.collected_from_merits
     assert "case_123" in m.metadata.collected_from_cases
-    assert "some_resource" in m.metadata.collected_from_resources
     assert m.metadata.scope == Scope.CASE
 
 
 @pytest.mark.asyncio
 async def test_metric_on_injection_cumulative_metadata():
-    """Test that metadata accumulates across multiple injections with different contexts."""
+    """Merit attribution accumulates via add_record across multiple contexts."""
     clear_registry()
 
     @metric(scope=Scope.SESSION)
@@ -148,13 +159,15 @@ async def test_metric_on_injection_cumulative_metadata():
     resolver = ResourceResolver()
     
     # First resolution with context A
-    ctx_a = {"test_item_name": "merit_a"}
-    m1 = await resolver.resolve("shared_metric", context=ctx_a)
+    with context_scope(Ctx(test_item_name="merit_a")):
+        m1 = await resolver.resolve("shared_metric")
+        m1.add_record(1)
     assert "merit_a" in m1.metadata.collected_from_merits
     
     # Second resolution with context B
-    ctx_b = {"test_item_name": "merit_b"}
-    m2 = await resolver.resolve("shared_metric", context=ctx_b)
+    with context_scope(Ctx(test_item_name="merit_b")):
+        m2 = await resolver.resolve("shared_metric")
+        m2.add_record(2)
     
     # Verify both are the same instance and contain accumulated metadata
     assert m1 is m2

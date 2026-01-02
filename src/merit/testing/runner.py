@@ -22,6 +22,7 @@ from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
 )
+from merit.testing.context import TestContext, ResolverContext, test_context_scope, resolver_context_scope
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, get_tracer, init_tracing
@@ -473,28 +474,23 @@ class Runner:
 
         expect_failure = item.xfail_reason is not None
 
-        # Resolve resources for this test's parameters
         kwargs = {}
         if item.param_values:
             kwargs.update(item.param_values)
 
-        test_item_context = {
-            "test_item_name": item.name,
-            "test_item_group_name": item.class_name,
-            "test_item_module_path": item.module_path,
-            "test_item_tags": list(item.tags),
-            "test_item_params": item.params,
-            "test_item_id_suffix": item.id_suffix,
-        }
+        resolver_ctx = ResolverContext(
+            consumer_name=item.name,
+        )
 
-        for param in item.params:
-            if param in kwargs:
-                continue
-            try:
-                kwargs[param] = await resolver.resolve(param, test_item_context)
-            except ValueError:
-                # Unknown resource - might be a non-resource param
-                pass
+        with resolver_context_scope(resolver_ctx):
+            for param in item.params:
+                if param in kwargs:
+                    continue
+                try:
+                    kwargs[param] = await resolver.resolve(param)
+                except ValueError:
+                    # Unknown resource - might be a non-resource param
+                    pass
 
         # For class methods, instantiate the class
         instance = None
@@ -504,8 +500,18 @@ class Runner:
             if cls:
                 instance = cls()
 
-        # Execute test, optionally wrapped in a trace span
-        return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+        ctx = TestContext(
+            test_item_name=item.name,
+            test_item_group_name=item.class_name,
+            test_item_module_path=str(item.module_path) if item.module_path else None,
+            test_item_tags=list(item.tags),
+            test_item_params=item.params,
+            test_item_id_suffix=item.id_suffix,
+        )
+
+        with test_context_scope(ctx):
+            return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+
 
     async def _execute_test_body(
         self,

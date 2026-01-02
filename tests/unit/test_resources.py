@@ -2,6 +2,12 @@
 
 import pytest
 
+from merit.testing.context import (
+    TestContext as Ctx,
+    RESOLVER_CONTEXT,
+    TEST_CONTEXT,
+    test_context_scope as context_scope,
+)
 from merit.testing.resources import (
     ResourceResolver,
     Scope,
@@ -358,7 +364,7 @@ class TestResourceHooks:
     async def test_on_injection_called(self):
         injection_calls = []
 
-        def track_injection(value, context):
+        def track_injection(value):
             injection_calls.append(value)
             return value
 
@@ -374,7 +380,7 @@ class TestResourceHooks:
 
     @pytest.mark.asyncio
     async def test_on_injection_transforms_value(self):
-        @resource(on_injection=lambda v, context: v * 2)
+        @resource(on_injection=lambda v: v * 2)
         def doubled():
             return 10
 
@@ -387,7 +393,7 @@ class TestResourceHooks:
     async def test_on_resolve_called_once(self):
         resolve_calls = []
 
-        def track_resolve(value, context):
+        def track_resolve(value):
             resolve_calls.append(value)
             return value
 
@@ -405,7 +411,7 @@ class TestResourceHooks:
     async def test_on_teardown_called_after_generator_teardown(self):
         call_order = []
 
-        def on_teardown_hook(value, context):
+        def on_teardown_hook(value):
             call_order.append(("hook", value))
 
         @resource(on_teardown=on_teardown_hook)
@@ -423,7 +429,7 @@ class TestResourceHooks:
     async def test_on_teardown_with_teardown_scope(self):
         teardown_hook_called = False
 
-        def on_teardown_hook(value, context):
+        def on_teardown_hook(value):
             nonlocal teardown_hook_called
             teardown_hook_called = True
 
@@ -443,12 +449,12 @@ class TestResourceHooks:
         injection_value = None
         teardown_value = None
 
-        def on_injection_hook(value, context):
+        def on_injection_hook(value):
             nonlocal injection_value
             injection_value = value
             return value
 
-        def on_teardown_hook(value, context):
+        def on_teardown_hook(value):
             nonlocal teardown_value
             teardown_value = value
 
@@ -467,11 +473,11 @@ class TestResourceHooks:
 
     @pytest.mark.asyncio
     async def test_on_injection_receives_custom_context(self):
-        received_context = None
+        received_name = None
 
-        def hook(value, context):
-            nonlocal received_context
-            received_context = context
+        def hook(value):
+            nonlocal received_name
+            received_name = TEST_CONTEXT.get().test_item_name
             return value
 
         @resource(on_injection=hook)
@@ -479,16 +485,16 @@ class TestResourceHooks:
             return 42
 
         resolver = ResourceResolver(get_registry())
-        await resolver.resolve("simple", context={"request_id": "123"})
-        assert received_context == {"request_id": "123"}
+        with context_scope(Ctx(test_item_name="my_test")):
+            await resolver.resolve("simple")
+        assert received_name == "my_test"
 
     @pytest.mark.asyncio
     async def test_on_injection_receives_consumer_name_for_dependencies(self):
         contexts = {}
 
-        def hook(value, context):
-            # context might be None if not passed, but resolve() for deps always passes it
-            contexts[context.get("consumer_name")] = value
+        def hook(value):
+            contexts[RESOLVER_CONTEXT.get().consumer_name] = value
             return value
 
         @resource(on_injection=hook)
@@ -509,8 +515,8 @@ class TestResourceHooks:
     async def test_nested_dependency_context(self):
         history = []
 
-        def hook(value, context):
-            history.append((context.get("consumer_name") if context else None, value))
+        def hook(value):
+            history.append((RESOLVER_CONTEXT.get().consumer_name, value))
             return value
 
         @resource(on_injection=hook)
@@ -537,7 +543,7 @@ class TestResourceHooks:
     async def test_on_injection_called_for_cached_resource(self):
         call_count = 0
 
-        def hook(value, context):
+        def hook(value):
             nonlocal call_count
             call_count += 1
             return value
@@ -547,8 +553,8 @@ class TestResourceHooks:
             return "val"
 
         resolver = ResourceResolver(get_registry())
-        await resolver.resolve("cached_res", context={"call": 1})
-        await resolver.resolve("cached_res", context={"call": 2})
+        await resolver.resolve("cached_res")
+        await resolver.resolve("cached_res")
 
         # Hook called twice, once for each injection
         assert call_count == 2
