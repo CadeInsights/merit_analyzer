@@ -22,6 +22,7 @@ from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
 )
+from merit.metrics.result import MetricResult, get_metric_results
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, get_tracer, init_tracing
@@ -193,6 +194,7 @@ class RunResult:
     """Result of a complete test run."""
 
     results: list[TestResult] = field(default_factory=list)
+    metric_results: list[MetricResult] = field(default_factory=list)
     total_duration_ms: float = 0
     stopped_early: bool = False
     environment: RunEnvironment | None = None
@@ -313,6 +315,9 @@ class Runner:
         # Teardown all resources
         await resolver.teardown()
         await close_predicate_api_client()
+
+        # Collect metric assertion results
+        run_result.metric_results = get_metric_results()
 
         run_result.total_duration_ms = (time.perf_counter() - start) * 1000
         if run_result.environment:
@@ -628,6 +633,21 @@ class Runner:
     def _print_summary(self, run_result: RunResult) -> None:
         """Print test run summary."""
         self.console.print()
+
+        # Print metric assertion results
+        if run_result.metric_results:
+            failed_metrics = [m for m in run_result.metric_results if not m.passed]
+            passed_metrics = [m for m in run_result.metric_results if m.passed]
+            if failed_metrics:
+                self.console.print("[bold red]Metric Assertions:[/bold red]")
+                for m in failed_metrics:
+                    self.console.print(f"  [red]✗[/red] {m.name}: {m.error}")
+            if passed_metrics and self.verbosity > 0:
+                self.console.print("[bold green]Metric Assertions:[/bold green]")
+                for m in passed_metrics:
+                    self.console.print(f"  [green]✓[/green] {m.name}")
+            self.console.print()
+
         parts = []
         if run_result.passed:
             parts.append(f"[green]{run_result.passed} passed[/green]")

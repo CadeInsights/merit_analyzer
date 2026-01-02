@@ -7,20 +7,13 @@ to test functions based on parameter name matching.
 import inspect
 from collections.abc import AsyncGenerator, Callable, Generator
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, ParamSpec, TypeVar
+
+from merit.types import Scope
 
 
 P = ParamSpec("P")
 T = TypeVar("T")
-
-
-class Scope(Enum):
-    """Resource lifecycle scope."""
-
-    CASE = "case"  # Fresh instance per test
-    SUITE = "suite"  # Shared across tests in same file
-    SESSION = "session"  # Shared across entire test run
 
 
 @dataclass
