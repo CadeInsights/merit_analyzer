@@ -7,9 +7,11 @@ This module provides the core classes and decorators for recording,
 computing, and managing metrics during test execution.
 """
 
-import threading
+import functools
+import inspect
 import math
 import statistics
+import threading
 import warnings
 from datetime import UTC, datetime
 from collections import Counter
@@ -18,7 +20,9 @@ from dataclasses import dataclass, field
 from typing import Any, ParamSpec
 from pydantic import validate_call
 
-from merit.testing.resources import Scope, resource
+from merit.metrics.result import MetricResult, add_metric_result, get_metric_results
+from merit.types import Scope
+from merit.testing.resources import resource
 
 
 P = ParamSpec("P")
@@ -143,6 +147,7 @@ class Metric:
     _float_values: list[float] = field(default_factory=list, repr=False)
     _values_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _cache: MetricState = field(default_factory=MetricState, repr=False)
+    _assertion_error: AssertionError | None = field(default=None, repr=False)
 
     @validate_call
     def add_record(self, value: int | float | bool | list[int] | list[float] | list[bool]) -> None:
@@ -386,27 +391,75 @@ def metric(
         return lambda f: metric(f, scope=scope)
 
     name = fn.__name__
+    is_generator = inspect.isgeneratorfunction(fn)
+    is_async_generator = inspect.isasyncgenfunction(fn)
 
-    def on_resolve_hook(metric: Metric, context: dict[str, Any] | None) -> Metric:
-        metric.name = name
-        metric.metadata.scope = scope if isinstance(scope, Scope) else Scope(scope)
-        return metric
+    def on_resolve_hook(m: Metric, context: dict[str, Any] | None) -> Metric:
+        m.name = name
+        m.metadata.scope = scope if isinstance(scope, Scope) else Scope(scope)
+        return m
 
-    def on_injection_hook(metric: Metric, context: dict[str, Any] | None) -> Metric:
+    def on_injection_hook(m: Metric, context: dict[str, Any] | None) -> Metric:
         if context:
             if merit_name := context.get("test_item_name", None):
-                metric.metadata.collected_from_merits.add(merit_name)
+                m.metadata.collected_from_merits.add(merit_name)
             if case_id := context.get("test_item_id_suffix", None):
                 if "case" in context.get("test_item_params", []):
-                    metric.metadata.collected_from_cases.add(case_id)
+                    m.metadata.collected_from_cases.add(case_id)
             if resource_name := context.get("consumer_name", None):
-                metric.metadata.collected_from_resources.add(resource_name)
+                m.metadata.collected_from_resources.add(resource_name)
+        return m
 
-        return metric
+    def on_teardown_hook(m: Metric, context: dict[str, Any] | None) -> None:
+        result = MetricResult(
+            name=m.name or name,
+            passed=m._assertion_error is None,
+            error=m._assertion_error,
+            scope=m.metadata.scope,
+        )
+        add_metric_result(result)
 
-    def on_teardown_hook(metric: Metric, context: dict[str, Any] | None) -> None:
-        # TODO: implement pushing data to dashboard
-        pass
+    if is_generator:
+        @functools.wraps(fn)
+        def wrapped_gen(*args: Any, **kwargs: Any) -> Generator[Metric, Any, Any]:
+            gen = fn(*args, **kwargs)
+            metric_instance = next(gen)
+            yield metric_instance
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+            except AssertionError as e:
+                metric_instance._assertion_error = e
+
+        return resource(
+            wrapped_gen,
+            scope=scope,
+            on_resolve=on_resolve_hook,
+            on_injection=on_injection_hook,
+            on_teardown=on_teardown_hook,
+        )
+
+    if is_async_generator:
+        @functools.wraps(fn)
+        async def wrapped_async_gen(*args: Any, **kwargs: Any):
+            gen = fn(*args, **kwargs)
+            metric_instance = await gen.__anext__()
+            yield metric_instance
+            try:
+                await gen.__anext__()
+            except StopAsyncIteration:
+                pass
+            except AssertionError as e:
+                metric_instance._assertion_error = e
+
+        return resource(
+            wrapped_async_gen,
+            scope=scope,
+            on_resolve=on_resolve_hook,
+            on_injection=on_injection_hook,
+            on_teardown=on_teardown_hook,
+        )
 
     return resource(
         fn,
@@ -414,4 +467,4 @@ def metric(
         on_resolve=on_resolve_hook,
         on_injection=on_injection_hook,
         on_teardown=on_teardown_hook,
-    )  # type: ignore
+    )
