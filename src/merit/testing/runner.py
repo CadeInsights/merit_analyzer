@@ -512,6 +512,7 @@ class Runner:
         with test_context_scope(ctx):
             return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
 
+
     async def _execute_test_body(
         self,
         item: TestItem,

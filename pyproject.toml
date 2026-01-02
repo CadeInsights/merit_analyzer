@@ -26,7 +26,6 @@ dependencies = [
     "opentelemetry-sdk>=1.29.0",
     "opentelemetry-instrumentation-openai>=0.49.0",
     "opentelemetry-instrumentation-anthropic>=0.49.0",
-    "libcst>=1.8.6",
 ]
 
 [dependency-groups]
