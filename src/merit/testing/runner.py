@@ -22,7 +22,7 @@ from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
 )
-from merit.testing.context import TestContext, ResolverContext, test_context_scope, resolver_context_scope
+from merit.context import TestContext, ResolverContext, test_context_scope, resolver_context_scope
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, get_tracer, init_tracing

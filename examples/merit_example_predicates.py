@@ -15,8 +15,6 @@ from merit.predicates import (
     matches_writing_layout,
 )
 
-load_dotenv()
-
 # =============================== Define SUT ===============================
 
 

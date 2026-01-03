@@ -8,10 +8,13 @@ import logging
 
 import httpx
 from enum import Enum
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 
 class PredicateType(str, Enum):

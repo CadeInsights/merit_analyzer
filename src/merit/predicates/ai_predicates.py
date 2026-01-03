@@ -3,7 +3,9 @@ from merit.predicates.client import get_predicate_api_client, PredicateType, Pre
 
 
 async def has_conflicting_facts(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if any facts in the actual text contradict any facts in the reference text.
@@ -17,8 +19,6 @@ async def has_conflicting_facts(
     strict : bool, default False
         Whether to use strict matching (explicit contradictions) or
         lenient matching (allowing for semantic inference).
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -45,7 +45,12 @@ async def has_conflicting_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="has_conflicting_facts",
+            actual=actual,
+            reference=reference,
+            strict=strict,
+        ),
         value=not resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -53,7 +58,9 @@ async def has_conflicting_facts(
 
 
 async def has_unsupported_facts(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if any facts in the actual text don't have evidence in the reference text.
@@ -66,8 +73,6 @@ async def has_unsupported_facts(
         The source text or context used for grounding.
     strict : bool, default False
         Whether to require explicit support in the reference text.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -94,7 +99,12 @@ async def has_unsupported_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="has_unsupported_facts",
+            actual=actual,
+            reference=reference,
+            strict=strict,
+        ),
         value=not resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -102,7 +112,9 @@ async def has_unsupported_facts(
 
 
 async def has_facts(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if all facts from the reference text are present in the actual text.
@@ -115,8 +127,6 @@ async def has_facts(
         The reference text containing expected facts.
     strict : bool, default False
         Whether to require an exact factual match.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -143,7 +153,9 @@ async def has_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="has_facts", actual=actual, reference=reference, strict=strict
+        ),
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -151,7 +163,9 @@ async def has_facts(
 
 
 async def matches_facts(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if the actual text and reference text have the same set of facts.
@@ -164,8 +178,6 @@ async def matches_facts(
         The ground truth text to compare against.
     strict : bool, default False
         Whether to require strict semantic equality of facts.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -192,7 +204,9 @@ async def matches_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="matches_facts", actual=actual, reference=reference, strict=strict
+        ),
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -200,7 +214,9 @@ async def matches_facts(
 
 
 async def has_topics(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if the actual text contains all topics from the reference text.
@@ -213,8 +229,6 @@ async def has_topics(
         The reference text containing expected topics.
     strict : bool, default False
         Whether to require an exact topic match.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -241,7 +255,9 @@ async def has_topics(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="has_topics", actual=actual, reference=reference, strict=strict
+        ),
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -249,7 +265,9 @@ async def has_topics(
 
 
 async def follows_policy(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if the actual text follows all rules and instructions in the reference text.
@@ -262,8 +280,6 @@ async def follows_policy(
         The set of policies, requirements, or instructions.
     strict : bool, default False
         Whether to enforce strict adherence to the policy.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -290,7 +306,9 @@ async def follows_policy(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="follows_policy", actual=actual, reference=reference, strict=strict
+        ),
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -298,7 +316,9 @@ async def follows_policy(
 
 
 async def matches_writing_layout(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if the actual text follows the same structure and formatting as the reference.
@@ -311,8 +331,6 @@ async def matches_writing_layout(
         An example document demonstrating the desired structure.
     strict : bool, default False
         Whether to require strict structural alignment.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -340,7 +358,12 @@ async def matches_writing_layout(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="matches_writing_layout",
+            actual=actual,
+            reference=reference,
+            strict=strict,
+        ),
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -348,7 +371,9 @@ async def matches_writing_layout(
 
 
 async def matches_writing_style(
-    actual: str, reference: str, strict: bool = False, metrics: list | None = None
+    actual: str,
+    reference: str,
+    strict: bool = False,
 ) -> PredicateResult:
     """
     Check if the actual text has the same writing style as the reference text.
@@ -361,8 +386,6 @@ async def matches_writing_style(
         An example document demonstrating the desired style.
     strict : bool, default False
         Whether to require strict stylistic matching.
-    metrics : list, optional
-        Optional list to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -389,7 +412,12 @@ async def matches_writing_style(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(actual=actual, reference=reference, strict=strict),
+        predicate_metadata=PredicateMetadata(
+            predicate_name="matches_writing_style",
+            actual=actual,
+            reference=reference,
+            strict=strict,
+        ),
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,

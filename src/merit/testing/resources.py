@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ParamSpec, TypeVar
 
-from merit.testing.context import ResolverContext, resolver_context_scope
+from merit.context import ResolverContext, resolver_context_scope
 
 
 P = ParamSpec("P")

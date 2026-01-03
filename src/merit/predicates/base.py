@@ -8,6 +8,8 @@ from functools import wraps
 from typing import Any, Protocol, overload, Callable, Awaitable, cast
 from pydantic import BaseModel, field_serializer, SerializationInfo, Field
 
+from merit.context import TEST_CONTEXT
+
 logger = logging.getLogger(__name__)
 
 # Protocols for predicate callables
@@ -28,8 +30,6 @@ class SyncPredicate(Protocol):
         Predefined value to compare against.
     strict
         Whether to enforce strict comparison semantics (predicate-specific).
-    metrics
-        Optional list used to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -42,8 +42,6 @@ class SyncPredicate(Protocol):
         actual: Any,
         reference: Any,
         strict: bool = False,
-        metrics: list | None = None,
-        case_id: UUID | None = None,
     ) -> "PredicateResult": ...
 
 
@@ -62,8 +60,6 @@ class AsyncPredicate(Protocol):
         Predefined value to compare against.
     strict
         Whether to enforce strict comparison semantics (predicate-specific).
-    metrics
-        Optional list used to accumulate metric objects produced during the check.
 
     Returns
     -------
@@ -76,8 +72,6 @@ class AsyncPredicate(Protocol):
         actual: Any,
         reference: Any,
         strict: bool = False,
-        metrics: list | None = None,
-        case_id: UUID | None = None,
     ) -> "PredicateResult": ...
 
 
@@ -131,44 +125,6 @@ class PredicateMetadata(BaseModel):
             return v if len(v) <= max_len else v[:max_len] + "..."
         return v
 
-    def model_post_init(self, __context) -> None:
-        """
-        Auto-fill the predicate_name and merit_name fields if not provided.
-        """
-        if self.predicate_name or self.merit_name:
-            return
-
-        frame = inspect.currentframe()
-
-        if frame is None:
-            logger.warning("No frame found for predicate_name and merit_name")
-            return
-
-        frame = frame.f_back
-
-        while frame:
-            func_name = frame.f_code.co_name
-            module_name = frame.f_globals.get("__name__", "")
-
-            if module_name.startswith("pydantic"):
-                frame = frame.f_back
-                continue
-
-            if func_name in {"__init__", "model_post_init", "_get_caller_and_merit_names"}:
-                frame = frame.f_back
-                continue
-
-            if self.predicate_name is None:
-                self.predicate_name = func_name
-
-            if self.merit_name is None and func_name.startswith("merit_"):
-                self.merit_name = func_name
-
-            if self.predicate_name and self.merit_name:
-                break
-
-            frame = frame.f_back
-
 
 class PredicateResult(BaseModel):
     """Result of a single predicate evaluation.
@@ -216,6 +172,16 @@ class PredicateResult(BaseModel):
     def __bool__(self) -> bool:
         return self.value
 
+    def model_post_init(self, __context: Any) -> None:
+        """
+        Auto-fill the predicate_name and merit_name fields if not provided.
+        """
+        ctx = TEST_CONTEXT.get()
+        if ctx.test_item_id_suffix:
+            self.case_id = UUID(ctx.test_item_id_suffix)
+        if ctx.test_item_name:
+            self.predicate_metadata.merit_name = ctx.test_item_name
+
 
 def _filter_supported_kwargs(fn: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
     """Return only kwargs that `fn` can accept."""
@@ -242,8 +208,8 @@ def predicate(
     """Decorator to convert a simple comparison function into a full Predicate.
 
     Wraps a function that takes (actual, reference) -> bool and converts it
-    to follow the Predicate protocol, which includes optional strict,
-    and metrics parameters and returns a PredicateResult.
+    to follow the Predicate protocol, which includes the optional ``strict``
+    flag and returns a PredicateResult.
 
     Args:
         func: A function that takes (actual, reference) and returns bool.
@@ -267,15 +233,11 @@ def predicate(
             actual: Any,
             reference: Any,
             strict: bool = False,
-            metrics: list | None = None,
-            case_id: UUID | None = None,
         ) -> PredicateResult:
             extra = _filter_supported_kwargs(
                 func,
                 {
                     "strict": strict,
-                    "metrics": metrics,
-                    "case_id": case_id,
                 },
             )
             result = await cast(Any, func)(actual, reference, **extra)
@@ -285,7 +247,6 @@ def predicate(
                     reference=str(reference),
                     strict=strict,
                 ),
-                case_id=case_id,
                 value=bool(result),
             )
             predicate_result.predicate_metadata.predicate_name = func.__name__
@@ -293,21 +254,16 @@ def predicate(
 
         return cast(AsyncPredicate, async_wrapper)
     else:
-
         @wraps(func)
         def sync_wrapper(
             actual: Any,
             reference: Any,
             strict: bool = False,
-            metrics: list | None = None,
-            case_id: UUID | None = None,
         ) -> PredicateResult:
             extra = _filter_supported_kwargs(
                 func,
                 {
                     "strict": strict,
-                    "metrics": metrics,
-                    "case_id": case_id,
                 },
             )
             result = cast(Any, func)(actual, reference, **extra)
@@ -317,7 +273,6 @@ def predicate(
                     reference=str(reference),
                     strict=strict,
                 ),
-                case_id=case_id,
                 value=bool(result),
             )
             predicate_result.predicate_metadata.predicate_name = func.__name__

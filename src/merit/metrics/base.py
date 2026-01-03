@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from typing import Any, ParamSpec
 from pydantic import validate_call
 
+from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT
 from merit.testing.resources import Scope, resource
-from merit.testing.context import RESOLVER_CONTEXT, TEST_CONTEXT
 
 
 P = ParamSpec("P")
