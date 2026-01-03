@@ -20,7 +20,7 @@ from pydantic import validate_call
 
 from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT
 from merit.testing.resources import Scope, resource
-
+from merit.assertions.result import AssertionResult
 
 P = ParamSpec("P")
 
@@ -146,7 +146,7 @@ class Metric:
     _cache: MetricState = field(default_factory=MetricState, repr=False)
 
     @validate_call
-    def add_record(self, value: int | float | bool | list[int] | list[float] | list[bool]) -> None:
+    def add_record(self, value: int | float | bool | list[int] | list[float] | list[bool] | AssertionResult) -> None:
         """
         Record one or more new data points.
 
@@ -156,22 +156,27 @@ class Metric:
             The value(s) to add to the metric.
         """
         with self._values_lock:
-            test_ctx = TEST_CONTEXT.get()
-            if item_name := test_ctx.test_item_name:
-                self.metadata.collected_from_merits.add(item_name)
-            if id_suffix := test_ctx.test_item_id_suffix:
-                self.metadata.collected_from_cases.add(id_suffix)
+            if test_ctx := TEST_CONTEXT.get():
+                if item_name := test_ctx.test_item_name:
+                    self.metadata.collected_from_merits.add(item_name)
+                if id_suffix := test_ctx.test_item_id_suffix:
+                    self.metadata.collected_from_cases.add(id_suffix)
 
             if self.metadata.first_item_recorded_at is None:
                 self.metadata.first_item_recorded_at = datetime.now(UTC)
             self.metadata.last_item_recorded_at = datetime.now(UTC)
             self._cache = MetricState()
-            if isinstance(value, list):
-                self._raw_values.extend(value)
-                self._float_values.extend(float(v) for v in value)
-            else:
-                self._raw_values.append(value)
-                self._float_values.append(float(value))
+
+            match value:
+                case list():
+                    self._raw_values.extend(value)
+                    self._float_values.extend(float(v) for v in value)
+                case AssertionResult():
+                    self._raw_values.append(value.passed)
+                    self._float_values.append(1.0 if value.passed else 0.0)
+                case _:
+                    self._raw_values.append(value)
+                    self._float_values.append(float(value))
 
     @property
     def raw_values(self) -> list[int | float | bool]:
@@ -403,9 +408,9 @@ def metric(
         return metric
 
     def on_injection_hook(metric: Metric) -> Metric:
-        resolver_ctx = RESOLVER_CONTEXT.get()
-        if consumer_name := resolver_ctx.consumer_name:
-            metric.metadata.collected_from_resources.add(consumer_name)
+        if resolver_ctx := RESOLVER_CONTEXT.get():
+            if consumer_name := resolver_ctx.consumer_name:
+                metric.metadata.collected_from_resources.add(consumer_name)
         return metric
 
     def on_teardown_hook(metric: Metric) -> None:

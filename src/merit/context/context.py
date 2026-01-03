@@ -5,6 +5,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Iterator
 
+from merit.assertions.result import AssertionResult
+from merit.metrics.base import Metric
+
+
+TEST_CONTEXT: ContextVar[TestContext | None] = ContextVar("test_context", default=None)
+RESOLVER_CONTEXT: ContextVar[ResolverContext | None] = ContextVar("resolver_context", default=None)
+METRICS_CONTEXT: ContextVar[list[Metric] | None] = ContextVar("metrics_context", default=None)
+
 
 @dataclass(frozen=True, slots=True)
 class TestContext:
@@ -24,6 +32,8 @@ class TestContext:
         Parameter values/labels for parametrized test items.
     test_item_id_suffix
         Optional extra suffix appended to an item id to ensure uniqueness.
+    collected_assertion_results
+        List of assertion results collected within the test item.
     """
 
     test_item_name: str | None = None
@@ -32,6 +42,7 @@ class TestContext:
     test_item_tags: list[str] = field(default_factory=list)
     test_item_params: list[str] = field(default_factory=list)
     test_item_id_suffix: str | None = None
+    collected_assertion_results: list[AssertionResult] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,8 +58,13 @@ class ResolverContext:
     consumer_name: str | None = None
 
 
-TEST_CONTEXT: ContextVar[TestContext] = ContextVar("test_context", default=TestContext())
-RESOLVER_CONTEXT: ContextVar[ResolverContext] = ContextVar("resolver_context", default=ResolverContext())
+@contextmanager
+def errors_to_metrics(ctx: list[Metric]) -> Iterator[None]:
+    token = METRICS_CONTEXT.set(ctx)
+    try:
+        yield
+    finally:
+        METRICS_CONTEXT.reset(token)
 
 
 @contextmanager
