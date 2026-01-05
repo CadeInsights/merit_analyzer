@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 from opentelemetry.trace import StatusCode
 from rich.console import Console
 
+from merit.assertions.result import AssertionResult
 from merit.predicates import (
     PredicateResult,
     close_predicate_api_client,
@@ -185,7 +186,7 @@ class TestResult:
     duration_ms: float
     error: Exception | None = None
     output: Any = None
-    predicate_results: list[PredicateResult] = field(default_factory=list) # TODO: implement collecting and printing predicate results
+    assertion_results: list[AssertionResult] = field(default_factory=list)
     repeat_runs: list["TestResult"] | None = None
 
 
@@ -510,7 +511,9 @@ class Runner:
         )
 
         with test_context_scope(ctx):
-            return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+            test_result = await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+            test_result.assertion_results = ctx.collected_assertion_results
+            return test_result
 
 
     async def _execute_test_body(

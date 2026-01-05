@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
-from merit.predicates import PredicateResult
-from merit.metrics import MetricResult
+from merit.predicates.base import PredicateResult
+from merit.metrics.result import MetricResult
 
 @dataclass
 class AssertionResult:

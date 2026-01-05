@@ -171,9 +171,11 @@ class Metric:
                 case list():
                     self._raw_values.extend(value)
                     self._float_values.extend(float(v) for v in value)
+
                 case AssertionResult():
                     self._raw_values.append(value.passed)
                     self._float_values.append(1.0 if value.passed else 0.0)
+                    
                 case _:
                     self._raw_values.append(value)
                     self._float_values.append(float(value))

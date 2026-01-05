@@ -1,5 +1,7 @@
 """Test discovery for merit_* files and functions."""
 
+import ast
+import importlib.abc
 import importlib.util
 import inspect
 import sys
@@ -7,11 +9,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from merit.testing.parametrize import get_parameter_sets
 from merit.testing.repeat import get_repeat_data
 from merit.testing.tags import TagData, get_tag_data, merge_tag_data
+
+if TYPE_CHECKING:
+    from merit.lib import MeritModuleLoader
 
 
 @dataclass
@@ -48,8 +53,26 @@ class TestItem:
 
 
 def _load_module(path: Path) -> ModuleType:
-    """Dynamically load a Python module from path."""
-    spec = importlib.util.spec_from_file_location(path.stem, path)
+    """Dynamically load a Python module from path.
+    
+    This function creates a custom loader that implements Python's import
+    protocol, allowing for AST transformations and global injections while
+    properly participating in the import system.
+    
+    Args:
+        path: Path to the Python module file.
+        
+    Returns:
+        The loaded and executed module.
+        
+    Raises:
+        ImportError: If the module cannot be loaded.
+    """
+    # Lazy import to avoid circular dependency with merit.lib
+    from merit.lib import MeritModuleLoader  # noqa: PLC0415
+
+    loader = MeritModuleLoader(path.stem, path)
+    spec = importlib.util.spec_from_file_location(path.stem, path, loader=loader)
     if spec is None or spec.loader is None:
         msg = f"Cannot load module from {path}"
         raise ImportError(msg)

@@ -3,10 +3,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 
-from merit.assertions.result import AssertionResult
-from merit.metrics.base import Metric
+if TYPE_CHECKING:
+    from merit.metrics.base import Metric
+    from merit.assertions.result import AssertionResult
 
 
 TEST_CONTEXT: ContextVar[TestContext | None] = ContextVar("test_context", default=None)

@@ -4,10 +4,12 @@ import asyncio
 import os
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from rich.console import Console
 
+from merit.assertions.result import AssertionResult
 from merit.testing.discovery import TestItem
 from merit.testing.resources import clear_registry, resource
 from merit.testing.runner import (
@@ -230,6 +232,34 @@ class TestRunner:
         result = await runner.run(items=[item])
 
         assert result.failed == 1
+
+    @pytest.mark.asyncio
+    async def test_attaches_collected_assertion_results_to_test_result(self, tmp_path: Path):
+        """Runner should copy assertions collected in TestContext onto TestResult."""
+        module_path = tmp_path / f"merit_runner_assertions_capture_{uuid4().hex}.py"
+        module_path.write_text(
+            "\n".join(
+                [
+                    "def merit_records_assertions():",
+                    "    assert 1 == 1",
+                    "    assert 2 + 2 == 4",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        runner = Runner(console=Console(quiet=True))
+        run_result = await runner.run(path=str(tmp_path))
+
+        assert run_result.total == 1
+        test_result = run_result.results[0]
+        assert test_result.status == TestStatus.PASSED
+
+        assert len(test_result.assertion_results) == 2
+        assert all(isinstance(ar, AssertionResult) for ar in test_result.assertion_results)
+        assert [ar.passed for ar in test_result.assertion_results] == [True, True]
+        assert [ar.expression for ar in test_result.assertion_results] == ["1 == 1", "2 + 2 == 4"]
 
 
 class TestResourceInjection:

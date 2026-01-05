@@ -1,11 +1,6 @@
 import merit
 
-from merit.metrics.base import Metric
-
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from merit import errors_to_metrics, Metric
 
 # Composite metrics
 
@@ -68,3 +63,21 @@ def hallucinations_counter(hallucinations_per_case: Metric):
 @merit.parametrize("h", [5, 10, 15])
 def merit_hallucinations_test(h: int, hallucinations_counter: Metric):
     hallucinations_counter.add_record(h)  # writes per each iterated case
+
+
+# Register metrics with error_to_metrics
+
+
+@merit.metric
+def facts_errors():
+    metric = Metric()
+    yield metric
+
+    assert metric.counter[False] == 2
+
+
+def merit_facts_errors(facts_errors: Metric):
+    with errors_to_metrics([facts_errors]):
+        assert "fact1" == "fact2"
+        assert "fact3" == "fact4"
+        assert "fact5" == "fact5"

@@ -176,11 +176,11 @@ class PredicateResult(BaseModel):
         """
         Auto-fill the predicate_name and merit_name fields if not provided.
         """
-        ctx = TEST_CONTEXT.get()
-        if ctx.test_item_id_suffix:
-            self.case_id = UUID(ctx.test_item_id_suffix)
-        if ctx.test_item_name:
-            self.predicate_metadata.merit_name = ctx.test_item_name
+        if ctx := TEST_CONTEXT.get():
+            if ctx.test_item_id_suffix:
+                self.case_id = UUID(ctx.test_item_id_suffix)
+            if ctx.test_item_name:
+                self.predicate_metadata.merit_name = ctx.test_item_name
 
 
 def _filter_supported_kwargs(fn: Any, kwargs: dict[str, Any]) -> dict[str, Any]:

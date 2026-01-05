@@ -5,6 +5,7 @@ from .context import (
     RESOLVER_CONTEXT,
     resolver_context_scope,
     test_context_scope,
+    errors_to_metrics,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "RESOLVER_CONTEXT",
     "resolver_context_scope",
     "test_context_scope",
+    "errors_to_metrics",
 ]
