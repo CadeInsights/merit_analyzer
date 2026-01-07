@@ -156,11 +156,11 @@ class Metric:
             The value(s) to add to the metric.
         """
         with self._values_lock:
-            test_ctx = TEST_CONTEXT.get()
-            if item_name := test_ctx.test_item_name:
-                self.metadata.collected_from_merits.add(item_name)
-            if id_suffix := test_ctx.test_item_id_suffix:
-                self.metadata.collected_from_cases.add(id_suffix)
+            if test_ctx := TEST_CONTEXT.get():
+                if test_ctx.test_item_name:
+                    self.metadata.collected_from_merits.add(test_ctx.test_item_name)
+                if test_ctx.test_item_id_suffix:
+                    self.metadata.collected_from_cases.add(test_ctx.test_item_id_suffix)
 
             if self.metadata.first_item_recorded_at is None:
                 self.metadata.first_item_recorded_at = datetime.now(UTC)
@@ -403,9 +403,9 @@ def metric(
         return metric
 
     def on_injection_hook(metric: Metric) -> Metric:
-        resolver_ctx = RESOLVER_CONTEXT.get()
-        if consumer_name := resolver_ctx.consumer_name:
-            metric.metadata.collected_from_resources.add(consumer_name)
+        if resolver_ctx := RESOLVER_CONTEXT.get():
+            if resolver_ctx.consumer_name:
+                metric.metadata.collected_from_resources.add(resolver_ctx.consumer_name)
         return metric
 
     def on_teardown_hook(metric: Metric) -> None:

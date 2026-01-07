@@ -28,13 +28,15 @@ class TestContext:
     test_item_id_suffix
         Optional extra suffix appended to an item id to ensure uniqueness.
     """
-
+    # read
     test_item_name: str | None = None
     test_item_group_name: str | None = None
     test_item_module_path: str | None = None
     test_item_tags: list[str] = field(default_factory=list)
     test_item_params: list[str] = field(default_factory=list)
     test_item_id_suffix: str | None = None
+
+    # write
     assertion_results: list[AssertionResult] = field(default_factory=list)
 
 
@@ -51,8 +53,9 @@ class ResolverContext:
     consumer_name: str | None = None
 
 
-TEST_CONTEXT: ContextVar[TestContext] = ContextVar("test_context", default=TestContext())
-RESOLVER_CONTEXT: ContextVar[ResolverContext] = ContextVar("resolver_context", default=ResolverContext())
+TEST_CONTEXT: ContextVar[TestContext | None] = ContextVar("test_context", default=None)
+RESOLVER_CONTEXT: ContextVar[ResolverContext | None] = ContextVar("resolver_context", default=None)
+ASSERTION_CONTEXT: ContextVar[AssertionResult | None] = ContextVar("assertion_context", default=None)
 
 
 @contextmanager
@@ -72,3 +75,11 @@ def resolver_context_scope(ctx: ResolverContext) -> Iterator[None]:
     finally:
         RESOLVER_CONTEXT.reset(token)
 
+
+@contextmanager
+def assertion_context_scope(ctx: AssertionResult) -> Iterator[None]:
+    token = ASSERTION_CONTEXT.set(ctx)
+    try:
+        yield
+    finally:
+        ASSERTION_CONTEXT.reset(token)
