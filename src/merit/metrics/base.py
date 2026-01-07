@@ -403,9 +403,9 @@ def metric(
         return metric
 
     def on_injection_hook(metric: Metric) -> Metric:
-        resolver_ctx = RESOLVER_CONTEXT.get()
-        if resolver_ctx and resolver_ctx.consumer_name:
-            metric.metadata.collected_from_resources.add(resolver_ctx.consumer_name)
+        if resolver_ctx := RESOLVER_CONTEXT.get():
+            if resolver_ctx.consumer_name:
+                metric.metadata.collected_from_resources.add(resolver_ctx.consumer_name)
         return metric
 
     def on_teardown_hook(metric: Metric) -> None:
