@@ -3,7 +3,7 @@ import math
 import statistics
 from merit.metrics.base import Metric, metric
 from merit.testing.resources import Scope, ResourceResolver, clear_registry
-from merit.testing.context import (
+from merit.context import (
     ResolverContext,
     TestContext as Ctx,
     resolver_context_scope,

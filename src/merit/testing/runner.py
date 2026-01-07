@@ -510,7 +510,9 @@ class Runner:
         )
 
         with test_context_scope(ctx):
-            return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+            test_result = await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+            test_result.assertion_results = ctx.assertion_results.copy()
+            return test_result
 
 
     async def _execute_test_body(

@@ -2,7 +2,7 @@
 
 import pytest
 
-from merit.testing.context import (
+from merit.context import (
     TestContext as Ctx,
     RESOLVER_CONTEXT,
     TEST_CONTEXT,
@@ -477,7 +477,10 @@ class TestResourceHooks:
 
         def hook(value):
             nonlocal received_name
-            received_name = TEST_CONTEXT.get().test_item_name
+            if test_ctx := TEST_CONTEXT.get():
+                received_name = test_ctx.test_item_name
+            else:
+                received_name = "unknown"
             return value
 
         @resource(on_injection=hook)
@@ -494,7 +497,10 @@ class TestResourceHooks:
         contexts = {}
 
         def hook(value):
-            contexts[RESOLVER_CONTEXT.get().consumer_name] = value
+            if resolver_ctx := RESOLVER_CONTEXT.get():
+                contexts[resolver_ctx.consumer_name] = value
+            else:
+                contexts[("unknown", value)] = value
             return value
 
         @resource(on_injection=hook)
@@ -516,7 +522,10 @@ class TestResourceHooks:
         history = []
 
         def hook(value):
-            history.append((RESOLVER_CONTEXT.get().consumer_name, value))
+            if resolver_ctx := RESOLVER_CONTEXT.get():
+                history.append((resolver_ctx.consumer_name, value))
+            else:
+                history.append(("unknown", value))
             return value
 
         @resource(on_injection=hook)

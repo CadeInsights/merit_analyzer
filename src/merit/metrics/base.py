@@ -18,11 +18,33 @@ from dataclasses import dataclass, field
 from typing import Any, ParamSpec
 from pydantic import validate_call
 
-from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT
+from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT, ASSERTION_CONTEXT
 from merit.testing.resources import Scope, resource
 
 
 P = ParamSpec("P")
+
+
+@dataclass(slots=True, frozen=True)
+class MetricValue:
+    """
+    Snapshot of a metric value captured during assertion evaluation.
+
+    Used to record *what* metric property was accessed and the
+    *value* that was observed at that moment.
+
+    Attributes
+    ----------
+    metric_full_name : str
+        Fully qualified metric property name, typically of the form
+        ``"<metric_name>.<property>"`` (e.g., ``"latency_ms.p95"``).
+    metric_value : int | float | bool | list[int | float | bool]
+        The value observed for that property (e.g., a float for ``mean``,
+        a tuple for confidence intervals, or a list for ``raw_values``).
+    """
+
+    metric_full_name: str
+    metric_value: int | float | bool | list[int | float | bool] | tuple[float, float] | tuple[float, float, float]
 
 
 @dataclass
@@ -145,6 +167,13 @@ class Metric:
     _values_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _cache: MetricState = field(default_factory=MetricState, repr=False)
 
+    def _push_value_to_context(self, prop_name: str, value: Any) -> None:
+        """Helper to record metric property access in assertion context."""
+        if as_ctx := ASSERTION_CONTEXT.get():
+            full_name = f"{self.name or 'unnamed_metric'}.{prop_name}"
+            mv = MetricValue(metric_full_name=full_name, metric_value=value)
+            as_ctx.metric_values.add(mv)
+
     @validate_call
     def add_record(self, value: int | float | bool | list[int] | list[float] | list[bool]) -> None:
         """
@@ -176,21 +205,27 @@ class Metric:
     @property
     def raw_values(self) -> list[int | float | bool]:
         with self._values_lock:
-            return list(self._raw_values)
+            value = list(self._raw_values)
+            self._push_value_to_context("raw_values", value)
+            return value
 
     @property
     def len(self) -> int:
         with self._values_lock:
             if self._cache.len is None:
                 self._cache.len = len(self._raw_values)
-            return self._cache.len
+            value = self._cache.len
+            self._push_value_to_context("len", value)
+            return value
 
     @property
     def sum(self) -> float:
         with self._values_lock:
             if self._cache.sum is None:
                 self._cache.sum = math.fsum(self._float_values)
-            return self._cache.sum
+            value = self._cache.sum
+            self._push_value_to_context("sum", value)
+            return value
 
     @property
     def min(self) -> float:
@@ -198,9 +233,12 @@ class Metric:
             if self._cache.min is None:
                 if self.len == 0:
                     warnings.warn(f"Cannot compute min for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
-                    return math.nan
-                self._cache.min = min(self._float_values)
-            return self._cache.min
+                    self._cache.min = math.nan
+                else:
+                    self._cache.min = min(self._float_values)
+            value = self._cache.min
+            self._push_value_to_context("min", value)
+            return value
 
     @property
     def max(self) -> float:
@@ -208,9 +246,13 @@ class Metric:
             if self._cache.max is None:
                 if self.len == 0:
                     warnings.warn(f"Cannot compute max for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
-                    return math.nan
-                self._cache.max = max(self._float_values)
-            return self._cache.max
+                    value = math.nan
+                    self._cache.max = value
+                else:
+                    self._cache.max = max(self._float_values)
+            value = self._cache.max
+            self._push_value_to_context("max", value)
+            return value
 
     @property
     def median(self) -> float:
@@ -218,9 +260,12 @@ class Metric:
             if self._cache.median is None:
                 if self.len == 0:
                     warnings.warn(f"Cannot compute median for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
-                    return math.nan
-                self._cache.median = statistics.median(self._float_values)
-            return self._cache.median
+                    self._cache.median = math.nan
+                else:
+                    self._cache.median = statistics.median(self._float_values)
+            value = self._cache.median
+            self._push_value_to_context("median", value)
+            return value
 
     @property
     def mean(self) -> float:
@@ -228,9 +273,12 @@ class Metric:
             if self._cache.mean is None:
                 if self.len == 0:
                     warnings.warn(f"Cannot compute mean for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
-                    return math.nan
-                self._cache.mean = statistics.mean(self._float_values)
-            return self._cache.mean
+                    self._cache.mean = math.nan
+                else:
+                    self._cache.mean = statistics.mean(self._float_values)
+            value = self._cache.mean
+            self._push_value_to_context("mean", value)
+            return value
 
     @property
     def variance(self) -> float:
@@ -238,9 +286,12 @@ class Metric:
             if self._cache.variance is None:
                 if self.len < 2:
                     warnings.warn(f"Cannot compute variance for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
-                    return math.nan
-                self._cache.variance = statistics.variance(self._float_values, xbar=self.mean)
-            return self._cache.variance
+                    self._cache.variance = math.nan
+                else:
+                    self._cache.variance = statistics.variance(self._float_values, xbar=self.mean)
+            value = self._cache.variance
+            self._push_value_to_context("variance", value)
+            return value
 
     @property
     def std(self) -> float:
@@ -248,23 +299,30 @@ class Metric:
             if self._cache.std is None:
                 if self.len < 2:
                     warnings.warn(f"Cannot compute std for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
-                    return math.nan
-                self._cache.std = statistics.stdev(self._float_values, xbar=self.mean)
-            return self._cache.std
+                    self._cache.std = math.nan
+                else:
+                    self._cache.std = statistics.stdev(self._float_values, xbar=self.mean)
+            value = self._cache.std
+            self._push_value_to_context("std", value)
+            return value
 
     @property
     def pvariance(self) -> float:
         with self._values_lock:
             if self._cache.pvariance is None:
                 self._cache.pvariance = statistics.pvariance(self._float_values, mu=self.mean)
-            return self._cache.pvariance
+            value = self._cache.pvariance
+            self._push_value_to_context("pvariance", value)
+            return value
 
     @property
     def pstd(self) -> float:
         with self._values_lock:
             if self._cache.pstd is None:
                 self._cache.pstd = statistics.pstdev(self._float_values, mu=self.mean)
-            return self._cache.pstd
+            value = self._cache.pstd
+            self._push_value_to_context("pstd", value)
+            return value
 
     @property
     def ci_90(self) -> tuple[float, float]:
@@ -272,7 +330,9 @@ class Metric:
             if self._cache.ci_90 is None:
                 half = 1.645 * self.std / math.sqrt(self.len)
                 self._cache.ci_90 = (self.mean - half, self.mean + half)
-            return self._cache.ci_90
+            value = self._cache.ci_90
+            self._push_value_to_context("ci_90", value)
+            return value
 
     @property
     def ci_95(self) -> tuple[float, float]:
@@ -280,7 +340,9 @@ class Metric:
             if self._cache.ci_95 is None:
                 half = 1.96 * self.std / math.sqrt(self.len)
                 self._cache.ci_95 = (self.mean - half, self.mean + half)
-            return self._cache.ci_95
+            value = self._cache.ci_95
+            self._push_value_to_context("ci_95", value)
+            return value
 
     @property
     def ci_99(self) -> tuple[float, float]:
@@ -288,7 +350,9 @@ class Metric:
             if self._cache.ci_99 is None:
                 half = 2.576 * self.std / math.sqrt(self.len)
                 self._cache.ci_99 = (self.mean - half, self.mean + half)
-            return self._cache.ci_99
+            value = self._cache.ci_99
+            self._push_value_to_context("ci_99", value)
+            return value
 
     @property
     def percentiles(self) -> list[float]:
@@ -301,12 +365,16 @@ class Metric:
                     self._cache.percentiles = statistics.quantiles(
                         self._float_values, n=100, method="inclusive"
                     )
-            return self._cache.percentiles
+            value = self._cache.percentiles
+            self._push_value_to_context("percentiles", value)
+            return value
 
     @property
     def p25(self) -> float:
         with self._values_lock:
-            return self.percentiles[24]
+            value = self.percentiles[24]
+            self._push_value_to_context("p25", value)
+            return value
 
     @property
     def p50(self) -> float:
@@ -315,22 +383,30 @@ class Metric:
     @property
     def p75(self) -> float:
         with self._values_lock:
-            return self.percentiles[74]
+            value = self.percentiles[74]
+            self._push_value_to_context("p75", value)
+            return value
 
     @property
     def p90(self) -> float:
         with self._values_lock:
-            return self.percentiles[89]
+            value = self.percentiles[89]
+            self._push_value_to_context("p90", value)
+            return value
 
     @property
     def p95(self) -> float:
         with self._values_lock:
-            return self.percentiles[94]
+            value = self.percentiles[94]
+            self._push_value_to_context("p95", value)
+            return value
 
     @property
     def p99(self) -> float:
         with self._values_lock:
-            return self.percentiles[98]
+            value = self.percentiles[98]
+            self._push_value_to_context("p99", value)
+            return value
 
     @property
     def counter(self) -> dict[int | float | bool, int]:
@@ -339,7 +415,9 @@ class Metric:
                 self._cache.counter = dict[int | float | bool, int](
                     Counter(self._raw_values)
                 )
-            return self._cache.counter
+            value = self._cache.counter
+            self._push_value_to_context("counter", value)
+            return value
 
     @property
     def distribution(self) -> dict[int | float | bool, float]:
@@ -350,12 +428,16 @@ class Metric:
                 self._cache.distribution = (
                     {k: v / total for k, v in counts.items()} if total > 0 else {}
                 )
-            return self._cache.distribution
+            value = self._cache.distribution
+            self._push_value_to_context("distribution", value)
+            return value
 
     @property
     def final_value(self) -> int | float | bool | list[int | float | bool] | None:
         with self._values_lock:
-            return self._cache.final_value
+            value = self._cache.final_value
+            self._push_value_to_context("final_value", value)
+            return value
 
     @final_value.setter
     def final_value(self, value: int | float | bool | list[int | float | bool] | None) -> None:
