@@ -1,8 +1,5 @@
 import asyncio
-import io
 from pathlib import Path
-
-from rich.console import Console
 
 from merit.testing import Runner
 from merit.testing.discovery import TestItem
@@ -34,8 +31,7 @@ def test_runner_applies_parameter_values():
     def resource_b():
         return "from_resource"
 
-    console = Console(file=io.StringIO())
-    runner = Runner(console=console)
+    runner = Runner(reporters=[])
 
     item = TestItem(
         name="merit_sample",

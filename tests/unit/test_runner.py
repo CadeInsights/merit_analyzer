@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from rich.console import Console
 
 from merit.testing.discovery import TestItem
 from merit.testing.resources import clear_registry, resource
@@ -145,7 +144,7 @@ class TestRunner:
             assert True
 
         item = make_item(passing_test)
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.passed == 1
@@ -157,7 +156,7 @@ class TestRunner:
             assert False, "expected failure"
 
         item = make_item(failing_test)
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.failed == 1
@@ -170,7 +169,7 @@ class TestRunner:
             assert True
 
         item = make_item(async_test, is_async=True)
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.passed == 1
@@ -181,7 +180,7 @@ class TestRunner:
             raise RuntimeError("something broke")
 
         item = make_item(error_test)
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.errors == 1
@@ -193,7 +192,7 @@ class TestRunner:
             pass
 
         item = make_item(skipped_test, skip_reason="not ready")
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.skipped == 1
@@ -204,7 +203,7 @@ class TestRunner:
             assert False
 
         item = make_item(xfail_test, xfail_reason="known bug")
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.xfailed == 1
@@ -215,7 +214,7 @@ class TestRunner:
             pass
 
         item = make_item(xpass_test, xfail_reason="expected to fail")
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.xpassed == 1
@@ -226,7 +225,7 @@ class TestRunner:
             pass
 
         item = make_item(strict_xfail_test, xfail_reason="must fail", xfail_strict=True)
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         assert result.failed == 1
@@ -247,7 +246,7 @@ class TestResourceInjection:
             captured.append(injected)
 
         item = make_item(test_with_resource, params=["injected"])
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         await runner.run(items=[item])
 
         assert captured == ["injected_value"]
@@ -258,7 +257,7 @@ class TestResourceInjection:
             pass
 
         item = make_item(test_unknown, params=["unknown_param"])
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
         # Should error because unknown_param is not provided
@@ -278,7 +277,7 @@ class TestMaxfail:
             assert False
 
         items = [make_item(failing, name=f"fail_{i}") for i in range(5)]
-        runner = Runner(console=Console(quiet=True), maxfail=2)
+        runner = Runner(reporters=[], maxfail=2)
         result = await runner.run(items=items)
 
         assert result.failed == 2
@@ -291,7 +290,7 @@ class TestMaxfail:
             raise RuntimeError
 
         items = [make_item(error_test, name=f"err_{i}") for i in range(5)]
-        runner = Runner(console=Console(quiet=True), maxfail=1)
+        runner = Runner(reporters=[], maxfail=1)
         result = await runner.run(items=items)
 
         assert result.errors == 1
@@ -310,7 +309,7 @@ class TestConcurrency:
             await asyncio.sleep(0.1)
 
         items = [make_item(slow_test, name=f"slow_{i}", is_async=True) for i in range(3)]
-        runner = Runner(console=Console(quiet=True), concurrency=3)
+        runner = Runner(reporters=[], concurrency=3)
         result = await runner.run(items=items)
 
         assert result.passed == 3
@@ -334,7 +333,7 @@ class TestConcurrency:
 
             items.append(make_item(test_fn, name=f"test_{i}", is_async=True))
 
-        runner = Runner(console=Console(quiet=True), concurrency=1)
+        runner = Runner(reporters=[], concurrency=1)
         result = await runner.run(items=items)
 
         assert result.passed == 3
@@ -343,7 +342,7 @@ class TestConcurrency:
 
     @pytest.mark.asyncio
     async def test_concurrency_zero_caps_at_default(self):
-        runner = Runner(console=Console(quiet=True), concurrency=0)
+        runner = Runner(reporters=[], concurrency=0)
         assert runner.concurrency == Runner.DEFAULT_MAX_CONCURRENCY
 
     @pytest.mark.asyncio
@@ -357,7 +356,7 @@ class TestConcurrency:
             assert False
 
         items = [make_item(failing, name=f"fail_{i}", is_async=True) for i in range(10)]
-        runner = Runner(console=Console(quiet=True), concurrency=5, maxfail=2)
+        runner = Runner(reporters=[], concurrency=5, maxfail=2)
         result = await runner.run(items=items)
 
         assert result.stopped_early
@@ -374,7 +373,7 @@ class TestTimeout:
             await asyncio.sleep(10)
 
         item = make_item(slow_test, is_async=True)
-        runner = Runner(console=Console(quiet=True), concurrency=2, timeout=0.1)
+        runner = Runner(reporters=[], concurrency=2, timeout=0.1)
         result = await runner.run(items=[item])
 
         assert result.errors == 1
@@ -386,7 +385,7 @@ class TestTimeout:
             await asyncio.sleep(0.01)
 
         item = make_item(quick_test, is_async=True)
-        runner = Runner(console=Console(quiet=True), concurrency=2)
+        runner = Runner(reporters=[], concurrency=2)
         # timeout is None by default
         assert runner.timeout is None
 
@@ -411,7 +410,7 @@ class TestResultOrdering:
 
             items.append(make_item(test_fn, name=f"test_{i}", is_async=True))
 
-        runner = Runner(console=Console(quiet=True), concurrency=3)
+        runner = Runner(reporters=[], concurrency=3)
         result = await runner.run(items=items)
 
         # Results should be in discovery order, not completion order
@@ -440,7 +439,7 @@ class TestResourceTeardown:
             make_item(test_with_case, name="test_2", params=["case_res"]),
         ]
 
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         result = await runner.run(items=items)
 
         assert result.passed == 2
@@ -466,7 +465,7 @@ class TestResourceTeardown:
             make_item(test_suite, name="test_2", params=["suite_res"]),
         ]
 
-        runner = Runner(console=Console(quiet=True))
+        runner = Runner(reporters=[])
         await runner.run(items=items)
 
         assert create_count == 1

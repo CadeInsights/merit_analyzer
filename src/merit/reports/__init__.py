@@ -1,3 +1,6 @@
-"""Base report classes and utilities for generating analysis reports"""
+"""Reporting module for merit test output."""
 
-# TODO: Refactor current methods inside merit_analyzer/processor to here fro better encapsulation
+from merit.reports.base import Reporter
+from merit.reports.console import ConsoleReporter
+
+__all__ = ["ConsoleReporter", "Reporter"]

@@ -1,10 +1,7 @@
 import asyncio
-import io
-import pytest
 from pathlib import Path
 
-
-from rich.console import Console
+import pytest
 
 from merit.testing import Runner, repeat
 from merit.testing.discovery import TestItem
@@ -24,24 +21,26 @@ def test_repeat_decorator_records_metadata():
 
 def test_repeat_decorator_validation():
     with pytest.raises(ValueError, match="repeat count must be >= 1"):
+
         @repeat(0)
         def sample1():
             pass
 
     with pytest.raises(ValueError, match="min_passes must be >= 1"):
+
         @repeat(5, min_passes=0)
         def sample2():
             pass
 
     with pytest.raises(ValueError, match="min_passes .* cannot exceed count"):
+
         @repeat(3, min_passes=5)
         def sample3():
             pass
 
 
 def test_runner_handles_repeat_all_pass():
-    console = Console(file=io.StringIO())
-    runner = Runner(console=console)
+    runner = Runner(reporters=[])
 
     call_count = 0
 
@@ -70,8 +69,7 @@ def test_runner_handles_repeat_all_pass():
 
 
 def test_runner_handles_repeat_partial_pass():
-    console = Console(file=io.StringIO())
-    runner = Runner(console=console)
+    runner = Runner(reporters=[])
 
     call_count = 0
 
@@ -104,8 +102,7 @@ def test_runner_handles_repeat_partial_pass():
 
 
 def test_runner_handles_repeat_insufficient_passes():
-    console = Console(file=io.StringIO())
-    runner = Runner(console=console)
+    runner = Runner(reporters=[])
 
     call_count = 0
 

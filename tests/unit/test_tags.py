@@ -1,8 +1,5 @@
 import asyncio
-import io
 from pathlib import Path
-
-from rich.console import Console
 
 from merit.testing import Runner
 from merit.testing.discovery import TestItem
@@ -24,8 +21,7 @@ def test_tag_decorator_records_metadata():
 
 
 def test_runner_handles_skip_and_xfail():
-    console = Console(file=io.StringIO())
-    runner = Runner(console=console)
+    runner = Runner(reporters=[])
 
     def merit_skip():
         raise AssertionError("should not run")

@@ -1,5 +1,7 @@
 """Test runner for executing discovered tests."""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import platform
@@ -10,23 +12,25 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from opentelemetry.trace import StatusCode
-from rich.console import Console
 
+from merit.assertions.base import AssertionResult
+from merit.context import ResolverContext, TestContext, resolver_context_scope, test_context_scope
 from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
 )
-from merit.context import TestContext, ResolverContext, test_context_scope, resolver_context_scope
 from merit.testing.discovery import TestItem, collect
 from merit.testing.resources import ResourceResolver, Scope, get_registry
-from merit.assertions.base import AssertionResult
 from merit.tracing import clear_traces, get_tracer, init_tracing
 from merit.version import __version__
+
+if TYPE_CHECKING:
+    from merit.reports.base import Reporter
 
 
 @dataclass
@@ -249,14 +253,19 @@ class Runner:
         # Unlimited concurrency (capped at 10)
         runner = Runner(concurrency=0)
         result = await runner.run(path="tests/")
+
+        # Custom reporters
+        from merit.reports import ConsoleReporter, JsonReporter
+        runner = Runner(reporters=[ConsoleReporter(), JsonReporter("results.json")])
+        result = await runner.run(path="tests/")
     """
 
     DEFAULT_MAX_CONCURRENCY = 10
 
     def __init__(
         self,
-        console: Console | None = None,
         *,
+        reporters: list[Reporter] | None = None,
         maxfail: int | None = None,
         verbosity: int = 0,
         concurrency: int = 1,
@@ -264,7 +273,11 @@ class Runner:
         enable_tracing: bool = False,
         trace_output: Path | str | None = None,
     ) -> None:
-        self.console = console or Console()
+        from merit.reports import ConsoleReporter
+
+        self.reporters: list[Reporter] = (
+            reporters if reporters is not None else [ConsoleReporter(verbosity=verbosity)]
+        )
         self.maxfail = maxfail if maxfail and maxfail > 0 else None
         self.verbosity = verbosity
         self.timeout = timeout  # Per-test timeout in seconds
@@ -272,6 +285,12 @@ class Runner:
         self.concurrency = concurrency if concurrency > 0 else self.DEFAULT_MAX_CONCURRENCY
         self.enable_tracing = enable_tracing
         self.trace_output = Path(trace_output) if trace_output else Path("traces.jsonl")
+
+    async def _notify_reporters(self, method_name: str, *args: Any, **kwargs: Any) -> None:
+        """Notify all reporters of an event concurrently."""
+        await asyncio.gather(
+            *[getattr(reporter, method_name)(*args, **kwargs) for reporter in self.reporters]
+        )
 
     async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> RunResult:
         """Run tests and return results.
@@ -295,12 +314,12 @@ class Runner:
             items = collect(path)
 
         if not items:
-            self.console.print("[yellow]No tests found.[/yellow]")
+            await self._notify_reporters("on_no_tests_found")
             if run_result.environment:
                 run_result.environment.end_time = datetime.now(UTC)
             return run_result
 
-        self.console.print(f"[bold]Collected {len(items)} tests[/bold]\n")
+        await self._notify_reporters("on_collection_complete", items)
 
         start = time.perf_counter()
 
@@ -318,33 +337,36 @@ class Runner:
         run_result.total_duration_ms = (time.perf_counter() - start) * 1000
         if run_result.environment:
             run_result.environment.end_time = datetime.now(UTC)
-        self._print_summary(run_result)
+
+        await self._notify_reporters("on_run_complete", run_result)
 
         # Tracing is streamed; surface the path for the user
-        if self.enable_tracing and self.trace_output.exists():
-            self.console.print(
-                f"[dim]Tracing written to {self.trace_output} ({self.trace_output.stat().st_size} bytes)[/dim]"
-            )
+        if self.enable_tracing:
+            await self._notify_reporters("on_tracing_enabled", self.trace_output)
 
         return run_result
 
-    async def _run_sequential(self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult) -> None:
+    async def _run_sequential(
+        self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult
+    ) -> None:
         """Run tests sequentially."""
         failures = 0
         for item in items:
             result = await self._run_test(item, resolver)
             run_result.results.append(result)
-            self._print_result(result)
+            await self._notify_reporters("on_test_complete", result)
             await resolver.teardown_scope(Scope.CASE)
 
             if result.status in {TestStatus.FAILED, TestStatus.ERROR}:
                 failures += 1
                 if self.maxfail and failures >= self.maxfail:
                     run_result.stopped_early = True
-                    self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
+                    await self._notify_reporters("on_run_stopped_early", self.maxfail)
                     break
 
-    async def _run_concurrent(self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult) -> None:
+    async def _run_concurrent(
+        self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult
+    ) -> None:
         """Run tests concurrently with semaphore control."""
         semaphore = asyncio.Semaphore(self.concurrency)
         lock = asyncio.Lock()
@@ -379,7 +401,9 @@ class Runner:
                     )
                 except Exception as e:
                     duration = (time.perf_counter() - start) * 1000
-                    result = TestResult(item=item, status=TestStatus.ERROR, duration_ms=duration, error=e)
+                    result = TestResult(
+                        item=item, status=TestStatus.ERROR, duration_ms=duration, error=e
+                    )
                 finally:
                     await child_resolver.teardown_scope(Scope.CASE)
 
@@ -403,16 +427,18 @@ class Runner:
 
         for _, result in sorted_results:
             run_result.results.append(result)
-            self._print_result(result)
+            await self._notify_reporters("on_test_complete", result)
 
         if run_result.stopped_early:
-            self.console.print(f"[red]Stopping early after {self.maxfail} failure(s).[/red]")
+            await self._notify_reporters("on_run_stopped_early", self.maxfail)
 
     async def _run_repeated_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
         """Execute a test multiple times and aggregate results."""
         start = time.perf_counter()
         repeat_runs: list[TestResult] = []
-        min_passes = item.repeat_min_passes if item.repeat_min_passes is not None else item.repeat_count
+        min_passes = (
+            item.repeat_min_passes if item.repeat_min_passes is not None else item.repeat_count
+        )
 
         # Create a non-repeating item for individual runs
         single_item = TestItem(
@@ -512,7 +538,6 @@ class Runner:
         with test_context_scope(ctx):
             return await self._execute_test_body(item, instance, kwargs, start, expect_failure)
 
-
     async def _execute_test_body(
         self,
         item: TestItem,
@@ -552,7 +577,9 @@ class Runner:
             if expect_failure:
                 if item.xfail_strict:
                     err = AssertionError(item.xfail_reason or "xfail marked test passed")
-                    return TestResult(item=item, status=TestStatus.FAILED, duration_ms=duration, error=err)
+                    return TestResult(
+                        item=item, status=TestStatus.FAILED, duration_ms=duration, error=err
+                    )
                 return TestResult(item=item, status=TestStatus.XPASSED, duration_ms=duration)
             return TestResult(item=item, status=TestStatus.PASSED, duration_ms=duration)
 
@@ -568,14 +595,9 @@ class Runner:
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(
-                    item=item,
-                    status=TestStatus.XFAILED,
-                    duration_ms=duration,
-                    error=err
+                    item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err
                 )
-            return TestResult(
-                item=item, status=TestStatus.FAILED, duration_ms=duration, error=e
-            )
+            return TestResult(item=item, status=TestStatus.FAILED, duration_ms=duration, error=e)
 
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
@@ -588,70 +610,14 @@ class Runner:
 
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
-                return TestResult(item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err)
+                return TestResult(
+                    item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err
+                )
             return TestResult(item=item, status=TestStatus.ERROR, duration_ms=duration, error=e)
 
         finally:
             if span_context:
                 span_context.__exit__(None, None, None)
-
-    def _print_result(self, result: TestResult) -> None:
-        """Print a single test result."""
-        if self.verbosity < 0 and result.status not in {TestStatus.FAILED, TestStatus.ERROR}:
-            return
-
-        # Handle repeated tests with sub-results
-        if result.repeat_runs:
-            passed_count = sum(1 for r in result.repeat_runs if r.status == TestStatus.PASSED)
-            total_count = len(result.repeat_runs)
-            min_passes = result.item.repeat_min_passes or total_count
-            
-            if result.status == TestStatus.PASSED:
-                self.console.print(f"  [green]✓[/green] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim] [green]{passed_count}/{total_count} passed (≥{min_passes} required)[/green]")
-            else:
-                self.console.print(f"  [red]✗[/red] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim] [red]{passed_count}/{total_count} passed (≥{min_passes} required)[/red]")
-            return
-
-        if result.status == TestStatus.PASSED:
-            self.console.print(f"  [green]✓[/green] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
-        elif result.status == TestStatus.FAILED:
-            self.console.print(f"  [red]✗[/red] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
-            if result.error:
-                self.console.print(f"    [red]{result.error}[/red]")
-        elif result.status == TestStatus.ERROR:
-            self.console.print(f"  [yellow]![/yellow] {result.item.full_name} [dim]({result.duration_ms:.1f}ms)[/dim]")
-            if result.error:
-                self.console.print(f"    [yellow]{type(result.error).__name__}: {result.error}[/yellow]")
-        elif result.status == TestStatus.SKIPPED:
-            reason = result.error.args[0] if result.error else "skipped"
-            self.console.print(f"  [yellow]-[/yellow] {result.item.full_name} [dim]skipped ({reason})[/dim]")
-        elif result.status == TestStatus.XFAILED:
-            reason = result.error.args[0] if result.error else "expected failure"
-            self.console.print(f"  [blue]x[/blue] {result.item.full_name} [dim]xfailed ({reason})[/dim]")
-        elif result.status == TestStatus.XPASSED:
-            self.console.print(f"  [magenta]![/magenta] {result.item.full_name} [dim]XPASS[/dim]")
-
-    def _print_summary(self, run_result: RunResult) -> None:
-        """Print test run summary."""
-        self.console.print()
-        parts = []
-        if run_result.passed:
-            parts.append(f"[green]{run_result.passed} passed[/green]")
-        if run_result.failed:
-            parts.append(f"[red]{run_result.failed} failed[/red]")
-        if run_result.errors:
-            parts.append(f"[yellow]{run_result.errors} errors[/yellow]")
-        if run_result.skipped:
-            parts.append(f"[yellow]{run_result.skipped} skipped[/yellow]")
-        if run_result.xfailed:
-            parts.append(f"[blue]{run_result.xfailed} xfailed[/blue]")
-        if run_result.xpassed:
-            parts.append(f"[magenta]{run_result.xpassed} xpassed[/magenta]")
-
-        summary = ", ".join(parts) if parts else "[dim]0 tests[/dim]"
-        self.console.print(f"[bold]{summary}[/bold] in {run_result.total_duration_ms:.0f}ms")
-        if run_result.stopped_early:
-            self.console.print("[yellow]Run terminated early due to maxfail limit.[/yellow]")
 
 
 def run(path: str | None = None) -> RunResult:
