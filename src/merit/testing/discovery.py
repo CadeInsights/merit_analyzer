@@ -109,6 +109,7 @@ class TestItem:
     skip_reason: str | None = None
     xfail_reason: str | None = None
     xfail_strict: bool = False
+    fail_fast: bool = False
     repeat_count: int = 1
     repeat_min_passes: int | None = None
 

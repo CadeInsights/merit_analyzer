@@ -393,6 +393,10 @@ class Runner:
             await self._notify_no_tests_found()
             merit_run.end_time = datetime.now(UTC)
             return merit_run
+        
+        if self.fail_fast:
+            for item in items:
+                item.fail_fast = True
 
         await self._notify_collection_complete(items)
 

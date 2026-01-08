@@ -62,4 +62,9 @@ class AssertionResult:
             for metric in metrics:
                 metric.add_record(passed)
 
+        if test_ctx := TEST_CONTEXT.get():
+            if test_ctx.item.fail_fast and not passed:
+                msg = self.error_message or f"Assertion failed: {self.expression_repr}"
+                raise AssertionError(msg)
+
         self._passed = passed

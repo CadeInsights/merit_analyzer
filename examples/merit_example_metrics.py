@@ -70,7 +70,7 @@ def merit_expected_true(band: str, false_negatives: Metric):
         assert is_good
 
 
-@merit.parametrize("horrible_band", ["Megadeth", "Nickelback", "Limp Bizkit"])
+@merit.parametrize("band", ["Megadeth", "Nickelback", "Limp Bizkit"])
 def merit_expected_false(band: str, false_positives: Metric):
     """
     Test that the classifier returns False for horrible bands.
