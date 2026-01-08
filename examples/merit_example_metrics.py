@@ -55,28 +55,28 @@ def false_negatives(accuracy: Metric):
     # Write false negatives to accuracy metric
     accuracy.add_record(metric.raw_values)
 
-    # Check the metric registered one false negative result
+    # Check the metric registered one false negative resultY
     assert metric.counter[False] == 1
 
 
-@merit.parametrize("good_band_name", ["Metallica", "Whitesnake", "Led Zeppelin"])
-def merit_expected_true(good_band_name: str, false_negatives: Metric):
+@merit.parametrize("band", ["Metallica", "Whitesnake", "Led Zeppelin"])
+def merit_expected_true(band: str, false_negatives: Metric):
     """
-    Test that the classifier returns True for good band names.
+    Test that the classifier returns True for good bands.
     If AI returns False: register it as a false negative.
     """
-    is_good = band_quality_classifier(good_band_name)
+    is_good = band_quality_classifier(band)
     with metrics([false_negatives]):
         assert is_good
 
 
-@merit.parametrize("horrible_band_name", ["Megadeth", "Nickelback", "Limp Bizkit"])
-def merit_expected_false(horrible_band_name: str, false_positives: Metric):
+@merit.parametrize("horrible_band", ["Megadeth", "Nickelback", "Limp Bizkit"])
+def merit_expected_false(band: str, false_positives: Metric):
     """
-    Test that the classifier returns False for horrible band names.
+    Test that the classifier returns False for horrible bands.
     If AI returns True: register it as a false positive.
     """
-    is_good = band_quality_classifier(horrible_band_name)
+    is_good = band_quality_classifier(band)
     with metrics([false_positives]):
         assert not is_good
 
@@ -121,7 +121,8 @@ def case_hallucinations_count(average_hallucinations_per_case: Metric):
     yield metric
 
     # Write the number of hallucinations for the case to the average metric
-    average_hallucinations_per_case.add_record(metric.counter[False])
+    hallucinations_for_case = metric.counter[False]
+    average_hallucinations_per_case.add_record(hallucinations_for_case)
 
 
 @merit.parametrize(
