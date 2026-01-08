@@ -161,9 +161,9 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         trace_output=args.trace_output,
         fail_fast=args.fail_fast,
     )
-    result = await runner.run(items=items)
+    merit_run = await runner.run(items=items)
 
-    return 0 if result.failed == 0 and result.errors == 0 else 1
+    return 0 if merit_run.result.failed == 0 and merit_run.result.errors == 0 else 1
 
 
 class KeywordMatcher:

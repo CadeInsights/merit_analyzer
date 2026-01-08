@@ -186,10 +186,10 @@ class Metric:
         """
         with self._values_lock:
             if test_ctx := TEST_CONTEXT.get():
-                if test_ctx.test_item_name:
-                    self.metadata.collected_from_merits.add(test_ctx.test_item_name)
-                if test_ctx.test_item_id_suffix:
-                    self.metadata.collected_from_cases.add(test_ctx.test_item_id_suffix)
+                if test_ctx.item.name:
+                    self.metadata.collected_from_merits.add(test_ctx.item.name)
+                if test_ctx.item.id_suffix:
+                    self.metadata.collected_from_cases.add(test_ctx.item.id_suffix)
 
             if self.metadata.first_item_recorded_at is None:
                 self.metadata.first_item_recorded_at = datetime.now(UTC)

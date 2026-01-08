@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from merit.testing.discovery import TestItem
-    from merit.testing.runner import RunResult, TestResult
+    from merit.testing.runner import MeritRun, TestExecution
 
 
 class Reporter(ABC):
@@ -26,11 +26,11 @@ class Reporter(ABC):
         """Called after test collection completes."""
 
     @abstractmethod
-    async def on_test_complete(self, result: TestResult) -> None:
+    async def on_test_complete(self, execution: TestExecution) -> None:
         """Called after each test completes."""
 
     @abstractmethod
-    async def on_run_complete(self, run_result: RunResult) -> None:
+    async def on_run_complete(self, merit_run: MeritRun) -> None:
         """Called after all tests complete."""
 
     @abstractmethod

@@ -51,6 +51,6 @@ def test_runner_handles_skip_and_xfail():
 
     run_result = asyncio.run(runner.run(items=[skip_item, xfail_item]))
 
-    assert run_result.skipped == 1
-    assert run_result.xfailed == 1
-    assert run_result.passed == 0
+    assert run_result.result.skipped == 1
+    assert run_result.result.xfailed == 1
+    assert run_result.result.passed == 0

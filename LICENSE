@@ -1,39 +1,21 @@
-Merit Commercial Evaluation License (v1.0)
+MIT License
 
-Copyright (c) 2025 Merit
+Copyright (c) 2026 Merit AI, Inc.
 
-Permission is hereby granted, free of charge, to any individual or organization ("Licensee")
-to install, use, and evaluate this software (the "Software") for the purpose of testing,
-integration, and evaluation in connection with Licensee's internal or commercial development
-projects, subject to the following terms:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. **Evaluation Use**
-   - Licensee may use the Software for evaluation and testing purposes, including testing
-     within commercial or enterprise environments.
-   - This license is provided for a limited evaluation period, as determined by Merit, and
-     may be extended or terminated by Merit at any time upon notice.
-   - Continued use of the Software beyond the evaluation period requires a separate
-     commercial license agreement with Merit.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. **Ownership and Restrictions**
-   - The Software and all related intellectual property remain the sole property of Merit.
-   - Licensee may not redistribute, sublicense, or integrate the Software into commercial
-     offerings for third parties without written permission from Merit.
-   - Licensee may make internal modifications or scripts solely for evaluation purposes.
-
-3. **No Warranty**
-   - The Software is provided "AS IS", without warranty of any kind, express or implied,
-     including but not limited to merchantability, fitness for a particular purpose,
-     or noninfringement.
-
-4. **Limitation of Liability**
-   - In no event shall Merit be liable for any damages or other liability arising from
-     the use or inability to use the Software, whether in evaluation or production settings.
-
-5. **Commercial Licensing**
-   - Upon expiration or completion of the evaluation period, continued use requires a valid
-     paid commercial license from Merit.
-   - Licensee agrees to contact Merit to obtain such license prior to continued use.
-
-For commercial licensing or support, visit: https://appmerit.com
-
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
