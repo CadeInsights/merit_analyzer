@@ -1,17 +1,94 @@
 """Test discovery for merit_* files and functions."""
 
 import importlib.util
+import importlib.abc
 import inspect
 import sys
+import ast
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, TypeVar
 
+from merit.assertions.transformers import AssertTransformer, InjectAssertionDependenciesTransformer
 from merit.testing.parametrize import get_parameter_sets
 from merit.testing.repeat import get_repeat_data
 from merit.testing.tags import TagData, get_tag_data, merge_tag_data
+
+
+TFunction = TypeVar("TFunction", ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+class MeritFunctionTransformer(ast.NodeTransformer):
+    """Finds all functions in the module that start with `merit_` and transforms them."""
+
+    def __init__(
+        self,
+        transformers: list[ast.NodeTransformer]
+    ) -> None:
+        self.transformers = transformers
+
+    def apply_transformers(self, node: TFunction) -> TFunction:
+        """Apply configured transformer pipeline to a single function node."""
+        for transformer in self.transformers:
+            node = transformer.visit(node)
+        return ast.fix_missing_locations(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        if node.name.startswith("merit_"):
+            node = self.apply_transformers(node)
+        return self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        if node.name.startswith("merit_"):
+            node = self.apply_transformers(node)
+        return self.generic_visit(node)
+
+
+class MeritModuleLoader(importlib.abc.SourceLoader):
+    """Custom loader for Merit test modules with AST transformations.
+    
+    This loader participates in Python's import protocol and handles
+    AST transformation and injection of Merit-specific globals during
+    module execution.
+    """
+
+    def __init__(self, fullname: str, path: Path) -> None:
+        """Initialize the loader.
+        
+        Args:
+            fullname: The fully qualified module name.
+            path: Path to the module file.
+        """
+        self.fullname = fullname
+        self.path = path
+
+    def get_filename(self, fullname: str) -> str:
+        return str(self.path)
+
+    def get_data(self, path: str) -> bytes:
+        return Path(path).read_bytes()
+
+    def exec_module(self, module: ModuleType) -> None:
+        filename = self.get_filename(module.__name__)
+        source = self.get_source(module.__name__)
+        if source is None:
+            msg = f"Cannot get source for module {module.__name__}"
+            raise ImportError(msg)
+        
+        transformer = MeritFunctionTransformer(
+            transformers=[
+                InjectAssertionDependenciesTransformer(),
+                AssertTransformer(source),
+            ]
+        )
+        tree = ast.parse(source, filename=filename)
+        transformed_tree = transformer.visit(tree)
+        validated_tree = ast.fix_missing_locations(transformed_tree)
+
+        code = compile(validated_tree, filename=filename, mode="exec")
+        exec(code, module.__dict__) 
 
 
 @dataclass
@@ -49,7 +126,11 @@ class TestItem:
 
 def _load_module(path: Path) -> ModuleType:
     """Dynamically load a Python module from path."""
-    spec = importlib.util.spec_from_file_location(path.stem, path)
+    spec = importlib.util.spec_from_file_location(
+        path.stem,
+        path,
+        loader=MeritModuleLoader(fullname=path.stem, path=path),
+    )
     if spec is None or spec.loader is None:
         msg = f"Cannot load module from {path}"
         raise ImportError(msg)
@@ -104,19 +185,19 @@ def _build_items_for_callable(
     combined_tags = merge_tag_data(parent_tags, get_tag_data(fn))
     repeat_data = get_repeat_data(fn)
 
-    base_kwargs = dict(
-        name=name,
-        fn=fn,
-        module_path=module_path,
-        is_async=inspect.iscoroutinefunction(fn),
-        params=_extract_test_params(fn),
-        class_name=class_name,
-        skip_reason=combined_tags.skip_reason,
-        xfail_reason=combined_tags.xfail_reason,
-        xfail_strict=combined_tags.xfail_strict,
-        repeat_count=repeat_data.count if repeat_data else 1,
-        repeat_min_passes=repeat_data.min_passes if repeat_data else None,
-    )
+    base_kwargs: dict[str, Any] = {
+        "name": name,
+        "fn": fn,
+        "module_path": module_path,
+        "is_async": inspect.iscoroutinefunction(fn),
+        "params": _extract_test_params(fn),
+        "class_name": class_name,
+        "skip_reason": combined_tags.skip_reason,
+        "xfail_reason": combined_tags.xfail_reason,
+        "xfail_strict": combined_tags.xfail_strict,
+        "repeat_count": repeat_data.count if repeat_data else 1,
+        "repeat_min_passes": repeat_data.min_passes if repeat_data else None,
+    }
 
     parameter_sets = get_parameter_sets(fn)
     if not parameter_sets:

@@ -389,7 +389,7 @@ class Runner:
 
         if not items:
             await self._notify_no_tests_found()
-            merit_run.environment.end_time = datetime.now(UTC)
+            merit_run.end_time = datetime.now(UTC)
             return merit_run
 
         await self._notify_collection_complete(items)
@@ -410,7 +410,7 @@ class Runner:
         await close_predicate_api_client()
 
         merit_run.result.total_duration_ms = (time.perf_counter() - start) * 1000
-        merit_run.environment.end_time = datetime.now(UTC)
+        merit_run.end_time = datetime.now(UTC)
 
         await self._notify_run_complete(merit_run)
 

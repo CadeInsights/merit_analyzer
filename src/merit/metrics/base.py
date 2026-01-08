@@ -112,8 +112,8 @@ class MetricState:
         99% confidence interval (lower, upper).
     percentiles : list of float, optional
         List of 99 quantiles (p1 to p99) computed with n=100.
-    counter : dict, optional
-        Frequency count of each unique raw value.
+    counter : Counter, optional
+        Frequency count of each unique raw value. Missing keys return 0.
     distribution : dict, optional
         Share of each unique raw value.
     final_value : int, float, bool, or list, optional
@@ -136,7 +136,7 @@ class MetricState:
     ci_95: tuple[float, float] | None = None
     ci_99: tuple[float, float] | None = None
     percentiles: list[float] | None = None
-    counter: dict[int | float | bool, int] | None = None
+    counter: Counter[int | float | bool] | None = None
     distribution: dict[int | float | bool, float] | None = None
     
     # final value of the metric
@@ -310,7 +310,11 @@ class Metric:
     def pvariance(self) -> float:
         with self._values_lock:
             if self._cache.pvariance is None:
-                self._cache.pvariance = statistics.pvariance(self._float_values, mu=self.mean)
+                if self.len == 0:
+                    warnings.warn(f"Cannot compute pvariance for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    self._cache.pvariance = math.nan
+                else:
+                    self._cache.pvariance = statistics.pvariance(self._float_values, mu=self.mean)
             value = self._cache.pvariance
             self._push_value_to_context("pvariance", value)
             return value
@@ -319,7 +323,11 @@ class Metric:
     def pstd(self) -> float:
         with self._values_lock:
             if self._cache.pstd is None:
-                self._cache.pstd = statistics.pstdev(self._float_values, mu=self.mean)
+                if self.len == 0:
+                    warnings.warn(f"Cannot compute pstd for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    self._cache.pstd = math.nan
+                else:
+                    self._cache.pstd = statistics.pstdev(self._float_values, mu=self.mean)
             value = self._cache.pstd
             self._push_value_to_context("pstd", value)
             return value
@@ -328,8 +336,12 @@ class Metric:
     def ci_90(self) -> tuple[float, float]:
         with self._values_lock:
             if self._cache.ci_90 is None:
-                half = 1.645 * self.std / math.sqrt(self.len)
-                self._cache.ci_90 = (self.mean - half, self.mean + half)
+                if self.len == 0:
+                    warnings.warn(f"Cannot compute ci_90 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    self._cache.ci_90 = (math.nan, math.nan)
+                else:
+                    half = 1.645 * self.std / math.sqrt(self.len)
+                    self._cache.ci_90 = (self.mean - half, self.mean + half)
             value = self._cache.ci_90
             self._push_value_to_context("ci_90", value)
             return value
@@ -338,8 +350,12 @@ class Metric:
     def ci_95(self) -> tuple[float, float]:
         with self._values_lock:
             if self._cache.ci_95 is None:
-                half = 1.96 * self.std / math.sqrt(self.len)
-                self._cache.ci_95 = (self.mean - half, self.mean + half)
+                if self.len == 0:
+                    warnings.warn(f"Cannot compute ci_95 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    self._cache.ci_95 = (math.nan, math.nan)
+                else:
+                    half = 1.96 * self.std / math.sqrt(self.len)
+                    self._cache.ci_95 = (self.mean - half, self.mean + half)
             value = self._cache.ci_95
             self._push_value_to_context("ci_95", value)
             return value
@@ -348,8 +364,12 @@ class Metric:
     def ci_99(self) -> tuple[float, float]:
         with self._values_lock:
             if self._cache.ci_99 is None:
-                half = 2.576 * self.std / math.sqrt(self.len)
-                self._cache.ci_99 = (self.mean - half, self.mean + half)
+                if self.len == 0:
+                    warnings.warn(f"Cannot compute ci_99 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    self._cache.ci_99 = (math.nan, math.nan)
+                else:
+                    half = 2.576 * self.std / math.sqrt(self.len)
+                    self._cache.ci_99 = (self.mean - half, self.mean + half)
             value = self._cache.ci_99
             self._push_value_to_context("ci_99", value)
             return value
@@ -409,12 +429,10 @@ class Metric:
             return value
 
     @property
-    def counter(self) -> dict[int | float | bool, int]:
+    def counter(self) -> Counter[int | float | bool]:
         with self._values_lock:
             if self._cache.counter is None:
-                self._cache.counter = dict[int | float | bool, int](
-                    Counter(self._raw_values)
-                )
+                self._cache.counter = Counter(self._raw_values)
             value = self._cache.counter
             self._push_value_to_context("counter", value)
             return value

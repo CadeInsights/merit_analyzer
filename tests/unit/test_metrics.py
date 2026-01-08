@@ -73,6 +73,7 @@ def test_metric_counter_and_distribution():
     m.add_record(list([True, True, False, 10, 10, 10]))
 
     assert m.counter == {True: 2, False: 1, 10: 3}
+    assert m.counter[999] == 0
     assert m.distribution == {True: 2 / 6, False: 1 / 6, 10: 3 / 6}
 
 
@@ -114,6 +115,19 @@ def test_metric_timestamps():
     assert m.metadata.last_item_recorded_at is not None
     assert t2 is not None
     assert m.metadata.last_item_recorded_at > t2
+
+
+def test_metric_empty_edge_cases_do_not_crash():
+    m = Metric(name="empty")
+    assert math.isnan(m.pvariance)
+    assert math.isnan(m.pstd)
+
+    ci90 = m.ci_90
+    ci95 = m.ci_95
+    ci99 = m.ci_99
+    assert math.isnan(ci90[0]) and math.isnan(ci90[1])
+    assert math.isnan(ci95[0]) and math.isnan(ci95[1])
+    assert math.isnan(ci99[0]) and math.isnan(ci99[1])
 
 
 @pytest.mark.asyncio
