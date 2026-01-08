@@ -409,7 +409,7 @@ class Metric:
             return value
 
     @property
-    def counter(self) -> dict[int | float | bool, int]:
+    def counter(self) -> dict[int | float | bool, int]: #TODO: for unknown keys return 0
         with self._values_lock:
             if self._cache.counter is None:
                 self._cache.counter = dict[int | float | bool, int](
