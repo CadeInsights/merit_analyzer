@@ -3,6 +3,7 @@ name = "merit-analyzer"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Mark Reith", email = "mark@appmerit.com" },
     { name = "Nikita Shirobokov", email = "nick@appmerit.com" }

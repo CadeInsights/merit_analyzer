@@ -155,10 +155,8 @@ Note: When using CLI flags to override vendors, you still need the appropriate A
 
 ## License
 
-This software is licensed under the Merit Commercial Evaluation License (v1.0).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-You may use this software for evaluation and testing purposes. Continued use beyond the evaluation period requires a commercial license from Merit.
+Merit is open source! We provide this SDK and CLI freely under the MIT License. 
 
-See [LICENSE](LICENSE) for full terms.
-
-For commercial licensing or support, visit: https://appmerit.com
+For premium cloud features and enterprise support, visit: https://appmerit.com
