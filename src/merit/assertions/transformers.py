@@ -25,15 +25,8 @@ class InjectAssertionDependenciesTransformer(ast.NodeTransformer):
         ]
 
         body = list(node.body)
-        if (
-            body
-            and isinstance(body[0], ast.Expr)
-            and isinstance(body[0].value, ast.Constant)
-            and isinstance(body[0].value.value, str)
-        ):
-            node.body = [body[0], *inject_stmts, *body[1:]]
-        else:
-            node.body = [*inject_stmts, *body]
+        insert_at = 1 if ast.get_docstring(node, clean=False) is not None else 0
+        node.body = [*body[:insert_at], *inject_stmts, *body[insert_at:]]
 
         for stmt in inject_stmts:
             ast.copy_location(stmt, node)
