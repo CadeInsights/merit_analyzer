@@ -46,6 +46,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     test_parser.add_argument("--maxfail", type=int, help="Stop after this many failures")
     test_parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Stop test after the first failed assertion",
+    )
+    test_parser.add_argument(
         "--concurrency",
         type=int,
         help="Number of concurrent tests (default: 1, 0 for unlimited up to 10)",
@@ -154,6 +159,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         concurrency=concurrency,
         enable_tracing=args.trace,
         trace_output=args.trace_output,
+        fail_fast=args.fail_fast,
     )
     result = await runner.run(items=items)
 

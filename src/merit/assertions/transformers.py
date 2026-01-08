@@ -123,7 +123,7 @@ class AssertTransformer(ast.NodeTransformer):
         if node.msg is None:
             return [ar_assign, eval_under_ctx, set_passed]
 
-        # Get the error message is assertion did not pass and store it on the AssertionResult object
+        # Get the error message if assertion did not pass and store it on the AssertionResult object
         fail_test = ast.UnaryOp(op=ast.Not(), operand=ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Load()))
         msg_assign = ast.Assign(
             targets=[ast.Name(id=self.MSG_VAR_NAME, ctx=ast.Store())],
