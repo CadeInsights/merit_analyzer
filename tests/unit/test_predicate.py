@@ -1,6 +1,7 @@
 import pytest
 import json
 import httpx
+from pathlib import Path
 
 from merit.predicates.base import PredicateResult, PredicateMetadata, predicate
 from merit.predicates.client import (
@@ -24,6 +25,19 @@ from merit.predicates.ai_predicates import (
 )
 
 from merit.context import test_context_scope as context_scope, TestContext as MeritTestContext
+from merit.testing.discovery import TestItem
+
+
+def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:
+    """Create a minimal TestItem for testing."""
+    return TestItem(
+        name=name,
+        fn=lambda: None,
+        module_path=Path("test.py"),
+        is_async=False,
+        id_suffix=id_suffix,
+    )
+
 
 def test_predicate_result_and_metadata_auto_filled():
 
@@ -50,7 +64,7 @@ def test_predicate_result_and_metadata_auto_filled():
         assert predicate_metadata.predicate_name == "simple_predicate"
         assert predicate_metadata.merit_name == "merit_with_simple_predicate"
 
-    with context_scope(MeritTestContext(test_item_name="merit_with_simple_predicate")):
+    with context_scope(MeritTestContext(item=_make_item("merit_with_simple_predicate"))):
         merit_with_simple_predicate()
 
 

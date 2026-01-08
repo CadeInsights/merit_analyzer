@@ -9,6 +9,10 @@ from .context import (
     assertion_context_scope,
     METRIC_CONTEXT,
     metrics,
+    MERIT_RUN_CONTEXT,
+    merit_run_scope,
+    get_test_context,
+    get_merit_run,
 )
 
 __all__ = [
@@ -18,8 +22,12 @@ __all__ = [
     "RESOLVER_CONTEXT",
     "ASSERTION_CONTEXT",
     "METRIC_CONTEXT",
+    "MERIT_RUN_CONTEXT",
     "resolver_context_scope",
     "test_context_scope",
     "assertion_context_scope",
     "metrics",
+    "merit_run_scope",
+    "get_test_context",
+    "get_merit_run",
 ]

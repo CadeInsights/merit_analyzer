@@ -61,11 +61,11 @@ def test_runner_handles_repeat_all_pass():
 
     run_result = asyncio.run(runner.run(items=[repeat_item]))
 
-    assert run_result.passed == 1
+    assert run_result.result.passed == 1
     assert call_count == 5
-    assert run_result.results[0].repeat_runs is not None
-    assert len(run_result.results[0].repeat_runs) == 5
-    assert all(r.status.value == "passed" for r in run_result.results[0].repeat_runs)
+    assert run_result.result.executions[0].result.repeat_runs is not None
+    assert len(run_result.result.executions[0].result.repeat_runs) == 5
+    assert all(r.status.value == "passed" for r in run_result.result.executions[0].result.repeat_runs)
 
 
 def test_runner_handles_repeat_partial_pass():
@@ -93,11 +93,11 @@ def test_runner_handles_repeat_partial_pass():
 
     run_result = asyncio.run(runner.run(items=[repeat_item]))
 
-    assert run_result.passed == 1
+    assert run_result.result.passed == 1
     assert call_count == 5
-    assert run_result.results[0].repeat_runs is not None
-    assert len(run_result.results[0].repeat_runs) == 5
-    passed = sum(1 for r in run_result.results[0].repeat_runs if r.status.value == "passed")
+    assert run_result.result.executions[0].result.repeat_runs is not None
+    assert len(run_result.result.executions[0].result.repeat_runs) == 5
+    passed = sum(1 for r in run_result.result.executions[0].result.repeat_runs if r.status.value == "passed")
     assert passed == 3
 
 
@@ -126,9 +126,9 @@ def test_runner_handles_repeat_insufficient_passes():
 
     run_result = asyncio.run(runner.run(items=[repeat_item]))
 
-    assert run_result.failed == 1
+    assert run_result.result.failed == 1
     assert call_count == 5
-    assert run_result.results[0].repeat_runs is not None
-    assert len(run_result.results[0].repeat_runs) == 5
-    passed = sum(1 for r in run_result.results[0].repeat_runs if r.status.value == "passed")
+    assert run_result.result.executions[0].result.repeat_runs is not None
+    assert len(run_result.result.executions[0].result.repeat_runs) == 5
+    passed = sum(1 for r in run_result.result.executions[0].result.repeat_runs if r.status.value == "passed")
     assert passed == 2

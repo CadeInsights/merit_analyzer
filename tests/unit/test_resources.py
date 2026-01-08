@@ -1,6 +1,7 @@
 """Tests for merit.testing.resources module."""
 
 import pytest
+from pathlib import Path
 
 from merit.context import (
     TestContext as Ctx,
@@ -8,6 +9,7 @@ from merit.context import (
     TEST_CONTEXT,
     test_context_scope as context_scope,
 )
+from merit.testing.discovery import TestItem
 from merit.testing.resources import (
     ResourceResolver,
     Scope,
@@ -15,6 +17,17 @@ from merit.testing.resources import (
     get_registry,
     resource,
 )
+
+
+def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:
+    """Create a minimal TestItem for testing."""
+    return TestItem(
+        name=name,
+        fn=lambda: None,
+        module_path=Path("test.py"),
+        is_async=False,
+        id_suffix=id_suffix,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -478,7 +491,7 @@ class TestResourceHooks:
         def hook(value):
             nonlocal received_name
             if test_ctx := TEST_CONTEXT.get():
-                received_name = test_ctx.test_item_name
+                received_name = test_ctx.item.name
             else:
                 received_name = "unknown"
             return value
@@ -488,7 +501,7 @@ class TestResourceHooks:
             return 42
 
         resolver = ResourceResolver(get_registry())
-        with context_scope(Ctx(test_item_name="my_test")):
+        with context_scope(Ctx(item=_make_item("my_test"))):
             await resolver.resolve("simple")
         assert received_name == "my_test"
 

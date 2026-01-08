@@ -1,7 +1,9 @@
 import pytest
 import math
 import statistics
+from pathlib import Path
 from merit.metrics.base import Metric, metric
+from merit.testing.discovery import TestItem
 from merit.testing.resources import Scope, ResourceResolver, clear_registry
 from merit.context import (
     ResolverContext,
@@ -9,6 +11,17 @@ from merit.context import (
     resolver_context_scope,
     test_context_scope as context_scope,
 )
+
+
+def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:
+    """Create a minimal TestItem for testing."""
+    return TestItem(
+        name=name,
+        fn=lambda: None,
+        module_path=Path("test.py"),
+        is_async=False,
+        id_suffix=id_suffix,
+    )
 
 
 def test_metric_recording():
@@ -127,11 +140,7 @@ async def test_metric_on_injection_hook_with_context():
         return Metric(name="ctx")
 
     resolver = ResourceResolver()
-    ctx = Ctx(
-        test_item_name="my_merit",
-        test_item_id_suffix="case_123",
-        test_item_params=["case"],
-    )
+    ctx = Ctx(item=_make_item("my_merit", id_suffix="case_123"))
     with context_scope(ctx):
         with resolver_context_scope(ResolverContext(consumer_name="some_resource")):
             m = await resolver.resolve("test_ctx_metric")
@@ -159,13 +168,13 @@ async def test_metric_on_injection_cumulative_metadata():
     resolver = ResourceResolver()
     
     # First resolution with context A
-    with context_scope(Ctx(test_item_name="merit_a")):
+    with context_scope(Ctx(item=_make_item("merit_a"))):
         m1 = await resolver.resolve("shared_metric")
         m1.add_record(1)
     assert "merit_a" in m1.metadata.collected_from_merits
     
     # Second resolution with context B
-    with context_scope(Ctx(test_item_name="merit_b")):
+    with context_scope(Ctx(item=_make_item("merit_b"))):
         m2 = await resolver.resolve("shared_metric")
         m2.add_record(2)
     

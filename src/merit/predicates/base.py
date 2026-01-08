@@ -177,10 +177,10 @@ class PredicateResult(BaseModel):
         Auto-fill the predicate_name and merit_name fields if not provided.
         """
         if test_ctx := TEST_CONTEXT.get():
-            if test_ctx.test_item_id_suffix:
-                self.case_id = UUID(test_ctx.test_item_id_suffix)
-            if test_ctx.test_item_name:
-                self.predicate_metadata.merit_name = test_ctx.test_item_name
+            if test_ctx.item.id_suffix:
+                self.case_id = UUID(test_ctx.item.id_suffix)
+            if test_ctx.item.name:
+                self.predicate_metadata.merit_name = test_ctx.item.name
 
         if as_ctx := ASSERTION_CONTEXT.get():
             as_ctx.predicate_results.append(self)

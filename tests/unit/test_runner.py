@@ -7,12 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
+from merit.context import TestContext
 from merit.testing.discovery import TestItem
 from merit.testing.resources import clear_registry, resource
 from merit.testing.runner import (
     RunEnvironment,
     Runner,
     RunResult,
+    TestExecution,
     TestResult,
     TestStatus,
     _filter_env_vars,
@@ -59,10 +61,20 @@ class TestRunResult:
 
     def test_counts_passed(self):
         result = RunResult()
-        result.results = [
-            TestResult(item=make_item(lambda: None), status=TestStatus.PASSED, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.PASSED, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.FAILED, duration_ms=1),
+        items = [make_item(lambda: None) for _ in range(3)]
+        result.executions = [
+            TestExecution(
+                context=TestContext(item=items[0]),
+                result=TestResult(status=TestStatus.PASSED, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[1]),
+                result=TestResult(status=TestStatus.PASSED, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[2]),
+                result=TestResult(status=TestStatus.FAILED, duration_ms=1),
+            ),
         ]
         assert result.passed == 2
         assert result.failed == 1
@@ -70,13 +82,14 @@ class TestRunResult:
 
     def test_counts_all_statuses(self):
         result = RunResult()
-        result.results = [
-            TestResult(item=make_item(lambda: None), status=TestStatus.PASSED, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.FAILED, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.ERROR, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.SKIPPED, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.XFAILED, duration_ms=1),
-            TestResult(item=make_item(lambda: None), status=TestStatus.XPASSED, duration_ms=1),
+        items = [make_item(lambda: None) for _ in range(6)]
+        result.executions = [
+            TestExecution(context=TestContext(item=items[0]), result=TestResult(status=TestStatus.PASSED, duration_ms=1)),
+            TestExecution(context=TestContext(item=items[1]), result=TestResult(status=TestStatus.FAILED, duration_ms=1)),
+            TestExecution(context=TestContext(item=items[2]), result=TestResult(status=TestStatus.ERROR, duration_ms=1)),
+            TestExecution(context=TestContext(item=items[3]), result=TestResult(status=TestStatus.SKIPPED, duration_ms=1)),
+            TestExecution(context=TestContext(item=items[4]), result=TestResult(status=TestStatus.XFAILED, duration_ms=1)),
+            TestExecution(context=TestContext(item=items[5]), result=TestResult(status=TestStatus.XPASSED, duration_ms=1)),
         ]
         assert result.passed == 1
         assert result.failed == 1
@@ -118,22 +131,9 @@ class TestEnvironmentCapture:
         """Test that capture_environment returns a valid RunEnvironment."""
         env = capture_environment()
         assert isinstance(env, RunEnvironment)
-        assert env.run_id is not None
-        assert env.start_time is not None
         assert env.python_version is not None
         assert env.platform is not None
         assert env.merit_version is not None
-
-    def test_run_environment_serialization(self):
-        """Test to_dict serialization."""
-        env = RunEnvironment()
-        data = env.to_dict()
-
-        assert isinstance(data["run_id"], str)
-        assert isinstance(data["start_time"], str)
-        assert data["end_time"] is None
-        assert isinstance(data["env_vars"], dict)
-
 
 class TestRunner:
     """Tests for Runner class."""
@@ -147,8 +147,8 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.passed == 1
-        assert result.failed == 0
+        assert result.result.passed == 1
+        assert result.result.failed == 0
 
     @pytest.mark.asyncio
     async def test_runs_failing_test(self):
@@ -159,8 +159,8 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.failed == 1
-        assert "expected failure" in str(result.results[0].error)
+        assert result.result.failed == 1
+        assert "expected failure" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
     async def test_runs_async_test(self):
@@ -172,7 +172,7 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.passed == 1
+        assert result.result.passed == 1
 
     @pytest.mark.asyncio
     async def test_handles_exception_as_error(self):
@@ -183,8 +183,8 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.errors == 1
-        assert isinstance(result.results[0].error, RuntimeError)
+        assert result.result.errors == 1
+        assert isinstance(result.result.executions[0].result.error, RuntimeError)
 
     @pytest.mark.asyncio
     async def test_skipped_test(self):
@@ -195,7 +195,7 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.skipped == 1
+        assert result.result.skipped == 1
 
     @pytest.mark.asyncio
     async def test_xfail_test_fails_as_expected(self):
@@ -206,7 +206,7 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.xfailed == 1
+        assert result.result.xfailed == 1
 
     @pytest.mark.asyncio
     async def test_xfail_test_passes_unexpectedly(self):
@@ -217,7 +217,7 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.xpassed == 1
+        assert result.result.xpassed == 1
 
     @pytest.mark.asyncio
     async def test_xfail_strict_fails_on_pass(self):
@@ -228,7 +228,7 @@ class TestRunner:
         runner = Runner(reporters=[])
         result = await runner.run(items=[item])
 
-        assert result.failed == 1
+        assert result.result.failed == 1
 
 
 class TestResourceInjection:
@@ -261,7 +261,7 @@ class TestResourceInjection:
         result = await runner.run(items=[item])
 
         # Should error because unknown_param is not provided
-        assert result.errors == 1
+        assert result.result.errors == 1
 
 
 class TestMaxfail:
@@ -280,8 +280,8 @@ class TestMaxfail:
         runner = Runner(reporters=[], maxfail=2)
         result = await runner.run(items=items)
 
-        assert result.failed == 2
-        assert result.stopped_early
+        assert result.result.failed == 2
+        assert result.result.stopped_early
         assert fail_count == 2
 
     @pytest.mark.asyncio
@@ -293,8 +293,8 @@ class TestMaxfail:
         runner = Runner(reporters=[], maxfail=1)
         result = await runner.run(items=items)
 
-        assert result.errors == 1
-        assert result.stopped_early
+        assert result.result.errors == 1
+        assert result.result.stopped_early
 
 
 class TestConcurrency:
@@ -312,7 +312,7 @@ class TestConcurrency:
         runner = Runner(reporters=[], concurrency=3)
         result = await runner.run(items=items)
 
-        assert result.passed == 3
+        assert result.result.passed == 3
         # All should start within a small window (concurrent)
         assert max(start_times) - min(start_times) < 0.05
 
@@ -336,7 +336,7 @@ class TestConcurrency:
         runner = Runner(reporters=[], concurrency=1)
         result = await runner.run(items=items)
 
-        assert result.passed == 3
+        assert result.result.passed == 3
         # Should execute in order
         assert execution_order == [0, 1, 2]
 
@@ -359,9 +359,9 @@ class TestConcurrency:
         runner = Runner(reporters=[], concurrency=5, maxfail=2)
         result = await runner.run(items=items)
 
-        assert result.stopped_early
+        assert result.result.stopped_early
         # May have more than 2 due to concurrent execution, but should stop
-        assert result.failed >= 2
+        assert result.result.failed >= 2
 
 
 class TestTimeout:
@@ -376,8 +376,8 @@ class TestTimeout:
         runner = Runner(reporters=[], concurrency=2, timeout=0.1)
         result = await runner.run(items=[item])
 
-        assert result.errors == 1
-        assert "timed out" in str(result.results[0].error).lower()
+        assert result.result.errors == 1
+        assert "timed out" in str(result.result.executions[0].result.error).lower()
 
     @pytest.mark.asyncio
     async def test_no_timeout_by_default(self):
@@ -390,7 +390,7 @@ class TestTimeout:
         assert runner.timeout is None
 
         result = await runner.run(items=[item])
-        assert result.passed == 1
+        assert result.result.passed == 1
 
 
 class TestResultOrdering:
@@ -414,7 +414,7 @@ class TestResultOrdering:
         result = await runner.run(items=items)
 
         # Results should be in discovery order, not completion order
-        names = [r.item.name for r in result.results]
+        names = [r.item.name for r in result.result.executions]
         assert names == ["test_0", "test_1", "test_2"]
 
 
@@ -442,7 +442,7 @@ class TestResourceTeardown:
         runner = Runner(reporters=[])
         result = await runner.run(items=items)
 
-        assert result.passed == 2
+        assert result.result.passed == 2
         assert teardown_count == 2
 
     @pytest.mark.asyncio

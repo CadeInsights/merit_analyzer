@@ -19,7 +19,13 @@ from uuid import UUID, uuid4
 from opentelemetry.trace import StatusCode
 
 from merit.assertions.base import AssertionResult
-from merit.context import ResolverContext, TestContext, resolver_context_scope, test_context_scope
+from merit.context import (
+    ResolverContext,
+    TestContext,
+    merit_run_scope,
+    resolver_context_scope,
+    test_context_scope,
+)
 from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
@@ -30,16 +36,13 @@ from merit.tracing import clear_traces, get_tracer, init_tracing
 from merit.version import __version__
 
 if TYPE_CHECKING:
+    from merit.context import TestContext
     from merit.reports.base import Reporter
 
 
 @dataclass
 class RunEnvironment:
     """Metadata about the environment where tests were executed."""
-
-    run_id: UUID = field(default_factory=uuid4)
-    start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
-    end_time: datetime | None = None
 
     # Git info
     commit_hash: str | None = None
@@ -59,9 +62,6 @@ class RunEnvironment:
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
-            "run_id": str(self.run_id),
-            "start_time": self.start_time.isoformat(),
-            "end_time": self.end_time.isoformat() if self.end_time else None,
             "commit_hash": self.commit_hash,
             "branch": self.branch,
             "dirty": self.dirty,
@@ -184,58 +184,117 @@ class TestStatus(Enum):
 class TestResult:
     """Result of a single test execution."""
 
-    item: TestItem
     status: TestStatus
     duration_ms: float
     error: Exception | None = None
-    output: Any = None
     assertion_results: list[AssertionResult] = field(default_factory=list)
     repeat_runs: list["TestResult"] | None = None
+
+
+@dataclass
+class TestExecution:
+    """Complete record of a test execution, combining context and result.
+
+    Encapsulates both the test context (inputs/setup) and the result (outcome)
+    as a single execution record.
+    """
+
+    context: TestContext
+    result: TestResult
+
+    @property
+    def item(self) -> TestItem:
+        """The test item that was executed."""
+        return self.context.item
+
+    @property
+    def status(self) -> TestStatus:
+        """Convenience access to result status."""
+        return self.result.status
+
+    @property
+    def duration_ms(self) -> float:
+        """Convenience access to result duration."""
+        return self.result.duration_ms
 
 
 @dataclass
 class RunResult:
     """Result of a complete test run."""
 
-    results: list[TestResult] = field(default_factory=list)
+    executions: list[TestExecution] = field(default_factory=list)
     total_duration_ms: float = 0
     stopped_early: bool = False
-    environment: RunEnvironment | None = None
 
     @property
     def passed(self) -> int:
         """Count of passed tests."""
-        return sum(1 for r in self.results if r.status == TestStatus.PASSED)
+        return sum(1 for e in self.executions if e.status == TestStatus.PASSED)
 
     @property
     def failed(self) -> int:
         """Count of failed tests."""
-        return sum(1 for r in self.results if r.status == TestStatus.FAILED)
+        return sum(1 for e in self.executions if e.status == TestStatus.FAILED)
 
     @property
     def errors(self) -> int:
         """Count of errored tests."""
-        return sum(1 for r in self.results if r.status == TestStatus.ERROR)
+        return sum(1 for e in self.executions if e.status == TestStatus.ERROR)
 
     @property
     def skipped(self) -> int:
         """Count of skipped tests."""
-        return sum(1 for r in self.results if r.status == TestStatus.SKIPPED)
+        return sum(1 for e in self.executions if e.status == TestStatus.SKIPPED)
 
     @property
     def xfailed(self) -> int:
         """Count of expected failures."""
-        return sum(1 for r in self.results if r.status == TestStatus.XFAILED)
+        return sum(1 for e in self.executions if e.status == TestStatus.XFAILED)
 
     @property
     def xpassed(self) -> int:
         """Count of unexpected passes for xfail tests."""
-        return sum(1 for r in self.results if r.status == TestStatus.XPASSED)
+        return sum(1 for e in self.executions if e.status == TestStatus.XPASSED)
 
     @property
     def total(self) -> int:
         """Total test count."""
-        return len(self.results)
+        return len(self.executions)
+
+
+@dataclass
+class MeritRun:
+    """Complete record of a test run, combining environment and results.
+
+    This is created at the top level of a merit test run and encapsulates
+    all information about the run, including environment metadata and
+    test executions with their contexts.
+
+    Access result data via merit_run.result.* (e.g., merit_run.result.passed).
+    """
+
+    run_id: UUID = field(default_factory=uuid4)
+    start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
+    end_time: datetime | None = None
+
+    environment: RunEnvironment = field(default_factory=RunEnvironment)
+    result: RunResult = field(default_factory=RunResult)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the complete run to a dictionary."""
+        return {
+            "run_id": str(self.run_id),
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "environment": self.environment.to_dict(),
+            "total_duration_ms": self.result.total_duration_ms,
+            "stopped_early": self.result.stopped_early,
+            "passed": self.result.passed,
+            "failed": self.result.failed,
+            "errors": self.result.errors,
+            "skipped": self.result.skipped,
+            "total": self.result.total,
+        }
 
 
 class Runner:
@@ -292,11 +351,11 @@ class Runner:
     async def _notify_collection_complete(self, items: list[TestItem]) -> None:
         await asyncio.gather(*[r.on_collection_complete(items) for r in self.reporters])
 
-    async def _notify_test_complete(self, result: TestResult) -> None:
-        await asyncio.gather(*[r.on_test_complete(result) for r in self.reporters])
+    async def _notify_test_complete(self, execution: TestExecution) -> None:
+        await asyncio.gather(*[r.on_test_complete(execution) for r in self.reporters])
 
-    async def _notify_run_complete(self, run_result: RunResult) -> None:
-        await asyncio.gather(*[r.on_run_complete(run_result) for r in self.reporters])
+    async def _notify_run_complete(self, merit_run: MeritRun) -> None:
+        await asyncio.gather(*[r.on_run_complete(merit_run) for r in self.reporters])
 
     async def _notify_run_stopped_early(self, failure_count: int) -> None:
         await asyncio.gather(*[r.on_run_stopped_early(failure_count) for r in self.reporters])
@@ -304,15 +363,18 @@ class Runner:
     async def _notify_tracing_enabled(self, output_path: Path) -> None:
         await asyncio.gather(*[r.on_tracing_enabled(output_path) for r in self.reporters])
 
-    async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> RunResult:
+    async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> MeritRun:
         """Run tests and return results.
 
         Args:
             items: Pre-collected test items, or None to discover.
             path: Path to discover tests from if items not provided.
+
+        Returns:
+            MeritRun with environment, results, and test executions.
         """
-        run_result = RunResult()
-        run_result.environment = capture_environment()
+        environment = capture_environment()
+        merit_run = MeritRun(environment=environment)
 
         # Initialize predicate client
         create_predicate_api_client()
@@ -327,9 +389,8 @@ class Runner:
 
         if not items:
             await self._notify_no_tests_found()
-            if run_result.environment:
-                run_result.environment.end_time = datetime.now(UTC)
-            return run_result
+            merit_run.environment.end_time = datetime.now(UTC)
+            return merit_run
 
         await self._notify_collection_complete(items)
 
@@ -337,47 +398,53 @@ class Runner:
 
         resolver = ResourceResolver(get_registry())
 
-        if self.concurrency == 1:
-            await self._run_sequential(items, resolver, run_result)
-        else:
-            await self._run_concurrent(items, resolver, run_result)
+        with merit_run_scope(merit_run):
+            if self.concurrency == 1:
+                await self._run_sequential(items, resolver, merit_run)
+            else:
+                await self._run_concurrent(items, resolver, merit_run)
 
-        # Teardown all resources
-        await resolver.teardown()
+            # Teardown all resources
+            await resolver.teardown()
+
         await close_predicate_api_client()
 
-        run_result.total_duration_ms = (time.perf_counter() - start) * 1000
-        if run_result.environment:
-            run_result.environment.end_time = datetime.now(UTC)
+        merit_run.result.total_duration_ms = (time.perf_counter() - start) * 1000
+        merit_run.environment.end_time = datetime.now(UTC)
 
-        await self._notify_run_complete(run_result)
+        await self._notify_run_complete(merit_run)
 
         # Tracing is streamed; surface the path for the user
         if self.enable_tracing:
             await self._notify_tracing_enabled(self.trace_output)
 
-        return run_result
+        return merit_run
 
     async def _run_sequential(
-        self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult
+        self, items: list[TestItem], resolver: ResourceResolver, merit_run: MeritRun
     ) -> None:
         """Run tests sequentially."""
         failures = 0
         for item in items:
-            result = await self._run_test(item, resolver)
-            run_result.results.append(result)
-            await self._notify_test_complete(result)
-            await resolver.teardown_scope(Scope.CASE)
+            ctx = self._create_test_context(item)
+            with test_context_scope(ctx):
+                result = await self._run_test(item, resolver, ctx)
+                result.assertion_results = ctx.assertion_results.copy()
+                execution = TestExecution(context=ctx, result=result)
+                await self._notify_test_complete(execution)
+                await resolver.teardown_scope(Scope.CASE)
+
+            merit_run.result.executions.append(execution)
 
             if result.status in {TestStatus.FAILED, TestStatus.ERROR}:
                 failures += 1
                 if self.maxfail and failures >= self.maxfail:
-                    run_result.stopped_early = True
+                    merit_run.result.stopped_early = True
                     await self._notify_run_stopped_early(self.maxfail)
                     break
 
     async def _run_concurrent(
-        self, items: list[TestItem], resolver: ResourceResolver, run_result: RunResult
+        self, items: list[TestItem], resolver: ResourceResolver, merit_run: MeritRun
     ) -> None:
         """Run tests concurrently with semaphore control."""
         semaphore = asyncio.Semaphore(self.concurrency)
@@ -385,7 +452,7 @@ class Runner:
         failures = 0
         stop_flag = False
 
-        async def run_one(idx: int, item: TestItem) -> tuple[int, TestResult | None]:
+        async def run_one(idx: int, item: TestItem) -> tuple[int, TestExecution | None]:
             nonlocal failures, stop_flag
             if stop_flag:
                 return (idx, None)
@@ -394,38 +461,42 @@ class Runner:
                     return (idx, None)
                 child_resolver = resolver.fork_for_case()
                 start = time.perf_counter()
+                ctx = self._create_test_context(item)
                 result: TestResult
-                try:
-                    if self.timeout:
-                        result = await asyncio.wait_for(
-                            self._run_test(item, child_resolver),
-                            timeout=self.timeout,
+                with test_context_scope(ctx):
+                    try:
+                        if self.timeout:
+                            result = await asyncio.wait_for(
+                                self._run_test(item, child_resolver, ctx),
+                                timeout=self.timeout,
+                            )
+                        else:
+                            result = await self._run_test(item, child_resolver, ctx)
+                    except TimeoutError:
+                        duration = (time.perf_counter() - start) * 1000
+                        result = TestResult(
+                            status=TestStatus.ERROR,
+                            duration_ms=duration,
+                            error=TimeoutError(f"Test timed out after {self.timeout}s"),
                         )
-                    else:
-                        result = await self._run_test(item, child_resolver)
-                except TimeoutError:
-                    duration = (time.perf_counter() - start) * 1000
-                    result = TestResult(
-                        item=item,
-                        status=TestStatus.ERROR,
-                        duration_ms=duration,
-                        error=TimeoutError(f"Test timed out after {self.timeout}s"),
-                    )
-                except Exception as e:
-                    duration = (time.perf_counter() - start) * 1000
-                    result = TestResult(
-                        item=item, status=TestStatus.ERROR, duration_ms=duration, error=e
-                    )
-                finally:
-                    await child_resolver.teardown_scope(Scope.CASE)
+                    except Exception as e:
+                        duration = (time.perf_counter() - start) * 1000
+                        result = TestResult(
+                            status=TestStatus.ERROR, duration_ms=duration, error=e
+                        )
+                    finally:
+                        result.assertion_results = ctx.assertion_results.copy()
+                        await child_resolver.teardown_scope(Scope.CASE)
+
+                execution = TestExecution(context=ctx, result=result)
 
                 if result.status in {TestStatus.FAILED, TestStatus.ERROR}:
                     async with lock:
                         failures += 1
                         if self.maxfail and failures >= self.maxfail:
                             stop_flag = True
-                            run_result.stopped_early = True
-                return (idx, result)
+                            merit_run.result.stopped_early = True
+                return (idx, execution)
 
         indexed_results = await asyncio.gather(
             *[run_one(i, item) for i, item in enumerate(items)], return_exceptions=True
@@ -437,14 +508,20 @@ class Runner:
             key=lambda x: x[0],
         )
 
-        for _, result in sorted_results:
-            run_result.results.append(result)
-            await self._notify_test_complete(result)
+        for _, execution in sorted_results:
+            merit_run.result.executions.append(execution)
+            await self._notify_test_complete(execution)
 
-        if run_result.stopped_early:
+        if merit_run.result.stopped_early:
             await self._notify_run_stopped_early(self.maxfail)
 
-    async def _run_repeated_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
+    def _create_test_context(self, item: TestItem) -> TestContext:
+        """Create a TestContext from a TestItem."""
+        return TestContext(item=item)
+
+    async def _run_repeated_test(
+        self, item: TestItem, resolver: ResourceResolver, ctx: TestContext
+    ) -> TestResult:
         """Execute a test multiple times and aggregate results."""
         start = time.perf_counter()
         repeat_runs: list[TestResult] = []
@@ -471,7 +548,7 @@ class Runner:
         )
 
         for _ in range(item.repeat_count):
-            result = await self._run_single_test(single_item, resolver)
+            result = await self._run_single_test(single_item, resolver, ctx)
             repeat_runs.append(result)
 
         duration = (time.perf_counter() - start) * 1000
@@ -483,28 +560,30 @@ class Runner:
             status = TestStatus.FAILED
 
         return TestResult(
-            item=item,
             status=status,
             duration_ms=duration,
             repeat_runs=repeat_runs,
         )
 
-    async def _run_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
+    async def _run_test(
+        self, item: TestItem, resolver: ResourceResolver, ctx: TestContext
+    ) -> TestResult:
         """Execute a single test with resource injection."""
         # Handle repeated tests
         if item.repeat_count > 1:
-            return await self._run_repeated_test(item, resolver)
+            return await self._run_repeated_test(item, resolver, ctx)
 
-        return await self._run_single_test(item, resolver)
+        return await self._run_single_test(item, resolver, ctx)
 
-    async def _run_single_test(self, item: TestItem, resolver: ResourceResolver) -> TestResult:
+    async def _run_single_test(
+        self, item: TestItem, resolver: ResourceResolver, ctx: TestContext
+    ) -> TestResult:
         """Execute a single test run (no repeat handling)."""
         start = time.perf_counter()
 
         if item.skip_reason:
             duration = (time.perf_counter() - start) * 1000
             return TestResult(
-                item=item,
                 status=TestStatus.SKIPPED,
                 duration_ms=duration,
                 error=AssertionError(item.skip_reason),
@@ -538,19 +617,8 @@ class Runner:
             if cls:
                 instance = cls()
 
-        ctx = TestContext(
-            test_item_name=item.name,
-            test_item_group_name=item.class_name,
-            test_item_module_path=str(item.module_path) if item.module_path else None,
-            test_item_tags=list(item.tags),
-            test_item_params=item.params,
-            test_item_id_suffix=item.id_suffix,
-        )
-
-        with test_context_scope(ctx):
-            test_result = await self._execute_test_body(item, instance, kwargs, start, expect_failure)
-            test_result.assertion_results = ctx.assertion_results.copy()
-            return test_result
+        test_result = await self._execute_test_body(item, instance, kwargs, start, expect_failure)
+        return test_result
 
     async def _execute_test_body(
         self,
@@ -592,10 +660,10 @@ class Runner:
                 if item.xfail_strict:
                     err = AssertionError(item.xfail_reason or "xfail marked test passed")
                     return TestResult(
-                        item=item, status=TestStatus.FAILED, duration_ms=duration, error=err
+                        status=TestStatus.FAILED, duration_ms=duration, error=err
                     )
-                return TestResult(item=item, status=TestStatus.XPASSED, duration_ms=duration)
-            return TestResult(item=item, status=TestStatus.PASSED, duration_ms=duration)
+                return TestResult(status=TestStatus.XPASSED, duration_ms=duration)
+            return TestResult(status=TestStatus.PASSED, duration_ms=duration)
 
         except AssertionError as e:
             duration = (time.perf_counter() - start) * 1000
@@ -609,9 +677,9 @@ class Runner:
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(
-                    item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err
+                    status=TestStatus.XFAILED, duration_ms=duration, error=err
                 )
-            return TestResult(item=item, status=TestStatus.FAILED, duration_ms=duration, error=e)
+            return TestResult(status=TestStatus.FAILED, duration_ms=duration, error=e)
 
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
@@ -625,9 +693,9 @@ class Runner:
             if expect_failure:
                 err = AssertionError(item.xfail_reason) if item.xfail_reason else e
                 return TestResult(
-                    item=item, status=TestStatus.XFAILED, duration_ms=duration, error=err
+                    status=TestStatus.XFAILED, duration_ms=duration, error=err
                 )
-            return TestResult(item=item, status=TestStatus.ERROR, duration_ms=duration, error=e)
+            return TestResult(status=TestStatus.ERROR, duration_ms=duration, error=e)
 
         finally:
             if span_context:

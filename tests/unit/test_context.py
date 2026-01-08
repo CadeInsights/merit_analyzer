@@ -1,5 +1,6 @@
 import pytest
 
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from merit.assertions.base import AssertionResult
@@ -17,7 +18,19 @@ from merit.context import (
 )
 from merit.metrics.base import Metric, metric
 from merit.predicates.base import PredicateMetadata, PredicateResult
+from merit.testing.discovery import TestItem
 from merit.testing.resources import ResourceResolver, Scope, clear_registry
+
+
+def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:
+    """Create a minimal TestItem for testing."""
+    return TestItem(
+        name=name,
+        fn=lambda: None,
+        module_path=Path("test.py"),
+        is_async=False,
+        id_suffix=id_suffix,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +42,7 @@ def clean_registry():
 
 
 def test_assertionresult_appends_to_test_context():
-    ctx = Ctx(test_item_name="merit_fn")
+    ctx = Ctx(item=_make_item("merit_fn"))
 
     with context_scope(ctx):
         ar = AssertionResult(_passed=True, expression_repr="x == y")
@@ -44,10 +57,7 @@ def test_assertionresult_appends_to_test_context():
 
 def test_assertion_context_collects_predicate_results_and_metric_values():
     case_uuid = uuid4()
-    test_ctx = Ctx(
-        test_item_name="merit_name",
-        test_item_id_suffix=str(case_uuid),
-    )
+    test_ctx = Ctx(item=_make_item("merit_name", id_suffix=str(case_uuid)))
     ar = AssertionResult(_passed=True, expression_repr="check")
 
     m = Metric(name="m")
@@ -76,10 +86,7 @@ def test_assertion_context_collects_predicate_results_and_metric_values():
 
 def test_metrics_records_assertion_passed_and_reads_test_context_for_metadata():
     case_uuid = uuid4()
-    test_ctx = Ctx(
-        test_item_name="my_merit",
-        test_item_id_suffix=str(case_uuid),
-    )
+    test_ctx = Ctx(item=_make_item("my_merit", id_suffix=str(case_uuid)))
 
     m1 = Metric(name="m1")
     m2 = Metric(name="m2")

@@ -50,4 +50,4 @@ def test_runner_applies_parameter_values():
 
     assert recorded["param_a"] == "from_param"
     assert recorded["resource_b"] == "from_resource"
-    assert run_result.passed == 1
+    assert run_result.result.passed == 1
