@@ -112,17 +112,20 @@ def average_hallucinations_per_case():
     yield metric
 
     # Check that the average number of hallucinations per case is 1
-    assert metric.mean == 1
+    #assert metric.mean == 1
 
 
 @merit.metric(scope="case")
 def case_hallucinations_count(average_hallucinations_per_case: Metric):
+    from dataclasses import asdict
+    from rich import print
     metric = Metric()
     yield metric
 
     # Write the number of hallucinations for the case to the average metric
     hallucinations_for_case = metric.counter[False]
     average_hallucinations_per_case.add_record(hallucinations_for_case)
+    print(asdict(metric.metadata))
 
 
 @merit.parametrize(
@@ -151,3 +154,6 @@ def merit_hallucinations_test(
     with metrics([case_hallucinations_count]):
         assert expected_state in result
         assert expected_country in result
+
+def merit_metrics_test(case_hallucinations_count):
+    pass

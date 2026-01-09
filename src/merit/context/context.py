@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
     from merit.metrics.base import Metric
     from merit.testing.discovery import TestItem
+    from merit.testing.new_runner import TestNode
     from merit.testing.runner import MeritRun
 
 
@@ -49,11 +50,17 @@ RESOLVER_CONTEXT: ContextVar[ResolverContext | None] = ContextVar("resolver_cont
 ASSERTION_CONTEXT: ContextVar[AssertionResult | None] = ContextVar("assertion_context", default=None)
 METRIC_CONTEXT: ContextVar[List[Metric] | None] = ContextVar("metric_context", default=None)
 MERIT_RUN_CONTEXT: ContextVar[MeritRun | None] = ContextVar("merit_run_context", default=None)
+NODE_CONTEXT: ContextVar[TestNode | None] = ContextVar("node_context", default=None)
 
 
 def get_test_context() -> TestContext | None:
     """Get the current test context, or None if not in a test."""
     return TEST_CONTEXT.get()
+
+
+def get_node_context() -> TestNode | None:
+    """Get the currently executing test node, or None if not in a test."""
+    return NODE_CONTEXT.get()
 
 
 def get_merit_run() -> MeritRun | None:
@@ -139,3 +146,19 @@ def merit_run_scope(run: MeritRun) -> Iterator[None]:
         yield
     finally:
         MERIT_RUN_CONTEXT.reset(token)
+
+
+@contextmanager
+def node_context_scope(node: TestNode) -> Iterator[None]:
+    """Temporarily set `NODE_CONTEXT` for the duration of the ``with`` block.
+
+    Parameters
+    ----------
+    node : TestNode
+        The test node to bind as the current node context.
+    """
+    token = NODE_CONTEXT.set(node)
+    try:
+        yield
+    finally:
+        NODE_CONTEXT.reset(token)

@@ -433,7 +433,7 @@ class Runner:
         failures = 0
         for item in items:
             ctx = self._create_test_context(item)
-            with test_context_scope(ctx):
+            with test_context_scope(ctx): # move into execute_test_body
                 result = await self._run_test(item, resolver, ctx)
                 result.assertion_results = ctx.assertion_results.copy()
                 execution = TestExecution(context=ctx, result=result)
@@ -469,7 +469,7 @@ class Runner:
                 start = time.perf_counter()
                 ctx = self._create_test_context(item)
                 result: TestResult
-                with test_context_scope(ctx):
+                with test_context_scope(ctx): # move into execute_test_body
                     try:
                         if self.timeout:
                             result = await asyncio.wait_for(
