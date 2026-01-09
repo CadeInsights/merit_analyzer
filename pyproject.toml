@@ -1,12 +1,13 @@
 [project]
-name = "merit-analyzer"
+name = "merit"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Testing Framework"
 readme = "README.md"
 license = "MIT"
 authors = [
     { name = "Mark Reith", email = "mark@appmerit.com" },
-    { name = "Nikita Shirobokov", email = "nick@appmerit.com" }
+    { name = "Nikita Shirobokov", email = "nick@appmerit.com" },
+    { name = "Daniel Rousso", email = "daniel@appmerit.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -14,14 +15,7 @@ dependencies = [
     "pydantic>=2.12.3",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
-    "scikit-learn>=1.7.2",
-    "hdbscan>=0.8.38",
     "anthropic[vertex]>=0.72.0",
-    "openai-agents>=0.4.2",
-    "claude-agent-sdk>=0.1.6",
-    "boto3>=1.40.67",
-    "botocore>=1.40.67",
-    "sentence-transformers>=5.1.2",
     "pydantic-settings>=2.11.0",
     "httpx>=0.28.1",
     "opentelemetry-sdk>=1.29.0",
@@ -42,7 +36,6 @@ lint = [
 
 [project.scripts]
 merit = "merit.cli:main"
-merit-analyzer = "merit_analyzer:main"
 
 [build-system]
 requires = ["hatchling"]

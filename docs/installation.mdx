@@ -53,30 +53,6 @@ MERIT_API_KEY=your_merit_api_key_here
 AI predicates (`has_facts`, `has_topics`, etc.) call the Merit cloud service. Regular assertions work without any API keys.
 </Note>
 
-### For Error Analyzer (Bring Your Own Key)
-
-If you plan to use Merit Analyzer, you'll need Anthropic credentials (direct API or via AWS Bedrock):
-
-<CodeGroup>
-
-```bash Anthropic (Direct)
-ANTHROPIC_API_KEY=sk-ant-...
-MODEL_VENDOR=anthropic
-INFERENCE_VENDOR=anthropic
-```
-
-```bash AWS Bedrock
-MODEL_VENDOR=anthropic
-INFERENCE_VENDOR=aws
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=us-east-1
-```
-
-</CodeGroup>
-
-The analyzer uses your own Anthropic credentials directly (no Merit API required).
-
 ## Project Setup
 
 Create a new project directory:

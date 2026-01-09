@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Metric abstractions for the Merit analyzer.
+Metric abstractions for Merit.
 
 This module provides the core classes and decorators for recording,
 computing, and managing metrics during test execution.
