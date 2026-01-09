@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 from merit.context import (
     ResolverContext,
@@ -57,6 +59,18 @@ class RunContext:
     merit_run: MeritRun
 
 
+RUN_CONTEXT: ContextVar[RunContext | None] = ContextVar("run_context", default=None)
+
+
+@contextmanager
+def run_context_scope(ctx: RunContext) -> Iterator[None]:
+    token = RUN_CONTEXT.set(ctx)
+    try:
+        yield
+    finally:
+        RUN_CONTEXT.reset(token)
+
+
 @dataclass
 class TestNode:
     """A node in the execution tree.
@@ -81,23 +95,117 @@ class TestNode:
     # Internal: event for leaf nodes to signal completion
     _completion_event: asyncio.Event | None = field(default=None, repr=False)
 
-    async def execute(self, run_context: RunContext) -> None:
-        """Execute this node. Leaf nodes queue for workers, containers run children."""
-        self.status = TestStatus.IN_PROGRESS
+    async def execute(self, *, _worker: bool = False) -> None:
+        """Execute this node.
+
+        - Container nodes run children and aggregate their status.
+        - Leaf nodes are queued for workers when called from the scheduler.
+        - Leaf nodes run their body when called from a worker.
+        """
+        run_context = RUN_CONTEXT.get()
+        assert run_context is not None
+
+        # Leaf node: scheduler path (queue for worker and wait)
+        if self.body and not _worker:
+            self.status = TestStatus.IN_PROGRESS
+            self._completion_event = asyncio.Event()
+            await run_context.queue.put(self)
+            await self._completion_event.wait()
+            return
+
         start = time.perf_counter()
-        
+
         with node_context_scope(self):
-            if self.body:
-                # Leaf node: queue for worker execution
-                self._completion_event = asyncio.Event()
-                await run_context.queue.put(self)
-                await self._completion_event.wait()
+            # Leaf node: worker path (run body)
+            if self.body and _worker:
+                body = self.body
+                resolver = run_context.resolver.fork_for_case()
+
+                # Handle skip
+                if body.skip_reason:
+                    self.duration_ms = (time.perf_counter() - start) * 1000
+                    self.mark_complete(TestStatus.SKIPPED, AssertionError(body.skip_reason))
+                    await resolver.teardown_scope(Scope.CASE)
+                    return
+
+                expect_failure = body.xfail_reason is not None
+
+                # Prepare kwargs from param_values and resolve resources
+                kwargs = dict(body.param_values)
+
+                resolver_ctx = ResolverContext(consumer_name=self.name)
+                with resolver_context_scope(resolver_ctx):
+                    for param in body.param_names:
+                        if param in kwargs:
+                            continue
+                        try:
+                            kwargs[param] = await resolver.resolve(param)
+                        except ValueError:
+                            pass  # Not a resource
+
+                # Instantiate class if method
+                instance = None
+                if body.class_name:
+                    cls = body.fn.__globals__.get(body.class_name)
+                    if cls:
+                        instance = cls()
+
+                # Execute
+                try:
+                    if instance:
+                        if body.is_async:
+                            await body.fn(instance, **kwargs)
+                        else:
+                            body.fn(instance, **kwargs)
+                    elif body.is_async:
+                        await body.fn(**kwargs)
+                    else:
+                        body.fn(**kwargs)
+
+                    self.duration_ms = (time.perf_counter() - start) * 1000
+
+                    if expect_failure:
+                        if body.xfail_strict:
+                            self.mark_complete(
+                                TestStatus.FAILED,
+                                AssertionError(
+                                    body.xfail_reason or "xfail marked test passed"
+                                ),
+                            )
+                        else:
+                            self.mark_complete(TestStatus.XPASSED)
+                    else:
+                        self.mark_complete(TestStatus.PASSED)
+
+                except AssertionError as e:
+                    self.duration_ms = (time.perf_counter() - start) * 1000
+                    if expect_failure:
+                        self.mark_complete(
+                            TestStatus.XFAILED,
+                            AssertionError(body.xfail_reason) if body.xfail_reason else e,
+                        )
+                    else:
+                        self.mark_complete(TestStatus.FAILED, e)
+
+                except Exception as e:
+                    self.duration_ms = (time.perf_counter() - start) * 1000
+                    if expect_failure:
+                        self.mark_complete(
+                            TestStatus.XFAILED,
+                            AssertionError(body.xfail_reason) if body.xfail_reason else e,
+                        )
+                    else:
+                        self.mark_complete(TestStatus.ERROR, e)
+
+                finally:
+                    await resolver.teardown_scope(Scope.CASE)
+
+            # Container: execute all children concurrently
             elif self.children:
-                # Container: execute all children concurrently
-                await asyncio.gather(*[child.execute(run_context) for child in self.children])
+                self.status = TestStatus.IN_PROGRESS
+                await asyncio.gather(*[child.execute() for child in self.children])
                 self._aggregate_status()
-        
-        self.duration_ms = (time.perf_counter() - start) * 1000
+                self.duration_ms = (time.perf_counter() - start) * 1000
 
     def mark_complete(self, status: TestStatus, error: Exception | None = None) -> None:
         """Mark this leaf node as complete (called by worker)."""
@@ -148,111 +256,35 @@ class Runner:
             resolver=ResourceResolver(get_registry()),
             merit_run=merit_run,
         )
-        
-        # Start worker pool
-        workers = [
-            asyncio.create_task(self._worker(run_context))
-            for _ in range(self.concurrency)
-        ]
-        
-        # Execute all root nodes (they'll queue leaf nodes for workers)
-        await asyncio.gather(*[node.execute(run_context) for node in root_nodes])
-        
-        # Signal workers to stop
-        for _ in workers:
-            await run_context.queue.put(None)
-        await asyncio.gather(*workers)
-        
-        # Teardown resources
-        await run_context.resolver.teardown()
+
+        with run_context_scope(run_context):
+            # Start worker pool (tasks inherit current contextvars)
+            workers = [
+                asyncio.create_task(self._worker())
+                for _ in range(self.concurrency)
+            ]
+
+            # Execute all root nodes (they'll queue leaf nodes for workers)
+            await asyncio.gather(*[node.execute() for node in root_nodes])
+
+            # Signal workers to stop
+            for _ in workers:
+                await run_context.queue.put(None)
+            await asyncio.gather(*workers)
+
+            # Teardown resources
+            await run_context.resolver.teardown()
         
         return merit_run
 
-    async def _worker(self, run_context: RunContext) -> None:
+    async def _worker(self) -> None:
         """Worker that processes queued leaf nodes."""
+        run_context = RUN_CONTEXT.get()
+        assert run_context is not None
+
         while True:
             node = await run_context.queue.get()
             if node is None:
                 break
-            
-            await self._execute_leaf(node, run_context)
 
-    async def _execute_leaf(self, node: TestNode, run_context: RunContext) -> None:
-        """Execute a single leaf node's body."""
-        body = node.body
-        if not body:
-            node.mark_complete(TestStatus.ERROR, RuntimeError("No body to execute"))
-            return
-
-        # IMPORTANT: fork a per-test resolver so Scope.CASE is isolated per leaf execution.
-        # This matches the behavior of the original runner's concurrent path.
-        resolver = run_context.resolver.fork_for_case()
-        
-        start = time.perf_counter()
-        
-        # Handle skip
-        if body.skip_reason:
-            node.duration_ms = (time.perf_counter() - start) * 1000
-            node.mark_complete(TestStatus.SKIPPED, AssertionError(body.skip_reason))
-            return
-        
-        expect_failure = body.xfail_reason is not None
-        
-        # Prepare kwargs from param_values and resolve resources
-        kwargs = dict(body.param_values)
-        
-        resolver_ctx = ResolverContext(consumer_name=node.name)
-        with resolver_context_scope(resolver_ctx):
-            for param in body.param_names:
-                if param in kwargs:
-                    continue
-                try:
-                    kwargs[param] = await resolver.resolve(param)
-                except ValueError:
-                    pass  # Not a resource
-        
-        # Instantiate class if method
-        instance = None
-        if body.class_name:
-            cls = body.fn.__globals__.get(body.class_name)
-            if cls:
-                instance = cls()
-        
-        # Execute
-        try:
-            if instance:
-                if body.is_async:
-                    await body.fn(instance, **kwargs)
-                else:
-                    body.fn(instance, **kwargs)
-            elif body.is_async:
-                await body.fn(**kwargs)
-            else:
-                body.fn(**kwargs)
-            
-            node.duration_ms = (time.perf_counter() - start) * 1000
-            
-            if expect_failure:
-                if body.xfail_strict:
-                    node.mark_complete(TestStatus.FAILED, AssertionError(body.xfail_reason or "xfail marked test passed"))
-                else:
-                    node.mark_complete(TestStatus.XPASSED)
-            else:
-                node.mark_complete(TestStatus.PASSED)
-                
-        except AssertionError as e:
-            node.duration_ms = (time.perf_counter() - start) * 1000
-            if expect_failure:
-                node.mark_complete(TestStatus.XFAILED, AssertionError(body.xfail_reason) if body.xfail_reason else e)
-            else:
-                node.mark_complete(TestStatus.FAILED, e)
-                
-        except Exception as e:
-            node.duration_ms = (time.perf_counter() - start) * 1000
-            if expect_failure:
-                node.mark_complete(TestStatus.XFAILED, AssertionError(body.xfail_reason) if body.xfail_reason else e)
-            else:
-                node.mark_complete(TestStatus.ERROR, e)
-        
-        finally:
-            await resolver.teardown_scope(Scope.CASE)
+            await node.execute(_worker=True)
