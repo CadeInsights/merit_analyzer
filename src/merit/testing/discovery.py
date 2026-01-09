@@ -38,11 +38,13 @@ class MeritFunctionTransformer(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if node.name.startswith("merit_"):
             node = self.apply_transformers(node)
+            return node
         return self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
         if node.name.startswith("merit_"):
             node = self.apply_transformers(node)
+            return node
         return self.generic_visit(node)
 
 

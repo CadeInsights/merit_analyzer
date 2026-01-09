@@ -25,6 +25,7 @@ from merit.context import (
     merit_run_scope,
     resolver_context_scope,
     test_context_scope,
+    assertions_collector,
 )
 from merit.predicates import (
     close_predicate_api_client,
@@ -433,9 +434,10 @@ class Runner:
         failures = 0
         for item in items:
             ctx = self._create_test_context(item)
-            with test_context_scope(ctx):
+            assertion_results: list[AssertionResult] = []
+            with test_context_scope(ctx), assertions_collector(assertion_results):
                 result = await self._run_test(item, resolver, ctx)
-                result.assertion_results = ctx.assertion_results.copy()
+                result.assertion_results = assertion_results.copy()
                 execution = TestExecution(context=ctx, result=result)
                 await self._notify_test_complete(execution)
                 await resolver.teardown_scope(Scope.CASE)
@@ -469,7 +471,8 @@ class Runner:
                 start = time.perf_counter()
                 ctx = self._create_test_context(item)
                 result: TestResult
-                with test_context_scope(ctx):
+                assertion_results: list[AssertionResult] = []
+                with test_context_scope(ctx), assertions_collector(assertion_results):
                     try:
                         if self.timeout:
                             result = await asyncio.wait_for(
@@ -491,7 +494,7 @@ class Runner:
                             status=TestStatus.ERROR, duration_ms=duration, error=e
                         )
                     finally:
-                        result.assertion_results = ctx.assertion_results.copy()
+                        result.assertion_results = assertion_results.copy()
                         await child_resolver.teardown_scope(Scope.CASE)
 
                 execution = TestExecution(context=ctx, result=result)

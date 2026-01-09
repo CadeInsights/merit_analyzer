@@ -8,7 +8,7 @@ from functools import wraps
 from typing import Any, Protocol, overload, Callable, Awaitable, cast
 from pydantic import BaseModel, field_serializer, SerializationInfo, Field
 
-from merit.context import TEST_CONTEXT, ASSERTION_CONTEXT
+from merit.context import TEST_CONTEXT, PREDICATE_RESULTS_COLLECTOR
 
 logger = logging.getLogger(__name__)
 
@@ -176,14 +176,16 @@ class PredicateResult(BaseModel):
         """
         Auto-fill the predicate_name and merit_name fields if not provided.
         """
-        if test_ctx := TEST_CONTEXT.get():
+        test_ctx = TEST_CONTEXT.get()
+        if test_ctx is not None:
             if test_ctx.item.id_suffix:
                 self.case_id = UUID(test_ctx.item.id_suffix)
             if test_ctx.item.name:
                 self.predicate_metadata.merit_name = test_ctx.item.name
 
-        if as_ctx := ASSERTION_CONTEXT.get():
-            as_ctx.predicate_results.append(self)
+        collector = PREDICATE_RESULTS_COLLECTOR.get()
+        if collector is not None:
+            collector.append(self)
 
 
 def _filter_supported_kwargs(fn: Any, kwargs: dict[str, Any]) -> dict[str, Any]:

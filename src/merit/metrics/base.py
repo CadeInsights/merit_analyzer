@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, ParamSpec
 from pydantic import validate_call
 
-from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT, ASSERTION_CONTEXT
+from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT, METRIC_VALUES_COLLECTOR
 from merit.testing.resources import Scope, resource
 
 
@@ -169,10 +169,11 @@ class Metric:
 
     def _push_value_to_context(self, prop_name: str, value: Any) -> None:
         """Helper to record metric property access in assertion context."""
-        if as_ctx := ASSERTION_CONTEXT.get():
+        collector = METRIC_VALUES_COLLECTOR.get()
+        if collector is not None:
             full_name = f"{self.name or 'unnamed_metric'}.{prop_name}"
             mv = MetricValue(metric_full_name=full_name, metric_value=value)
-            as_ctx.metric_values.add(mv)
+            collector.append(mv)
 
     @validate_call
     def add_record(self, value: int | float | bool | list[int] | list[float] | list[bool]) -> None:
@@ -185,7 +186,8 @@ class Metric:
             The value(s) to add to the metric.
         """
         with self._values_lock:
-            if test_ctx := TEST_CONTEXT.get():
+            test_ctx = TEST_CONTEXT.get()
+            if test_ctx is not None:
                 if test_ctx.item.name:
                     self.metadata.collected_from_merits.add(test_ctx.item.name)
                 if test_ctx.item.id_suffix:
@@ -503,7 +505,8 @@ def metric(
         return metric
 
     def on_injection_hook(metric: Metric) -> Metric:
-        if resolver_ctx := RESOLVER_CONTEXT.get():
+        resolver_ctx = RESOLVER_CONTEXT.get()
+        if resolver_ctx is not None:
             if resolver_ctx.consumer_name:
                 metric.metadata.collected_from_resources.add(resolver_ctx.consumer_name)
         return metric
