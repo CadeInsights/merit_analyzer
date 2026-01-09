@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from merit.context import METRIC_CONTEXT, TEST_CONTEXT
+from merit.context import METRIC_CONTEXT, TEST_CONTEXT, ASSERTION_RESULTS_COLLECTOR
 
 if TYPE_CHECKING:
     from merit.predicates.base import PredicateResult
@@ -47,8 +47,8 @@ class AssertionResult:
     _passed: bool | None = field(default=None)
 
     def __post_init__(self) -> None:
-        if test_ctx := TEST_CONTEXT.get():
-            test_ctx.assertion_results.append(self)
+        if collector := ASSERTION_RESULTS_COLLECTOR.get():
+            collector.append(self)
 
     @property
     def passed(self) -> bool:
