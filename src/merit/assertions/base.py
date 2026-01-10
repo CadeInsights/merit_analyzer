@@ -7,7 +7,7 @@ from merit.context import METRIC_CONTEXT, TEST_CONTEXT, ASSERTION_RESULTS_COLLEC
 
 if TYPE_CHECKING:
     from merit.predicates.base import PredicateResult
-    from merit.metrics.base import MetricValue
+    from merit.metrics.base import MetricSnapshot
 
 
 
@@ -30,7 +30,7 @@ class AssertionResult:
     predicate_results
         Optional list of PredicateResult objects collected during the assertion.
     metric_values
-        Optional list of MetricValue objects collected during the assertion.
+        Optional list of MetricSnapshot objects collected during the assertion.
 
     Attributes
     ----------
@@ -43,7 +43,7 @@ class AssertionResult:
     passed: bool
     error_message: str | None = None
     predicate_results: list[PredicateResult] = field(default_factory=list)
-    metric_values: set[MetricValue] = field(default_factory=set)
+    metric_values: set[MetricSnapshot] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         collector = ASSERTION_RESULTS_COLLECTOR.get()

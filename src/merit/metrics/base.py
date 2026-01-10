@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Metric abstractions for Merit.
+Metric abstractions for the Merit testing framework.
 
 This module provides the core classes and decorators for recording,
 computing, and managing metrics during test execution.
@@ -11,22 +11,45 @@ import threading
 import math
 import statistics
 import warnings
+import functools
+import inspect
 from datetime import UTC, datetime
 from collections import Counter
-from collections.abc import Callable, Generator
-from dataclasses import dataclass, field
-from typing import Any, ParamSpec
+from collections.abc import Callable, Generator, AsyncGenerator
+from dataclasses import dataclass, field, replace
+from typing import Any, ParamSpec, TYPE_CHECKING
 from pydantic import validate_call
 
-from merit.context import RESOLVER_CONTEXT, TEST_CONTEXT, METRIC_VALUES_COLLECTOR
+from merit.context import (
+    RESOLVER_CONTEXT,
+    TEST_CONTEXT,
+    METRIC_VALUES_COLLECTOR,
+    METRIC_RESULTS_COLLECTOR,
+    assertions_collector,
+)
 from merit.testing.resources import Scope, resource
+
+if TYPE_CHECKING:
+    from merit.assertions.base import AssertionResult
 
 
 P = ParamSpec("P")
 
+CalculatedValue = (
+    int
+    | float
+    | bool
+    | list[int | float | bool]
+    | tuple[int | float | bool, ...]
+    | tuple[tuple[int | float | bool, int], ...]
+    | tuple[tuple[int | float | bool, float], ...]
+    | tuple[float, float]
+    | tuple[float, float, float]
+)
+
 
 @dataclass(slots=True, frozen=True)
-class MetricValue:
+class MetricSnapshot:
     """
     Snapshot of a metric value captured during assertion evaluation.
 
@@ -35,16 +58,16 @@ class MetricValue:
 
     Attributes
     ----------
-    metric_full_name : str
+    full_name : str
         Fully qualified metric property name, typically of the form
         ``"<metric_name>.<property>"`` (e.g., ``"latency_ms.p95"``).
-    metric_value : int | float | bool | list[int | float | bool]
+    value : CalculatedValue
         The value observed for that property (e.g., a float for ``mean``,
-        a tuple for confidence intervals, or a list for ``raw_values``).
+        a tuple for confidence intervals, or a tuple for ``raw_values``).
     """
 
-    metric_full_name: str
-    metric_value: int | float | bool | list[int | float | bool] | tuple[float, float] | tuple[float, float, float]
+    full_name: str
+    value: CalculatedValue
 
 
 @dataclass
@@ -116,12 +139,8 @@ class MetricState:
         Frequency count of each unique raw value. Missing keys return 0.
     distribution : dict, optional
         Share of each unique raw value.
-    final_value : int, float, bool, or list, optional
-        A single value or list representing the final result of the metric
-        after all records are processed.
     """
 
-    # auto-computed values
     len: int | None = None
     sum: float | None = None
     min: float | None = None
@@ -138,9 +157,6 @@ class MetricState:
     percentiles: list[float] | None = None
     counter: Counter[int | float | bool] | None = None
     distribution: dict[int | float | bool, float] | None = None
-    
-    # final value of the metric
-    final_value: int | float | bool | list[int | float | bool] | None = None
 
 
 @dataclass(slots=True)
@@ -171,18 +187,28 @@ class Metric:
         """Helper to record metric property access in assertion context."""
         collector = METRIC_VALUES_COLLECTOR.get()
         if collector is not None:
+            match value:
+                case list() as v:
+                    value = tuple(v)
+
+                case Counter() as v:
+                    value = tuple(sorted(v.items(), key=lambda kv: kv[0]))
+
+                case dict() as v:
+                    value = tuple(sorted(v.items(), key=lambda kv: kv[0]))
+
             full_name = f"{self.name or 'unnamed_metric'}.{prop_name}"
-            mv = MetricValue(metric_full_name=full_name, metric_value=value)
+            mv = MetricSnapshot(full_name=full_name, value=value)
             collector.append(mv)
 
     @validate_call
-    def add_record(self, value: int | float | bool | list[int] | list[float] | list[bool]) -> None:
+    def add_record(self, value: CalculatedValue) -> None:
         """
         Record one or more new data points.
 
         Parameters
         ----------
-        value : int, float, bool, or list of these
+        value : int, float, bool, list of these, or tuple of these
             The value(s) to add to the metric.
         """
         with self._values_lock:
@@ -197,12 +223,31 @@ class Metric:
                 self.metadata.first_item_recorded_at = datetime.now(UTC)
             self.metadata.last_item_recorded_at = datetime.now(UTC)
             self._cache = MetricState()
-            if isinstance(value, list):
-                self._raw_values.extend(value)
-                self._float_values.extend(float(v) for v in value)
-            else:
-                self._raw_values.append(value)
-                self._float_values.append(float(value))
+            match value:
+                case list() as values:
+                    self._raw_values.extend(values)
+                    self._float_values.extend(float(v) for v in values)
+
+                case tuple() as values:
+                    items: list[int | float | bool] = []
+                    for v in values:
+                        if isinstance(v, (int, float, bool)):
+                            items.append(v)
+                        else:
+                            raise TypeError(
+                                "add_record only supports scalar or sequences of int|float|bool."
+                            )
+                    self._raw_values.extend(items)
+                    self._float_values.extend(float(v) for v in items)
+
+                case int() | float() | bool() as v:
+                    self._raw_values.append(v)
+                    self._float_values.append(float(v))
+
+                case _:
+                    raise TypeError(
+                        "add_record only supports scalar or sequences of int|float|bool."
+                    )
 
     @property
     def raw_values(self) -> list[int | float | bool]:
@@ -234,7 +279,10 @@ class Metric:
         with self._values_lock:
             if self._cache.min is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute min for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute min for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.min = math.nan
                 else:
                     self._cache.min = min(self._float_values)
@@ -247,7 +295,10 @@ class Metric:
         with self._values_lock:
             if self._cache.max is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute max for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute max for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     value = math.nan
                     self._cache.max = value
                 else:
@@ -261,7 +312,10 @@ class Metric:
         with self._values_lock:
             if self._cache.median is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute median for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute median for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.median = math.nan
                 else:
                     self._cache.median = statistics.median(self._float_values)
@@ -274,7 +328,10 @@ class Metric:
         with self._values_lock:
             if self._cache.mean is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute mean for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute mean for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.mean = math.nan
                 else:
                     self._cache.mean = statistics.mean(self._float_values)
@@ -287,7 +344,10 @@ class Metric:
         with self._values_lock:
             if self._cache.variance is None:
                 if self.len < 2:
-                    warnings.warn(f"Cannot compute variance for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute variance for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.variance = math.nan
                 else:
                     self._cache.variance = statistics.variance(self._float_values, xbar=self.mean)
@@ -300,7 +360,10 @@ class Metric:
         with self._values_lock:
             if self._cache.std is None:
                 if self.len < 2:
-                    warnings.warn(f"Cannot compute std for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute std for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.std = math.nan
                 else:
                     self._cache.std = statistics.stdev(self._float_values, xbar=self.mean)
@@ -313,7 +376,10 @@ class Metric:
         with self._values_lock:
             if self._cache.pvariance is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute pvariance for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute pvariance for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.pvariance = math.nan
                 else:
                     self._cache.pvariance = statistics.pvariance(self._float_values, mu=self.mean)
@@ -326,7 +392,10 @@ class Metric:
         with self._values_lock:
             if self._cache.pstd is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute pstd for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute pstd for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.pstd = math.nan
                 else:
                     self._cache.pstd = statistics.pstdev(self._float_values, mu=self.mean)
@@ -339,7 +408,10 @@ class Metric:
         with self._values_lock:
             if self._cache.ci_90 is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute ci_90 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute ci_90 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.ci_90 = (math.nan, math.nan)
                 else:
                     half = 1.645 * self.std / math.sqrt(self.len)
@@ -353,7 +425,10 @@ class Metric:
         with self._values_lock:
             if self._cache.ci_95 is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute ci_95 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute ci_95 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.ci_95 = (math.nan, math.nan)
                 else:
                     half = 1.96 * self.std / math.sqrt(self.len)
@@ -367,7 +442,10 @@ class Metric:
         with self._values_lock:
             if self._cache.ci_99 is None:
                 if self.len == 0:
-                    warnings.warn(f"Cannot compute ci_99 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.", stacklevel=2)
+                    warnings.warn(
+                        f"Cannot compute ci_99 for {self.name or 'unnamed metric'} - not enough values. Returning NaN.",
+                        stacklevel=2,
+                    )
                     self._cache.ci_99 = (math.nan, math.nan)
                 else:
                     half = 2.576 * self.std / math.sqrt(self.len)
@@ -381,7 +459,10 @@ class Metric:
         with self._values_lock:
             if self._cache.percentiles is None:
                 if self.len < 2:
-                    warnings.warn(f"Metric '{self.name or 'unnamed'}' has less than 2 values. Cannot compute percentiles.", stacklevel=2)
+                    warnings.warn(
+                        f"Metric '{self.name or 'unnamed'}' has less than 2 values. Cannot compute percentiles.",
+                        stacklevel=2,
+                    )
                     self._cache.percentiles = [math.nan] * 99
                 else:
                     self._cache.percentiles = statistics.quantiles(
@@ -452,73 +533,166 @@ class Metric:
             self._push_value_to_context("distribution", value)
             return value
 
-    @property
-    def final_value(self) -> int | float | bool | list[int | float | bool] | None:
-        with self._values_lock:
-            value = self._cache.final_value
-            self._push_value_to_context("final_value", value)
-            return value
 
-    @final_value.setter
-    def final_value(self, value: int | float | bool | list[int | float | bool] | None) -> None:
-        with self._values_lock:
-            self._cache.final_value = value
+@dataclass(slots=True)
+class MetricResult:
+    """
+    Result of evaluating a `Metric` resource.
+
+    Parameters
+    ----------
+    name : str
+        The metric name. By default this is the decorated function name.
+    metadata : MetricMetadata
+        Snapshot of metadata describing where/when the metric was recorded
+        (scope, contributors, timestamps).
+    assertion_results : list[AssertionResult]
+        Assertion results collected while the metric resource was running.
+    value : CalculatedValue
+        The last yielded value from the metric generator. NaN if no value was yielded.
+    """
+
+    name: str
+    metadata: MetricMetadata
+    assertion_results: list[AssertionResult]
+    value: CalculatedValue
+
+    def __post_init__(self) -> None:
+        collector = METRIC_RESULTS_COLLECTOR.get()
+        if collector is not None:
+            collector.append(self)
 
 
 def metric(
-    fn: Callable[P, Metric] | Callable[P, Generator[Metric, Any, Any]] | None = None,
+    fn: Callable[P, Generator[Metric | CalculatedValue, Any, Any]]
+    | Callable[P, AsyncGenerator[Metric | CalculatedValue, Any]]
+    | None = None,
     *,
     scope: Scope | str = Scope.SESSION,
 ) -> Any:
     """
-    Register a metric.
+    Register a metric resource and capture its final result.
 
-    This decorator converts a function that returns a `Metric` (or a generator
-    yielding one) into a managed resource within the Merit framework. It
-    automatically handles metadata collection like which tests or resources
-    contributed to the metric.
+    This decorator wraps a **generator** or **async generator** function into a
+    managed resource via `merit.testing.resources.resource`. The wrapped function
+    must:
+
+    - `yield` a single `Metric` instance first (this is what gets injected and
+      used during the test run).
+    - Optionally `yield` a **final value** (int/float/bool/list/CI tuple) later.
+      When the generator completes, a `MetricResult` is emitted containing that
+      final value and any assertions evaluated while the generator was running.
 
     Parameters
     ----------
     fn : callable, optional
-        The function or generator to register. If None, returns a decorator.
+        The generator/async-generator function to register. If None, returns a
+        decorator.
     scope : Scope or str, default Scope.SESSION
         The lifecycle scope of the metric resource. Can be "case", "suite",
         or "session".
-
-    Returns
-    -------
-    callable
-        The wrapped resource or a decorator if `fn` is None.
     """
     if fn is None:
         return lambda f: metric(f, scope=scope)
 
     name = fn.__name__
 
-    def on_resolve_hook(metric: Metric) -> Metric:
-        if not isinstance(metric, Metric):
-            raise ValueError(f"Metric {metric} is not a valid Metric instance.")
+    is_generator = inspect.isgeneratorfunction(fn)
+    is_async_generator = inspect.isasyncgenfunction(fn)
 
-        metric.name = name
-        metric.metadata.scope = scope if isinstance(scope, Scope) else Scope(scope)
-        return metric
+    def on_resolve_hook(m: Metric) -> Metric:
+        m.name = name
+        m.metadata.scope = scope if isinstance(scope, Scope) else Scope(scope)
+        return m
 
-    def on_injection_hook(metric: Metric) -> Metric:
+    def on_injection_hook(m: Metric) -> Metric:
         resolver_ctx = RESOLVER_CONTEXT.get()
         if resolver_ctx is not None:
             if resolver_ctx.consumer_name:
-                metric.metadata.collected_from_resources.add(resolver_ctx.consumer_name)
-        return metric
+                m.metadata.collected_from_resources.add(resolver_ctx.consumer_name)
+        return m
 
-    def on_teardown_hook(metric: Metric) -> None:
-        # TODO: implement pushing data to dashboard
-        pass
+    if is_generator:
 
-    return resource(
-        fn,
-        scope=scope,
-        on_resolve=on_resolve_hook,
-        on_injection=on_injection_hook,
-        on_teardown=on_teardown_hook,
-    )  # type: ignore
+        @functools.wraps(fn)
+        def wrapped_gen(*args: Any, **kwargs: Any) -> Generator[Metric, Any, Any]:
+            assertions_results = []
+
+            with assertions_collector(assertions_results):
+                gen = fn(*args, **kwargs)
+                metric_instance: Metric = next(gen)
+
+            yield metric_instance
+
+            with assertions_collector(assertions_results):
+                final_value = None
+                while True:
+                    try:
+                        final_value = next(gen)
+                    except StopIteration:
+                        if final_value is None:
+                            value = math.nan
+                        else:
+                            value = final_value
+                        MetricResult(
+                            name=name,
+                            metadata=replace(
+                                metric_instance.metadata
+                            ),  # use replace to create a copy
+                            assertion_results=assertions_results,
+                            value=value,
+                        )
+                        break
+
+        return resource(
+            wrapped_gen,
+            scope=scope,
+            on_resolve=on_resolve_hook,
+            on_injection=on_injection_hook,
+        )
+
+    elif is_async_generator:
+
+        @functools.wraps(fn)
+        async def wrapped_async_gen(*args: Any, **kwargs: Any):
+            assertions_results = []
+
+            with assertions_collector(assertions_results):
+                gen = fn(*args, **kwargs)
+                metric_instance: Metric = await gen.__anext__()
+
+            yield metric_instance
+
+            with assertions_collector(assertions_results):
+                final_value = None
+                while True:
+                    try:
+                        final_value = await gen.__anext__()
+                    except StopAsyncIteration:
+                        if final_value is None:
+                            value = math.nan
+                        else:
+                            value = final_value
+                        MetricResult(
+                            name=name,
+                            metadata=replace(
+                                metric_instance.metadata
+                            ),  # use replace to create a copy
+                            assertion_results=assertions_results,
+                            value=value,
+                        )
+                        break
+
+        return resource(
+            wrapped_async_gen,
+            scope=scope,
+            on_resolve=on_resolve_hook,
+            on_injection=on_injection_hook,
+        )
+
+    else:
+        msg = f"""
+        {fn.__name__} is not a generator or async generator and can't be wrapped as a Merit metric. 
+        To fix: yield a Metric instance and optionally yield a final calculated value.
+        """
+        raise ValueError(msg)

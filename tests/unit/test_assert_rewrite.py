@@ -6,8 +6,10 @@ import pytest
 from merit.context import TestContext, test_context_scope as context_scope_ctx
 from merit.context import metrics as metrics_scope_ctx
 from merit.context import assertions_collector
+from merit.context import metric_results_collector
 from merit.testing.discovery import collect
 from merit.metrics.base import Metric
+from merit.testing.resources import ResourceResolver, clear_registry
 
 
 def test_rewritten_assert_collects_predicate_results_and_metric_values(tmp_path):
@@ -43,7 +45,7 @@ def merit_sample():
         assert len(ar.predicate_results) == 1
         assert ar.predicate_results[0].predicate_metadata.predicate_name == "equals"
 
-        names = {mv.metric_full_name for mv in ar.metric_values}
+        names = {mv.full_name for mv in ar.metric_values}
         assert "m.len" in names
     finally:
         sys.modules.pop(mod_name, None)
@@ -110,5 +112,45 @@ def merit_metric_capture_multi():
         assert ctx.assertion_results[0].passed is True
         assert ctx.assertion_results[1].passed is False
     finally:
+        sys.modules.pop(mod_name, None)
+
+
+@pytest.mark.asyncio
+async def test_rewritten_asserts_inside_metric_functions_are_collected(tmp_path):
+    clear_registry()
+    mod_name = f"merit_{uuid4().hex}"
+    mod_path = tmp_path / f"{mod_name}.py"
+    mod_path.write_text(
+        """
+import merit
+from merit.metrics.base import Metric
+
+@merit.metric
+def my_metric():
+    m = Metric(name="m")
+    yield m
+    assert False, "nope"
+
+def merit_dummy():
+    pass
+""".lstrip()
+    )
+
+    try:
+        [item] = collect(mod_path)
+        resolver = ResourceResolver()
+        metric_results = []
+        with metric_results_collector(metric_results):
+            await resolver.resolve("my_metric")
+            await resolver.teardown()
+
+        assert len(metric_results) == 1
+        [metric_result] = metric_results
+        assert len(metric_result.assertion_results) == 1
+        ar = metric_result.assertion_results[0]
+        assert ar.passed is False
+        assert ar.error_message == "nope"
+    finally:
+        clear_registry()
         sys.modules.pop(mod_name, None)
 
