@@ -26,6 +26,7 @@ from merit.context import (
     resolver_context_scope,
     test_context_scope,
     assertions_collector,
+    metric_results_collector,
 )
 from merit.predicates import (
     close_predicate_api_client,
@@ -39,6 +40,7 @@ from merit.version import __version__
 if TYPE_CHECKING:
     from merit.context import TestContext
     from merit.reports.base import Reporter
+    from merit.metrics.base import MetricResult
 
 
 @dataclass
@@ -224,6 +226,7 @@ class RunResult:
     """Result of a complete test run."""
 
     executions: list[TestExecution] = field(default_factory=list)
+    metric_results: list[MetricResult] = field(default_factory=list)
     total_duration_ms: float = 0
     stopped_early: bool = False
 
@@ -405,7 +408,9 @@ class Runner:
 
         resolver = ResourceResolver(get_registry())
 
-        with merit_run_scope(merit_run):
+        metric_results: list[MetricResult] = []
+
+        with merit_run_scope(merit_run), metric_results_collector(metric_results):
             if self.concurrency == 1:
                 await self._run_sequential(items, resolver, merit_run)
             else:
@@ -417,6 +422,7 @@ class Runner:
         await close_predicate_api_client()
 
         merit_run.result.total_duration_ms = (time.perf_counter() - start) * 1000
+        merit_run.result.metric_results = metric_results.copy()
         merit_run.end_time = datetime.now(UTC)
 
         await self._notify_run_complete(merit_run)

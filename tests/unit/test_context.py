@@ -17,6 +17,8 @@ from merit.context import (
     resolver_context_scope,
     test_context_scope as context_scope,
 )
+from collections.abc import Generator
+from typing import Any
 from merit.metrics.base import Metric, metric
 from merit.predicates.base import PredicateMetadata, PredicateResult
 from merit.testing.discovery import TestItem
@@ -122,8 +124,8 @@ def test_metrics_records_assertion_passed_and_reads_test_context_for_metadata():
 @pytest.mark.asyncio
 async def test_metric_injection_reads_resolver_context():
     @metric(scope=Scope.CASE)
-    def injected_metric() -> Metric:
-        return Metric(name="ignored_by_on_resolve")
+    def injected_metric() -> Generator[Metric, Any, Any]:
+        yield Metric(name="ignored_by_on_resolve")
 
     resolver = ResourceResolver()
     with resolver_context_scope(ResolverContext(consumer_name="consumer_a")):
