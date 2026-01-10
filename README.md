@@ -1,157 +1,217 @@
+<div align="center">
+
 # Merit
 
-**Description:**
-Error analysis for AI projects.
+**Testing framework for AI systems**
 
-**Expected behavior:**
-- user runs the tool in CLI
-- the tool takes a .csv file with test results and error messages as input. It tells the user what columns and types are necessary
-- backend parses each row inside this file into a data object: test input (any), expected output (any), actual output (any), pass (bool), error_message (str | None), additional_context (str | None). If no error_message is provided - it generates it with LLM
-- backend clusters all messages into groups. For each group it generates a name (str) and pattern (str).
-- backend predicts what code contributes to each group of errors the most, and provide ideas on fixing them.
-- the tool returns an HTML file with the following structure: error group name > problematic behavior > problematic code > relevant test results. The HTML report can be opened directly in a browser and displays a clickable file:// URL in the terminal output.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
-## Environment Variables
+[Documentation](https://docs.appmerit.com) | [GitHub](https://github.com/appMerit/merit)
 
-Merit Analyzer requires environment variables to configure the LLM provider. The tool automatically loads variables from a `.env` file in the current working directory, so you can simply create a `.env` file and it will be detected. Alternatively, you can export variables in your shell.
+</div>
 
-**Note:** The `.env` file is automatically loaded when you run the CLI tool, regardless of whether you use `uvx`, `uv run`, or direct execution. No manual sourcing or loading is required.
+---
 
-### Required Variables
+**Merit** is a modern testing framework built specifically for LLMs and AI agents. Stop guessing. Start testing your AI with semantic assertions that understand what your AI actually says.
 
-**Core Configuration:**
-- `MODEL_VENDOR`: The model family to use. Options: `openai` or `anthropic`
-- `INFERENCE_VENDOR`: The inference provider to use. Options depend on `MODEL_VENDOR`:
-  - For `openai`: `openai`
-  - For `anthropic`: `anthropic`, `aws`, or `gcp`
+The key features are:
 
-### Provider-Specific Variables
+* **Semantic assertions**: LLM-as-a-Judge checks facts, not strings. Detects hallucinations, missing info, and contradictions automatically.
+* **Familiar syntax**: Pytest-like interface. If you know pytest, you know Merit. Resources, parametrization, async support.
+* **Production-ready**: Built for scale. Concurrent testing, tracing, CI/CD integration.
 
-**OpenAI:**
-```bash
-MODEL_VENDOR=openai
-INFERENCE_VENDOR=openai
-OPENAI_API_KEY=your_openai_api_key_here
-```
+---
 
-**Anthropic (Direct API):**
-```bash
-MODEL_VENDOR=anthropic
-INFERENCE_VENDOR=anthropic
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-```
-
-**AWS Bedrock:**
-```bash
-MODEL_VENDOR=anthropic
-INFERENCE_VENDOR=aws
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
-AWS_REGION=us-east-1  # Optional, defaults to us-east-1
-```
-
-**Google Cloud Vertex AI:**
-```bash
-MODEL_VENDOR=anthropic
-INFERENCE_VENDOR=gcp
-GOOGLE_CLOUD_PROJECT=your_project_id  # or use ANTHROPIC_VERTEX_PROJECT_ID
-CLOUD_ML_REGION=us-east5  # Optional, defaults to us-east5
-```
-
-## CLI
-
-Run the full pipeline from any project directory:
+## Installation
 
 ```bash
-uv run merit-analyzer analyze path/to/tests.csv
+pip install git+https://github.com/appMerit/merit.git
 ```
 
-### Command Options
+**Requirements**: Python 3.12+
 
-**Basic Usage:**
+---
+
+## Example
+
+### Create it
+
+Create a file `test_chatbot.py`:
+
+```python
+import merit
+from merit.predicates import has_facts, has_unsupported_facts
+
+def chatbot(prompt: str) -> str:
+    """Your AI system."""
+    return "Paris is the capital of France and home to the Eiffel Tower."
+
+async def merit_chatbot_accuracy():
+    """Test chatbot with semantic assertions."""
+    response = chatbot("What is the capital of France?")
+    
+    # ✓ Semantic fact checking (not string matching)
+    assert await has_facts(response, "Paris is the capital of France")
+    
+    # ✓ Hallucination detection
+    assert not await has_unsupported_facts(
+        response, 
+        "Paris is the capital of France. The Eiffel Tower is in Paris."
+    )
+```
+
+### Run it
+
 ```bash
-uv run merit-analyzer analyze <csv_path> [OPTIONS]
+merit
 ```
 
-**Arguments:**
-- `csv_path` (required): Path to CSV file containing test results with columns: `case_input`, `reference_value`, `output_for_assertions`, `passed`, `error_message`
+**Output:**
 
-**Options:**
-- `--report <path>`: Where to write the HTML report (default: `merit_report.html`)
-- `--model-vendor <vendor>`: Override `MODEL_VENDOR` environment variable (e.g., `openai`, `anthropic`)
-- `--inference-vendor <vendor>`: Override `INFERENCE_VENDOR` environment variable (e.g., `openai`, `anthropic`, `aws`, `gcp`)
+```
+Merit Test Runner
+=================
 
-### Examples
+Collected 1 test
 
-**Using OpenAI (with environment variables):**
+test_chatbot.py::merit_chatbot_accuracy ✓
+
+==================== 1 passed in 0.45s ====================
+```
+
+That's it! Merit handles the complexity of semantic evaluation for you.
+
+---
+
+## What You Can Test
+
+Merit's LLM-as-a-Judge assertions understand **meaning**, not just text:
+
+* **`has_facts`** - Catches incomplete responses that skip critical details
+* **`has_unsupported_facts`** - Detects when your LLM invents information (hallucinations)
+* **`has_conflicting_facts`** - Finds contradictions with your source material
+* **`has_topics`** - Ensures all required subjects are covered
+* **`follows_policy`** - Validates compliance with brand guidelines
+* **`matches_writing_style`** - Checks tone, voice, and writing patterns
+* **`has_structure`** - Validates format and organization
+* **`is_valid_json`** - Checks JSON structure and schema
+
+[See all predicates →](https://docs.appmerit.com/predicates/overview)
+
+---
+
+## Parametrization
+
+Test multiple cases easily:
+
+```python
+import merit
+
+def chatbot(prompt: str) -> str:
+    return f"Hello, {prompt}!"
+
+@merit.parametrize(
+    "name,expected",
+    [
+        ("World", "Hello, World!"),
+        ("Alice", "Hello, Alice!"),
+        ("Bob", "Hello, Bob!"),
+    ],
+)
+def merit_chatbot_greetings(name: str, expected: str):
+    """Test multiple greetings."""
+    response = chatbot(name)
+    assert response == expected
+```
+
+**Output:**
+
+```
+test_chatbot.py::merit_chatbot_greetings[World] ✓
+test_chatbot.py::merit_chatbot_greetings[Alice] ✓
+test_chatbot.py::merit_chatbot_greetings[Bob] ✓
+
+==================== 3 passed in 0.12s ====================
+```
+
+---
+
+## Resources (Fixtures)
+
+Merit supports pytest-like resources for setup and teardown:
+
+```python
+import merit
+
+@merit.resource
+def api_client():
+    """Setup resource."""
+    client = {"connected": True}
+    yield client
+    client["connected"] = False  # Teardown
+
+@merit.resource(scope="suite")
+def expensive_model():
+    """Suite-scoped resource - shared across all tests."""
+    return "loaded-model-v1"
+
+def merit_client_works(api_client):
+    """Test using resource."""
+    assert api_client["connected"] is True
+
+async def merit_async_test(api_client):
+    """Async tests work too."""
+    assert api_client["connected"] is True
+```
+
+---
+
+## Configuration
+
+For AI predicates, set up your Merit API credentials:
+
 ```bash
-# Set in .env file or export:
-# MODEL_VENDOR=openai
-# INFERENCE_VENDOR=openai
-# OPENAI_API_KEY=sk-...
-
-uv run merit-analyzer analyze tests.csv --report analysis.html
+# .env file
+MERIT_API_BASE_URL=https://api.appmerit.com
+MERIT_API_KEY=your_api_key_here
 ```
 
-**Using Anthropic Direct API:**
-```bash
-# Set in .env file or export:
-# MODEL_VENDOR=anthropic
-# INFERENCE_VENDOR=anthropic
-# ANTHROPIC_API_KEY=sk-ant-...
+AI predicates use the Merit cloud service. [Contact us](mailto:daniel@appmerit.com) to get access.
 
-uv run merit-analyzer analyze tests.csv --report analysis.html
-```
+**Alternative**: You can also use local LLM providers (OpenAI, Anthropic, AWS Bedrock, etc.). See [Configuration docs](https://docs.appmerit.com/configuration) for details.
 
-**Using AWS Bedrock:**
-```bash
-# Set in .env file or export:
-# MODEL_VENDOR=anthropic
-# INFERENCE_VENDOR=aws
-# AWS_ACCESS_KEY_ID=...
-# AWS_SECRET_ACCESS_KEY=...
-# AWS_REGION=us-east-1
+---
 
-uv run merit-analyzer analyze tests.csv --report analysis.html
-```
+## Documentation
 
-**Overriding vendors via CLI flags:**
-```bash
-uv run merit-analyzer analyze tests.csv \
-  --model-vendor anthropic \
-  --inference-vendor aws \
-  --report bedrock_analysis.html
-```
+**Getting Started:**
+- [Quick Start](https://docs.appmerit.com/quickstart) - Get up and running in 2 minutes
+- [Your First Test](https://docs.appmerit.com/first-test) - Write and run your first test
+- [Writing Tests](https://docs.appmerit.com/core/writing-tests) - Learn about resources and test structure
 
-Note: When using CLI flags to override vendors, you still need the appropriate API keys set in your environment variables.
+**Core Features:**
+- [AI Predicates](https://docs.appmerit.com/predicates/overview) - LLM-as-a-Judge assertions
+- [Test Cases](https://docs.appmerit.com/core/test-cases) - Organize tests with Case objects
+- [Resources](https://docs.appmerit.com/core/resources) - Setup and teardown (fixtures)
+- [Running Tests](https://docs.appmerit.com/core/running-tests) - CLI options and test discovery
 
-## Structure
+**Advanced:**
+- [Parametrization](https://docs.appmerit.com/advanced/parametrize) - Test multiple inputs
+- [Tags & Filters](https://docs.appmerit.com/advanced/tags-filters) - Organize and filter tests
+- [Tracing](https://docs.appmerit.com/advanced/tracing) - Distributed tracing integration
 
-**Key data abstractions:**
-- src/merit_analyzer/types
+---
 
-**Key stateless processors:** 
-- src/merit_analyzer/processors
+## Who Uses Merit?
 
-**Key stateful engines:**
-- src/merit_analyzer/engines
+- **Chatbot Developers** - Test response accuracy, detect hallucinations, ensure brand voice
+- **Document AI** - Verify summaries, check extractions, validate transformations at scale
+- **AI Agent Teams** - Test complex workflows, validate tool usage, ensure reliable behavior
+- **RAG Systems** - Validate groundedness, catch hallucinations, test retrieval quality
+- **Content Generation** - Check facts, verify style, ensure quality across 1000s of outputs
 
-**Core layer:**
-- src/merit_analyzer/core
-
-**Interfaces:**
-- src/merit_analyzer/interface
-
-**Tests:**
-- tests/unit
-- tests/integrations
-
-## Design patterns
-
-1. Keep all LLM-related callables async. 
-
-## TODO
-1. Test end-to-end with Bedrock
+---
 
 ## License
 
