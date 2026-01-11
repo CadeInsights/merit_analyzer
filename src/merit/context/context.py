@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Iterator, TYPE_CHECKING, List
+from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
-    from merit.metrics.base import Metric, MetricSnapshot
+    from merit.metrics.base import Metric, MetricResult, MetricSnapshot
     from merit.predicates.base import PredicateResult
-    from merit.testing.discovery import TestItem
-    from merit.testing.runner import MeritRun
-    from merit.metrics.base import MetricResult
+    from merit.testing.models import MeritRun, TestItem
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,13 +21,15 @@ class TestContext:
     This object holds a reference to the currently executing test item and
     aggregates results produced while executing that item (e.g., assertion results).
 
-    Attributes
+    Attributes:
     ----------
     item : TestItem
         The test item being executed.
     assertion_results : list[AssertionResult]
         Assertion results produced while executing the test item.
     """
+
+    __test__ = False  # Prevent pytest from collecting this as a test class
 
     item: TestItem
     assertion_results: list[AssertionResult] = field(default_factory=list)
@@ -37,7 +39,7 @@ class TestContext:
 class ResolverContext:
     """Context for resource resolution.
 
-    Attributes
+    Attributes:
     ----------
     consumer_name
         Name/identifier of the component currently resolving/consuming a resource.
@@ -45,14 +47,23 @@ class ResolverContext:
 
     consumer_name: str | None = None
 
-ASSERTION_RESULTS_COLLECTOR: ContextVar[List[AssertionResult] | None] = ContextVar("assertion_results_collector", default=None)
-PREDICATE_RESULTS_COLLECTOR: ContextVar[List[PredicateResult] | None] = ContextVar("predicate_results_collector", default=None)
-METRIC_VALUES_COLLECTOR: ContextVar[List[MetricSnapshot] | None] = ContextVar("metric_values_collector", default=None)
-METRIC_RESULTS_COLLECTOR: ContextVar[List[MetricResult] | None] = ContextVar("metric_results_collector", default=None)
+
+ASSERTION_RESULTS_COLLECTOR: ContextVar[list[AssertionResult] | None] = ContextVar(
+    "assertion_results_collector", default=None
+)
+PREDICATE_RESULTS_COLLECTOR: ContextVar[list[PredicateResult] | None] = ContextVar(
+    "predicate_results_collector", default=None
+)
+METRIC_VALUES_COLLECTOR: ContextVar[list[MetricSnapshot] | None] = ContextVar(
+    "metric_values_collector", default=None
+)
+METRIC_RESULTS_COLLECTOR: ContextVar[list[MetricResult] | None] = ContextVar(
+    "metric_results_collector", default=None
+)
 
 TEST_CONTEXT: ContextVar[TestContext | None] = ContextVar("test_context", default=None)
 RESOLVER_CONTEXT: ContextVar[ResolverContext | None] = ContextVar("resolver_context", default=None)
-METRIC_CONTEXT: ContextVar[List[Metric] | None] = ContextVar("metric_context", default=None)
+METRIC_CONTEXT: ContextVar[list[Metric] | None] = ContextVar("metric_context", default=None)
 MERIT_RUN_CONTEXT: ContextVar[MeritRun | None] = ContextVar("merit_run_context", default=None)
 
 
@@ -67,7 +78,7 @@ def get_merit_run() -> MeritRun | None:
 
 
 @contextmanager
-def assertions_collector(ctx: List[AssertionResult]) -> Iterator[None]:
+def assertions_collector(ctx: list[AssertionResult]) -> Iterator[None]:
     token = ASSERTION_RESULTS_COLLECTOR.set(ctx)
     try:
         yield
@@ -76,16 +87,16 @@ def assertions_collector(ctx: List[AssertionResult]) -> Iterator[None]:
 
 
 @contextmanager
-def predicate_results_collector(ctx: List[PredicateResult]) -> Iterator[None]:
+def predicate_results_collector(ctx: list[PredicateResult]) -> Iterator[None]:
     token = PREDICATE_RESULTS_COLLECTOR.set(ctx)
     try:
         yield
     finally:
-  
         PREDICATE_RESULTS_COLLECTOR.reset(token)
 
+
 @contextmanager
-def metric_values_collector(ctx: List[MetricSnapshot]) -> Iterator[None]:
+def metric_values_collector(ctx: list[MetricSnapshot]) -> Iterator[None]:
     token = METRIC_VALUES_COLLECTOR.set(ctx)
     try:
         yield
@@ -94,7 +105,7 @@ def metric_values_collector(ctx: List[MetricSnapshot]) -> Iterator[None]:
 
 
 @contextmanager
-def metric_results_collector(ctx: List[MetricResult]) -> Iterator[None]:
+def metric_results_collector(ctx: list[MetricResult]) -> Iterator[None]:
     token = METRIC_RESULTS_COLLECTOR.set(ctx)
     try:
         yield
@@ -135,7 +146,7 @@ def resolver_context_scope(ctx: ResolverContext) -> Iterator[None]:
 
 
 @contextmanager
-def metrics(ctx: List[Metric]) -> Iterator[None]:
+def metrics(ctx: list[Metric]) -> Iterator[None]:
     """Attach metrics to the current execution scope via `METRIC_CONTEXT`.
 
     Parameters

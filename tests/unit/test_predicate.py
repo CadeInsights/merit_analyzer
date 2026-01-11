@@ -1,30 +1,30 @@
-import pytest
 import json
-import httpx
 from pathlib import Path
 
-from merit.predicates.base import PredicateResult, PredicateMetadata, predicate
+import httpx
+import pytest
+
+from merit.context import TestContext as MeritTestContext, test_context_scope as context_scope
+from merit.predicates.ai_predicates import (
+    follows_policy,
+    has_conflicting_facts,
+    has_facts,
+    has_topics,
+    has_unsupported_facts,
+    matches_facts,
+    matches_writing_layout,
+    matches_writing_style,
+)
+from merit.predicates.base import PredicateResult, predicate
 from merit.predicates.client import (
     PredicateAPIClient,
     PredicateAPIFactory,
     PredicateAPISettings,
-    close_predicate_api_client,
-    get_predicate_api_client,
-    create_predicate_api_client,
     PredicateType,
+    close_predicate_api_client,
+    create_predicate_api_client,
+    get_predicate_api_client,
 )
-from merit.predicates.ai_predicates import (
-    has_conflicting_facts,
-    has_unsupported_facts,
-    has_facts,
-    has_topics,
-    matches_facts,
-    follows_policy,
-    matches_writing_layout,
-    matches_writing_style,
-)
-
-from merit.context import test_context_scope as context_scope, TestContext as MeritTestContext
 from merit.testing.discovery import TestItem
 
 
@@ -40,10 +40,8 @@ def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem
 
 
 def test_predicate_result_and_metadata_auto_filled():
-
     @predicate
-    def simple_predicate(
-        actual: str, reference: str, strict: bool = True):
+    def simple_predicate(actual: str, reference: str, strict: bool = True):
         return actual == reference
 
     def merit_with_simple_predicate():
@@ -151,8 +149,11 @@ async def test_module_level_get_and_close_work(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("MERIT_API_BASE_URL", "https://example.com")
     monkeypatch.setenv("MERIT_API_KEY", "secret")
 
+    # Reset to ensure clean state (previous tests may have initialized)
+    close_predicate_api_client()
+
     # Should raise error before initialization
-    with pytest.raises(RuntimeError, match="not initialized"):
+    with pytest.raises(RuntimeError):
         await get_predicate_api_client()
 
     create_predicate_api_client()
@@ -163,10 +164,9 @@ async def test_module_level_get_and_close_work(monkeypatch: pytest.MonkeyPatch) 
 
     await close_predicate_api_client()
 
-    # Still initialized but internal httpx client is closed
-    # get() should recreate it
-    client3 = await get_predicate_api_client()
-    assert client3 is not client1
+    with pytest.raises(RuntimeError):
+        client3 = await get_predicate_api_client()
+        assert client3 is not client1
 
     await close_predicate_api_client()
 

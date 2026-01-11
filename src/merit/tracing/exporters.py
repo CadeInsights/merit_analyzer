@@ -3,10 +3,8 @@
 Writes spans to a JSONL file as they are finished, avoiding memory buildup.
 """
 
-import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult

@@ -3,21 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
-
-@dataclass
-class RepeatData:
-    """Configuration for repeating a test multiple times."""
-
-    count: int
-    min_passes: int
-
-
-def get_repeat_data(target: Any) -> RepeatData | None:
-    """Return repeat configuration for the target, if any."""
-    return getattr(target, "__merit_repeat__", None)
+from merit.testing.models import RepeatModifier
 
 
 class RepeatDecorator:
@@ -46,11 +34,12 @@ class RepeatDecorator:
         if actual_min_passes > count:
             raise ValueError(f"min_passes ({actual_min_passes}) cannot exceed count ({count})")
 
+        modifier = RepeatModifier(count=count, min_passes=actual_min_passes)
+
         def decorator(target: Any) -> Any:
-            target.__merit_repeat__ = RepeatData(
-                count=count,
-                min_passes=actual_min_passes,
-            )
+            modifiers: list = getattr(target, "__merit_modifiers__", [])
+            modifiers.append(modifier)
+            target.__merit_modifiers__ = modifiers
             return target
 
         return decorator
@@ -58,4 +47,4 @@ class RepeatDecorator:
 
 repeat = RepeatDecorator()
 
-__all__ = ["RepeatData", "get_repeat_data", "repeat"]
+__all__ = ["RepeatModifier", "repeat"]

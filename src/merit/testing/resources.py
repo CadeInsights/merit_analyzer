@@ -126,7 +126,9 @@ class ResourceResolver:
     ) -> None:
         self._registry = registry if registry is not None else _registry
         self._cache: dict[tuple[Scope, str], Any] = {}
-        self._teardowns: list[tuple[Scope, str, Generator[Any, None, None] | AsyncGenerator[Any, None]]] = []
+        self._teardowns: list[
+            tuple[Scope, str, Generator[Any, None, None] | AsyncGenerator[Any, None]]
+        ] = []
         self._parent = parent
 
     def fork_for_case(self) -> "ResourceResolver":
@@ -142,7 +144,9 @@ class ResourceResolver:
                 child._cache[key] = value
         return child
 
-    def _register_teardown(self, scope: Scope, name: str, gen: Generator[Any, None, None] | AsyncGenerator[Any, None]) -> None:
+    def _register_teardown(
+        self, scope: Scope, name: str, gen: Generator[Any, None, None] | AsyncGenerator[Any, None]
+    ) -> None:
         """Register a teardown, delegating to parent for SUITE/SESSION scopes."""
         if scope in {Scope.SUITE, Scope.SESSION} and self._parent:
             self._parent._register_teardown(scope, name, gen)
@@ -160,7 +164,7 @@ class ResourceResolver:
 
         if cache_key in self._cache:
             value = self._cache[cache_key]
-            
+
             # hook returns updated value on resource injection from cache
             if defn.on_injection:
                 try:
@@ -169,7 +173,9 @@ class ResourceResolver:
                         value = await value
                     return value
                 except Exception as e:
-                    raise RuntimeError(f"Hook {defn.on_injection.__name__} failed for resource '{name}': {e}") from e
+                    raise RuntimeError(
+                        f"Hook {defn.on_injection.__name__} failed for resource '{name}': {e}"
+                    ) from e
             return value
 
         # Resolve dependencies first
@@ -202,7 +208,9 @@ class ResourceResolver:
                 if inspect.iscoroutine(value):
                     value = await value
             except Exception as e:
-                raise RuntimeError(f"Hook {defn.on_resolve.__name__} failed for resource '{name}': {e}") from e
+                raise RuntimeError(
+                    f"Hook {defn.on_resolve.__name__} failed for resource '{name}': {e}"
+                ) from e
 
         self._cache[cache_key] = value
         # Sync cache to parent for SUITE/SESSION scopes
@@ -216,7 +224,9 @@ class ResourceResolver:
                 if inspect.iscoroutine(value):
                     value = await value
             except Exception as e:
-                raise RuntimeError(f"Hook {defn.on_injection.__name__} failed for resource '{name}': {e}") from e
+                raise RuntimeError(
+                    f"Hook {defn.on_injection.__name__} failed for resource '{name}': {e}"
+                ) from e
 
         return value
 
@@ -247,7 +257,9 @@ class ResourceResolver:
                         if inspect.iscoroutine(result):
                             await result
                     except Exception as e:
-                        raise RuntimeError(f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}") from e
+                        raise RuntimeError(
+                            f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
+                        ) from e
 
         self._teardowns.clear()
 
@@ -276,7 +288,9 @@ class ResourceResolver:
                             if inspect.iscoroutine(result):
                                 await result
                         except Exception as e:
-                            raise RuntimeError(f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}") from e
+                            raise RuntimeError(
+                                f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
+                            ) from e
             else:
                 remaining.append((s, name, gen))
 

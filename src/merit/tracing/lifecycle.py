@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from opentelemetry import trace
+from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
 from merit.tracing.exporters import StreamingFileSpanExporter
-from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
-from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 
 
 _exporter: StreamingFileSpanExporter | None = None

@@ -123,8 +123,18 @@ class AssertTransformer(ast.NodeTransformer):
 
         # Conditionally evaluate and store error message if assertion fails
         if node.msg is not None:
+            # __merit_msg = None
             # if not __merit_passed: __merit_msg = str(node.msg)
-            fail_test = ast.UnaryOp(op=ast.Not(), operand=ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Load()))
+            msg_init = ast.Assign(
+                targets=[ast.Name(id=self.MSG_VAR_NAME, ctx=ast.Store())],
+                value=ast.Constant(value=None),
+            )
+            ast.copy_location(msg_init, node)
+            statements.append(msg_init)
+
+            fail_test = ast.UnaryOp(
+                op=ast.Not(), operand=ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Load())
+            )
             msg_assign = ast.Assign(
                 targets=[ast.Name(id=self.MSG_VAR_NAME, ctx=ast.Store())],
                 value=ast.Call(
@@ -141,7 +151,10 @@ class AssertTransformer(ast.NodeTransformer):
         ar_keywords = [
             ast.keyword(arg="expression_repr", value=ast.Constant(value=expr_repr)),
             ast.keyword(arg="passed", value=ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Load())),
-            ast.keyword(arg="predicate_results", value=ast.Name(id=self.PREDICATE_RESULTS_VAR_NAME, ctx=ast.Load())),
+            ast.keyword(
+                arg="predicate_results",
+                value=ast.Name(id=self.PREDICATE_RESULTS_VAR_NAME, ctx=ast.Load()),
+            ),
             ast.keyword(
                 arg="metric_values",
                 value=ast.Call(
@@ -154,7 +167,9 @@ class AssertTransformer(ast.NodeTransformer):
 
         if node.msg is not None:
             ar_keywords.append(
-                ast.keyword(arg="error_message", value=ast.Name(id=self.MSG_VAR_NAME, ctx=ast.Load()))
+                ast.keyword(
+                    arg="error_message", value=ast.Name(id=self.MSG_VAR_NAME, ctx=ast.Load())
+                )
             )
 
         ar_assign = ast.Assign(
@@ -167,7 +182,7 @@ class AssertTransformer(ast.NodeTransformer):
         )
         ast.copy_location(ar_assign, node)
         statements.append(ar_assign)
-        
+
         # Ensure all nested nodes have location info
         for stmt in statements:
             ast.fix_missing_locations(stmt)

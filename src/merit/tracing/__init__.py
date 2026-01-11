@@ -6,6 +6,7 @@ from merit.tracing.lifecycle import (
     trace_step,
 )
 
+
 __all__ = [
     "clear_traces",
     "get_tracer",

@@ -6,7 +6,7 @@ import pytest
 
 from merit.testing.resources import ResourceResolver, Scope, clear_registry, get_registry
 from merit.testing.sut import sut
-from merit.tracing import clear_traces, init_tracing, set_trace_output_path
+from merit.tracing import clear_traces, set_trace_output_path
 
 
 @pytest.fixture(autouse=True)

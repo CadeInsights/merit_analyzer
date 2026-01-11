@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """
 Metric abstractions for the Merit testing framework.
 
@@ -7,27 +8,29 @@ This module provides the core classes and decorators for recording,
 computing, and managing metrics during test execution.
 """
 
-import threading
-import math
-import statistics
-import warnings
 import functools
 import inspect
-from datetime import UTC, datetime
+import math
+import statistics
+import threading
+import warnings
 from collections import Counter
-from collections.abc import Callable, Generator, AsyncGenerator
+from collections.abc import AsyncGenerator, Callable, Generator
 from dataclasses import dataclass, field, replace
-from typing import Any, ParamSpec, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, ParamSpec
+
 from pydantic import validate_call
 
 from merit.context import (
+    METRIC_RESULTS_COLLECTOR,
+    METRIC_VALUES_COLLECTOR,
     RESOLVER_CONTEXT,
     TEST_CONTEXT,
-    METRIC_VALUES_COLLECTOR,
-    METRIC_RESULTS_COLLECTOR,
     assertions_collector,
 )
 from merit.testing.resources import Scope, resource
+
 
 if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
@@ -50,13 +53,12 @@ CalculatedValue = (
 
 @dataclass(slots=True, frozen=True)
 class MetricSnapshot:
-    """
-    Snapshot of a metric value captured during assertion evaluation.
+    """Snapshot of a metric value captured during assertion evaluation.
 
     Used to record *what* metric property was accessed and the
     *value* that was observed at that moment.
 
-    Attributes
+    Attributes:
     ----------
     full_name : str
         Fully qualified metric property name, typically of the form
@@ -72,10 +74,9 @@ class MetricSnapshot:
 
 @dataclass
 class MetricMetadata:
-    """
-    Metadata for a metric tracking its lifecycle and origin.
+    """Metadata for a metric tracking its lifecycle and origin.
 
-    Attributes
+    Attributes:
     ----------
     last_item_recorded_at : datetime, optional
         Timestamp of the most recently recorded value.
@@ -102,10 +103,9 @@ class MetricMetadata:
 
 @dataclass(slots=True)
 class MetricState:
-    """
-    Typed cache for computed metric values to avoid redundant calculations.
+    """Typed cache for computed metric values to avoid redundant calculations.
 
-    Attributes
+    Attributes:
     ----------
     len : int, optional
         Number of recorded values.
@@ -161,13 +161,12 @@ class MetricState:
 
 @dataclass(slots=True)
 class Metric:
-    """
-    Thread-safe class for recording data points and computing statistical metrics.
+    """Thread-safe class for recording data points and computing statistical metrics.
 
     This class maintains a list of raw values and provides properties to compute
     various statistics (mean, std, percentiles, etc.) on demand.
 
-    Attributes
+    Attributes:
     ----------
     name : str, optional
         Name of the metric.
@@ -203,8 +202,7 @@ class Metric:
 
     @validate_call
     def add_record(self, value: CalculatedValue) -> None:
-        """
-        Record one or more new data points.
+        """Record one or more new data points.
 
         Parameters
         ----------
@@ -536,8 +534,7 @@ class Metric:
 
 @dataclass(slots=True)
 class MetricResult:
-    """
-    Result of evaluating a `Metric` resource.
+    """Result of evaluating a `Metric` resource.
 
     Parameters
     ----------
@@ -570,8 +567,7 @@ def metric(
     *,
     scope: Scope | str = Scope.SESSION,
 ) -> Any:
-    """
-    Register a metric resource and capture its final result.
+    """Register a metric resource and capture its final result.
 
     This decorator wraps a **generator** or **async generator** function into a
     managed resource via `merit.testing.resources.resource`. The wrapped function
@@ -651,7 +647,7 @@ def metric(
             on_injection=on_injection_hook,
         )
 
-    elif is_async_generator:
+    if is_async_generator:
 
         @functools.wraps(fn)
         async def wrapped_async_gen(*args: Any, **kwargs: Any):
@@ -690,9 +686,8 @@ def metric(
             on_injection=on_injection_hook,
         )
 
-    else:
-        msg = f"""
+    msg = f"""
         {fn.__name__} is not a generator or async generator and can't be wrapped as a Merit metric. 
         To fix: yield a Metric instance and optionally yield a final calculated value.
         """
-        raise ValueError(msg)
+    raise ValueError(msg)

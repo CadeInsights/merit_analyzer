@@ -1,14 +1,14 @@
-"""Test case definitions and decorators.
-"""
+"""Test case definitions and decorators."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
-from typing_extensions import TypeVar
 from uuid import UUID, uuid4
+
 from pydantic import BaseModel, Field, TypeAdapter
 from pydantic_core import SchemaValidator
+from typing_extensions import TypeVar
 
 from merit.testing.parametrize import parametrize
 
@@ -17,10 +17,9 @@ RefsT = TypeVar("RefsT", default=dict[str, Any])
 
 
 class Case(BaseModel, Generic[RefsT]):
-    """
-    Container for a single test case inputs and references.
+    """Container for a single test case inputs and references.
 
-    Attributes
+    Attributes:
     ----------
     id : UUID
         Unique identifier for the test case, defaults to a new UUID.
@@ -33,6 +32,7 @@ class Case(BaseModel, Generic[RefsT]):
     sut_input_values : dict[str, Any]
         Input arguments to be passed to the System Under Test (SUT).
     """
+
     id: UUID = Field(default_factory=uuid4)
     tags: set[str] = Field(default_factory=set)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
@@ -41,12 +41,9 @@ class Case(BaseModel, Generic[RefsT]):
 
 
 def valididate_cases_for_sut(
-    cases: Sequence[Case[RefsT]], 
-    sut: Callable[..., Any],
-    raise_on_error: bool = True
-    ) -> Sequence[Case[RefsT]]:
-    """
-    Validate that all cases match the signature of the System Under Test.
+    cases: Sequence[Case[RefsT]], sut: Callable[..., Any], raise_on_error: bool = True
+) -> Sequence[Case[RefsT]]:
+    """Validate that all cases match the signature of the System Under Test.
 
     This function uses Pydantic to inspect the SUT's signature and ensures that
     the `sut_input_values` in each case are compatible with what the SUT expects.
@@ -58,21 +55,21 @@ def valididate_cases_for_sut(
     sut : Callable[..., Any], optional
         The System Under Test to validate against.
 
-    Returns
+    Returns:
     -------
     bool
         True if all cases are valid for the given SUT.
 
-    Raises
+    Raises:
     ------
     ValidationError
         If any case's input values do not match the SUT's signature.
     """
     valid_cases = []
     schema = TypeAdapter(sut).core_schema
-    arg_schema = schema.get('arguments_schema', None)
+    arg_schema = schema.get("arguments_schema", None)
     if arg_schema:
-        validator = SchemaValidator(arg_schema) # type: ignore[arg-type]
+        validator = SchemaValidator(arg_schema)  # type: ignore[arg-type]
         for case in cases:
             input_values = case.sut_input_values or {}
             try:
@@ -81,21 +78,19 @@ def valididate_cases_for_sut(
             except Exception as e:
                 if raise_on_error:
                     raise e
-                else:
-                    continue
-    return valid_cases        
+                continue
+    return valid_cases
 
 
 def iter_cases(cases: Sequence[Case[RefsT]]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """
-    Decorator to run a test function for each case in the provided sequence.
+    """Decorator to run a test function for each case in the provided sequence.
 
     Parameters
     ----------
     cases : Sequence[Case[RefsT]]
         The sequence of test cases to iterate over.
 
-    Returns
+    Returns:
     -------
     Callable
         A decorator that applies parametrization to the target function.

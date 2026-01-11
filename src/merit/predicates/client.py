@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+
 """HTTP client for calling the Merit remote predicate API."""
 
 import asyncio
-import random
 import logging
+import random
+from enum import Enum
 
 import httpx
-from enum import Enum
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ class PredicateAPISettings(BaseSettings):
 
     Environment variables are read without a prefix.
 
-    Attributes
+    Attributes:
     ----------
     base_url
         Service base URL (from ``MERIT_API_BASE_URL``).
@@ -113,7 +115,6 @@ class PredicateAPIClient:
         settings
             Retry and timeout configuration.
         """
-
         self._http = http
         self._settings = settings
 
@@ -131,17 +132,16 @@ class PredicateAPIClient:
         strict
             Whether to enforce strict checking semantics.
 
-        Returns
+        Returns:
         -------
         PredicateAPIResponse
             Parsed response returned by the service.
 
-        Raises
+        Raises:
         ------
         httpx.HTTPError
             If the request ultimately fails or returns a non-success status.
         """
-
         s = self._settings
 
         if s.debugging_mode:
@@ -202,7 +202,6 @@ class PredicateAPIFactory:
             Optional settings override. If omitted, settings are loaded from the
             environment via `PredicateAPISettings`.
         """
-
         self._settings = settings or PredicateAPISettings()  # type: ignore[call-arg]
         self._lock = asyncio.Lock()
         self._http: httpx.AsyncClient | None = None
@@ -210,7 +209,6 @@ class PredicateAPIFactory:
 
     async def aclose(self) -> None:
         """Close the underlying `httpx.AsyncClient` (if any) and reset state."""
-
         async with self._lock:
             if self._http and not self._http.is_closed:
                 await self._http.aclose()
@@ -220,12 +218,11 @@ class PredicateAPIFactory:
     async def get(self) -> PredicateAPIClient:
         """Return a shared `PredicateAPIClient`, creating it if needed.
 
-        Returns
+        Returns:
         -------
         PredicateAPIClient
             A client backed by a shared `httpx.AsyncClient` connection pool.
         """
-
         http = self._http
         client = self._client
         if client is not None and http is not None and not http.is_closed:
@@ -269,14 +266,12 @@ _default_factory: PredicateAPIFactory | None = None
 
 def create_predicate_api_client(settings: PredicateAPISettings | None = None) -> None:
     """Initialize the global PredicateAPIClient factory."""
-
     global _default_factory
     _default_factory = PredicateAPIFactory(settings=settings)
 
 
 async def get_predicate_api_client() -> PredicateAPIClient:
     """Return a process-wide shared PredicateAPIClient."""
-
     if _default_factory is None:
         raise RuntimeError(
             "Predicate API client not initialized. Call create_predicate_api_client() first."
@@ -286,7 +281,9 @@ async def get_predicate_api_client() -> PredicateAPIClient:
 
 async def close_predicate_api_client() -> None:
     """Close the shared client pool."""
-
+    global _default_factory
     if _default_factory is None:
         return
     await _default_factory.aclose()
+
+    _default_factory = None
