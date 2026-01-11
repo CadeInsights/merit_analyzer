@@ -1,4 +1,4 @@
-#TODO: introduce new examples when checks endpoint is ready
+# TODO: introduce new examples when checks endpoint is ready
 
 # """Simple example of using Merit testing framework."""
 

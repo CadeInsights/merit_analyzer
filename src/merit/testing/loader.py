@@ -13,10 +13,7 @@ TFunction = TypeVar("TFunction", ast.FunctionDef, ast.AsyncFunctionDef)
 class MeritFunctionTransformer(ast.NodeTransformer):
     """Finds all functions in the module that start with `merit_` and transforms them."""
 
-    def __init__(
-        self,
-        transformers: list[ast.NodeTransformer]
-    ) -> None:
+    def __init__(self, transformers: list[ast.NodeTransformer]) -> None:
         self.transformers = transformers
 
     def apply_transformers(self, node: TFunction) -> TFunction:
@@ -41,10 +38,7 @@ class MeritFunctionTransformer(ast.NodeTransformer):
 class MeritMetricTransformer(ast.NodeTransformer):
     """Find metric functions (decorated with `@merit.metric` / `@metric`) and transform them."""
 
-    def __init__(
-        self,
-        transformers: list[ast.NodeTransformer]
-    ) -> None:
+    def __init__(self, transformers: list[ast.NodeTransformer]) -> None:
         self.transformers = transformers
 
     def apply_transformers(self, node: TFunction) -> TFunction:
@@ -108,7 +102,7 @@ class MeritMetricTransformer(ast.NodeTransformer):
 
 class MeritModuleLoader(importlib.abc.SourceLoader):
     """Custom loader for Merit test modules with AST transformations.
-    
+
     This loader participates in Python's import protocol and handles
     AST transformation and injection of Merit-specific globals during
     module execution.
@@ -116,7 +110,7 @@ class MeritModuleLoader(importlib.abc.SourceLoader):
 
     def __init__(self, fullname: str, path: Path) -> None:
         """Initialize the loader.
-        
+
         Args:
             fullname: The fully qualified module name.
             path: Path to the module file.
@@ -136,12 +130,14 @@ class MeritModuleLoader(importlib.abc.SourceLoader):
         if source is None:
             msg = f"Cannot get source for module {module.__name__}"
             raise ImportError(msg)
-        
+
         module_transformers = [
             MeritMetricTransformer(
-                transformers=[InjectAssertionDependenciesTransformer(), AssertTransformer(source)]),
+                transformers=[InjectAssertionDependenciesTransformer(), AssertTransformer(source)]
+            ),
             MeritFunctionTransformer(
-                transformers=[InjectAssertionDependenciesTransformer(), AssertTransformer(source)]),
+                transformers=[InjectAssertionDependenciesTransformer(), AssertTransformer(source)]
+            ),
         ]
         tree = ast.parse(source, filename=filename)
         for transformer in module_transformers:
@@ -149,4 +145,4 @@ class MeritModuleLoader(importlib.abc.SourceLoader):
         validated_tree = ast.fix_missing_locations(tree)
 
         code = compile(validated_tree, filename=filename, mode="exec")
-        exec(code, module.__dict__) 
+        exec(code, module.__dict__)

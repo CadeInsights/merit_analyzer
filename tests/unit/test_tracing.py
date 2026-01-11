@@ -3,8 +3,17 @@
 import json
 
 import pytest
+from opentelemetry import trace
 
-from merit.tracing import clear_traces, get_tracer, init_tracing, set_trace_output_path, trace_step
+from merit.testing.resources import ResourceResolver, get_registry
+from merit.tracing import (
+    TraceContext,
+    clear_traces,
+    get_tracer,
+    init_tracing,
+    set_trace_output_path,
+    trace_step,
+)
 
 
 @pytest.fixture(scope="module")
@@ -71,3 +80,67 @@ class TestTraceStep:
 
         lines = trace_output_path.read_text().strip().split("\n")
         assert len(lines) == 2
+
+
+@pytest.mark.usefixtures("trace_output_path")
+class TestTraceContext:
+    """Tests for TraceContext resource and object."""
+
+    @pytest.mark.asyncio
+    async def test_trace_context_injection(self):
+        """Test that trace_context resolves correctly within an active span."""
+        tracer = get_tracer()
+
+        # Start a span to simulate a running test
+        with tracer.start_as_current_span("test_root_span") as span:
+            resolver = ResourceResolver(get_registry())
+
+            # Resolve the trace_context resource
+            # Note: The resource is a generator, resolver handles the lifecycle
+            ctx = await resolver.resolve("trace_context")
+
+            assert isinstance(ctx, TraceContext)
+            assert ctx.is_enabled is True
+
+            # Verify IDs match the current span
+            assert ctx.trace_id == format(span.get_span_context().trace_id, "032x")
+            assert ctx.span_id == format(span.get_span_context().span_id, "016x")
+
+            # Create a child span
+            with trace_step("child_step"):
+                pass
+
+            # Verify child span capture
+            child_spans = ctx.get_child_spans()
+            assert len(child_spans) >= 1
+            assert any(s.name == "child_step" for s in child_spans)
+
+            # Test custom attributes
+            ctx.set_attribute("my.custom.attr", "value")
+
+            # Teardown the resolver (important for generators)
+            await resolver.teardown()
+
+    @pytest.mark.asyncio
+    async def test_trace_context_lifecycle(self):
+        """Test that trace_context clears spans on teardown."""
+        tracer = get_tracer()
+
+        with tracer.start_as_current_span("lifecycle_test") as span:
+            resolver = ResourceResolver(get_registry())
+            ctx = await resolver.resolve("trace_context")
+            trace_id = ctx.trace_id
+
+            with trace_step("step_1"): pass
+
+            assert len(ctx.get_child_spans()) > 0
+
+            # Trigger teardown
+            # This should invoke trace_context generator teardown which calls collector.clear(trace_id)
+            await resolver.teardown()
+
+            # Verify spans are cleared from collector for this trace
+            from merit.tracing import get_span_collector
+            collector = get_span_collector()
+            assert len(collector.get_spans(trace_id)) == 0
+

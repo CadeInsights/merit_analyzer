@@ -4,8 +4,7 @@ from pathlib import Path
 import pytest
 
 from merit.testing import Runner, repeat
-from merit.testing.discovery import TestItem
-from merit.testing.repeat import get_repeat_data
+from merit.testing.models import RepeatModifier, TestItem
 
 
 def test_repeat_decorator_records_metadata():
@@ -13,10 +12,11 @@ def test_repeat_decorator_records_metadata():
     def sample():
         pass
 
-    data = get_repeat_data(sample)
-    assert data is not None
-    assert data.count == 5
-    assert data.min_passes == 3
+    modifiers = getattr(sample, "__merit_modifiers__", [])
+    assert len(modifiers) == 1
+    assert isinstance(modifiers[0], RepeatModifier)
+    assert modifiers[0].count == 5
+    assert modifiers[0].min_passes == 3
 
 
 def test_repeat_decorator_validation():
@@ -54,8 +54,7 @@ def test_runner_handles_repeat_all_pass():
         module_path=Path("sample.py"),
         is_async=False,
         params=[],
-        repeat_count=5,
-        repeat_min_passes=5,
+        modifiers=[RepeatModifier(count=5, min_passes=5)],
         tags={"repeat"},
     )
 
@@ -63,9 +62,9 @@ def test_runner_handles_repeat_all_pass():
 
     assert run_result.result.passed == 1
     assert call_count == 5
-    assert run_result.result.executions[0].result.repeat_runs is not None
-    assert len(run_result.result.executions[0].result.repeat_runs) == 5
-    assert all(r.status.value == "passed" for r in run_result.result.executions[0].result.repeat_runs)
+    assert run_result.result.executions[0].result.sub_runs is not None
+    assert len(run_result.result.executions[0].result.sub_runs) == 5
+    assert all(r.status.value == "passed" for r in run_result.result.executions[0].result.sub_runs)
 
 
 def test_runner_handles_repeat_partial_pass():
@@ -86,8 +85,7 @@ def test_runner_handles_repeat_partial_pass():
         module_path=Path("sample.py"),
         is_async=False,
         params=[],
-        repeat_count=5,
-        repeat_min_passes=3,
+        modifiers=[RepeatModifier(count=5, min_passes=3)],
         tags={"repeat"},
     )
 
@@ -95,9 +93,11 @@ def test_runner_handles_repeat_partial_pass():
 
     assert run_result.result.passed == 1
     assert call_count == 5
-    assert run_result.result.executions[0].result.repeat_runs is not None
-    assert len(run_result.result.executions[0].result.repeat_runs) == 5
-    passed = sum(1 for r in run_result.result.executions[0].result.repeat_runs if r.status.value == "passed")
+    assert run_result.result.executions[0].result.sub_runs is not None
+    assert len(run_result.result.executions[0].result.sub_runs) == 5
+    passed = sum(
+        1 for r in run_result.result.executions[0].result.sub_runs if r.status.value == "passed"
+    )
     assert passed == 3
 
 
@@ -119,8 +119,7 @@ def test_runner_handles_repeat_insufficient_passes():
         module_path=Path("sample.py"),
         is_async=False,
         params=[],
-        repeat_count=5,
-        repeat_min_passes=3,
+        modifiers=[RepeatModifier(count=5, min_passes=3)],
         tags={"repeat"},
     )
 
@@ -128,7 +127,9 @@ def test_runner_handles_repeat_insufficient_passes():
 
     assert run_result.result.failed == 1
     assert call_count == 5
-    assert run_result.result.executions[0].result.repeat_runs is not None
-    assert len(run_result.result.executions[0].result.repeat_runs) == 5
-    passed = sum(1 for r in run_result.result.executions[0].result.repeat_runs if r.status.value == "passed")
+    assert run_result.result.executions[0].result.sub_runs is not None
+    assert len(run_result.result.executions[0].result.sub_runs) == 5
+    passed = sum(
+        1 for r in run_result.result.executions[0].result.sub_runs if r.status.value == "passed"
+    )
     assert passed == 2

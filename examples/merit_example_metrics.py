@@ -1,6 +1,6 @@
 import merit
-
-from merit import Metric, metrics
+from merit import Metric
+from merit.context import metrics
 
 
 # Use dependency injection to stack metrics
@@ -10,20 +10,15 @@ from merit import Metric, metrics
 
 
 def band_quality_classifier(query: str) -> bool:
-    if "Metallica" in query:
+    if "Metallica" in query or "Whitesnake" in query:
         return True
-    elif "Whitesnake" in query:
-        return True
-    elif "Led Zeppelin" in query:
+    if "Led Zeppelin" in query:
         return False
-    elif "Megadeth" in query:
+    if "Megadeth" in query or "Nickelback" in query:
         return True
-    elif "Nickelback" in query:
-        return True
-    elif "Limp Bizkit" in query:
+    if "Limp Bizkit" in query:
         return False
-    else:
-        raise ValueError(f"Unknown query: {query}")
+    raise ValueError(f"Unknown query: {query}")
 
 
 @merit.metric
@@ -33,6 +28,7 @@ def accuracy():
 
     # Check accuracy metric is 50%
     assert metric.distribution[True] == 0.5
+    yield metric.distribution[True]
 
 
 @merit.metric
@@ -45,6 +41,7 @@ def false_positives(accuracy: Metric):
 
     # Check the metric registered two false positive results
     assert metric.counter[False] == 2
+    yield metric.counter[False]
 
 
 @merit.metric
@@ -55,14 +52,14 @@ def false_negatives(accuracy: Metric):
     # Write false negatives to accuracy metric
     accuracy.add_record(metric.raw_values)
 
-    # Check the metric registered one false negative resultY
+    # Check the metric registered one false negative result
     assert metric.counter[False] == 1
+    yield metric.counter[False]
 
 
 @merit.parametrize("band", ["Metallica", "Whitesnake", "Led Zeppelin"])
 def merit_expected_true(band: str, false_negatives: Metric):
-    """
-    Test that the classifier returns True for good bands.
+    """Test that the classifier returns True for good bands.
     If AI returns False: register it as a false negative.
     """
     is_good = band_quality_classifier(band)
@@ -72,8 +69,7 @@ def merit_expected_true(band: str, false_negatives: Metric):
 
 @merit.parametrize("band", ["Megadeth", "Nickelback", "Limp Bizkit"])
 def merit_expected_false(band: str, false_positives: Metric):
-    """
-    Test that the classifier returns False for horrible bands.
+    """Test that the classifier returns False for horrible bands.
     If AI returns True: register it as a false positive.
     """
     is_good = band_quality_classifier(band)
@@ -90,20 +86,23 @@ def merit_expected_false(band: str, false_positives: Metric):
 def geography_bot(query: str) -> str:
     if "San Francisco" in query:
         return "California, USA"
-    elif "Boston" in query:
+    if "Boston" in query:
         return "Massachusetts, Canada"
-    elif "Chicago" in query:
+    if "Chicago" in query or "Seattle" in query:
         return "Washington, USA"
-    elif "Seattle" in query:
-        return "Washington, USA"
-    elif "Miami" in query:
+    if "Miami" in query:
         return "California, USA"
-    elif "Houston" in query:
+    if "Houston" in query:
         return "California, Uzbekistan"
-    elif "Washington" in query:
+    if "Washington" in query:
         return "California, Canada"
-    else:
-        raise ValueError(f"Unknown query: {query}")
+    if "Denver" in query:
+        return "Colorado, USA"
+    if "Phoenix" in query:
+        return "Arizona, USA"
+    if "Austin" in query:
+        return "Texas, USA"
+    raise ValueError(f"Unknown query: {query}")
 
 
 @merit.metric(scope="session")
@@ -113,6 +112,7 @@ def average_hallucinations_per_case():
 
     # Check that the average number of hallucinations per case is 1
     assert metric.mean == 1
+    yield metric.mean
 
 
 @merit.metric(scope="case")
@@ -123,6 +123,7 @@ def case_hallucinations_count(average_hallucinations_per_case: Metric):
     # Write the number of hallucinations for the case to the average metric
     hallucinations_for_case = metric.counter[False]
     average_hallucinations_per_case.add_record(hallucinations_for_case)
+    yield hallucinations_for_case
 
 
 @merit.parametrize(
@@ -138,14 +139,30 @@ def case_hallucinations_count(average_hallucinations_per_case: Metric):
     ],
 )
 def merit_hallucinations_test(
-    city: str, 
-    expected_state: str, 
-    expected_country: str, 
-    case_hallucinations_count: Metric
-    ):
-    """
-    Test that the geography bot returns the correct state and country for the given city.
+    city: str, expected_state: str, expected_country: str, case_hallucinations_count: Metric
+):
+    """Test that the geography bot returns the correct state and country for the given city.
     If AI returns a different state or country: register it as a hallucination for the case.
+    """
+    result = geography_bot(city)
+    with metrics([case_hallucinations_count]):
+        assert expected_state in result
+        assert expected_country in result
+
+
+@merit.parametrize(
+    "city,expected_state,expected_country",
+    [
+        ("Denver", "Colorado", "USA"),
+        ("Phoenix", "Arizona", "USA"),
+        ("Austin", "Texas", "USA"),
+    ],
+)
+def merit_hallucinations_test_correct_responses(
+    city: str, expected_state: str, expected_country: str, case_hallucinations_count: Metric
+):
+    """Test geography bot with cities that return correct responses.
+    These cases should have zero hallucinations.
     """
     result = geography_bot(city)
     with metrics([case_hallucinations_count]):

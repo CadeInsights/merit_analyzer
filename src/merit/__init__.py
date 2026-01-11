@@ -1,11 +1,11 @@
 """Merit - Testing framework for AI agents."""
 
-from .predicates import predicate, PredicateResult, PredicateMetadata, Predicate
-from .metrics import Metric, metric
 from .context import metrics
-from .testing import Case, parametrize, repeat, resource, tag, iter_cases, valididate_cases_for_sut
+from .metrics import Metric, metric
+from .predicates import Predicate, PredicateMetadata, PredicateResult, predicate
+from .testing import Case, iter_cases, parametrize, repeat, resource, tag, valididate_cases_for_sut
 from .testing.sut import sut
-from .tracing import init_tracing, trace_step
+from .tracing import init_tracing, trace_step, TraceContext
 from .version import __version__
 
 
@@ -31,4 +31,5 @@ __all__ = [
     # Tracing
     "init_tracing",
     "trace_step",
+    "TraceContext",
 ]

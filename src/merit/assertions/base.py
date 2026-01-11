@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from merit.context import METRIC_CONTEXT, TEST_CONTEXT, ASSERTION_RESULTS_COLLECTOR
+from merit.context import ASSERTION_RESULTS_COLLECTOR, METRIC_CONTEXT, TEST_CONTEXT
+
 
 if TYPE_CHECKING:
-    from merit.predicates.base import PredicateResult
     from merit.metrics.base import MetricSnapshot
-
+    from merit.predicates.base import PredicateResult
 
 
 @dataclass
@@ -32,7 +32,7 @@ class AssertionResult:
     metric_values
         Optional list of MetricSnapshot objects collected during the assertion.
 
-    Attributes
+    Attributes:
     ----------
     passed
         Boolean pass/fail state. Setting this property records the boolean value into

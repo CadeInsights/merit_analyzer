@@ -37,7 +37,9 @@ def _build_parser() -> argparse.ArgumentParser:
     test_parser = subparsers.add_parser("test", help="Run merit tests")
     test_parser.add_argument("paths", nargs="*", help="Test files or directories")
     test_parser.add_argument("-k", "--keyword", help="Filter tests by keyword expression")
-    test_parser.add_argument("-t", "--tag", dest="include_tags", action="append", help="Run tests with given tag")
+    test_parser.add_argument(
+        "-t", "--tag", dest="include_tags", action="append", help="Run tests with given tag"
+    )
     test_parser.add_argument(
         "--skip-tag",
         dest="exclude_tags",
@@ -67,7 +69,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output path for trace data (default: traces.jsonl)",
     )
     test_parser.add_argument("-q", "--quiet", action="count", default=0, help="Reduce CLI output")
-    test_parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase CLI output")
+    test_parser.add_argument(
+        "-v", "--verbose", action="count", default=0, help="Increase CLI output"
+    )
 
     return parser
 
