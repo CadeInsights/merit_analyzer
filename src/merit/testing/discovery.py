@@ -4,49 +4,13 @@ import importlib.util
 import inspect
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from merit.testing.loader import MeritModuleLoader
-from merit.testing.parametrize import get_parameter_sets
-from merit.testing.repeat import get_repeat_data
+from merit.testing.models import Modifier, TestItem
 from merit.testing.tags import TagData, get_tag_data, merge_tag_data
-
-
-@dataclass
-class TestItem:
-    """A discovered test function or method."""
-
-    __test__ = False  # Prevent pytest from collecting this as a test class
-
-    name: str
-    fn: Callable[..., Any]
-    module_path: Path
-    is_async: bool
-    params: list[str] = field(default_factory=list)
-    class_name: str | None = None
-    param_values: dict[str, Any] | None = None
-    id_suffix: str | None = None
-    tags: set[str] = field(default_factory=set)
-    skip_reason: str | None = None
-    xfail_reason: str | None = None
-    xfail_strict: bool = False
-    fail_fast: bool = False
-    repeat_count: int = 1
-    repeat_min_passes: int | None = None
-
-    @property
-    def full_name(self) -> str:
-        """Full qualified name for display."""
-        if self.class_name:
-            base = f"{self.module_path.stem}::{self.class_name}::{self.name}"
-        else:
-            base = f"{self.module_path.stem}::{self.name}"
-        if self.id_suffix:
-            return f"{base}[{self.id_suffix}]"
-        return base
 
 
 def _load_module(path: Path) -> ModuleType:
@@ -72,22 +36,25 @@ def _extract_test_params(fn: Callable[..., Any]) -> list[str]:
     return [p for p in sig.parameters if p != "self"]
 
 
+def _get_modifiers(fn: Callable[..., Any]) -> list[Modifier]:
+    """Extract modifiers from function's __merit_modifiers__ attribute."""
+    return getattr(fn, "__merit_modifiers__", [])
+
+
 def _collect_from_module(module: ModuleType, module_path: Path) -> list[TestItem]:
     """Collect all merit_* tests from a module."""
     items: list[TestItem] = []
 
     for name, obj in inspect.getmembers(module):
-        # Collect merit_* functions
         if name.startswith("merit_") and inspect.isfunction(obj):
-            items.extend(_build_items_for_callable(obj, name, module_path))
+            items.append(_build_item_for_callable(obj, name, module_path))
 
-        # Collect Merit* classes with merit_* methods
         elif name.startswith("Merit") and inspect.isclass(obj):
             class_tags = get_tag_data(obj)
             for method_name, method in inspect.getmembers(obj, predicate=inspect.isfunction):
                 if method_name.startswith("merit_"):
-                    items.extend(
-                        _build_items_for_callable(
+                    items.append(
+                        _build_item_for_callable(
                             method,
                             method_name,
                             module_path,
@@ -99,51 +66,30 @@ def _collect_from_module(module: ModuleType, module_path: Path) -> list[TestItem
     return items
 
 
-def _build_items_for_callable(
+def _build_item_for_callable(
     fn: Callable[..., Any],
     name: str,
     module_path: Path,
     class_name: str | None = None,
     parent_tags: TagData | None = None,
-) -> list[TestItem]:
-    """Create TestItems for a callable, expanding parametrizations if present."""
+) -> TestItem:
+    """Create a single TestItem for a callable with modifiers attached."""
     combined_tags = merge_tag_data(parent_tags, get_tag_data(fn))
-    repeat_data = get_repeat_data(fn)
+    modifiers = reversed(_get_modifiers(fn))
 
-    base_kwargs: dict[str, Any] = {
-        "name": name,
-        "fn": fn,
-        "module_path": module_path,
-        "is_async": inspect.iscoroutinefunction(fn),
-        "params": _extract_test_params(fn),
-        "class_name": class_name,
-        "skip_reason": combined_tags.skip_reason,
-        "xfail_reason": combined_tags.xfail_reason,
-        "xfail_strict": combined_tags.xfail_strict,
-        "repeat_count": repeat_data.count if repeat_data else 1,
-        "repeat_min_passes": repeat_data.min_passes if repeat_data else None,
-    }
-
-    parameter_sets = get_parameter_sets(fn)
-    if not parameter_sets:
-        return [
-            TestItem(
-                **base_kwargs,
-                tags=set(combined_tags.tags),
-            )
-        ]
-
-    expanded: list[TestItem] = []
-    for param_set in parameter_sets:
-        expanded.append(
-            TestItem(
-                **base_kwargs,
-                tags=set(combined_tags.tags),
-                param_values=param_set.values,
-                id_suffix=param_set.id_suffix,
-            )
-        )
-    return expanded
+    return TestItem(
+        name=name,
+        fn=fn,
+        module_path=module_path,
+        is_async=inspect.iscoroutinefunction(fn),
+        params=_extract_test_params(fn),
+        class_name=class_name,
+        modifiers=list(modifiers),
+        tags=set(combined_tags.tags),
+        skip_reason=combined_tags.skip_reason,
+        xfail_reason=combined_tags.xfail_reason,
+        xfail_strict=combined_tags.xfail_strict,
+    )
 
 
 def collect(path: Path | str | None = None) -> list[TestItem]:

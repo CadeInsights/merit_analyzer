@@ -8,18 +8,17 @@ from unittest.mock import patch
 import pytest
 
 from merit.context import TestContext
-from merit.testing.discovery import TestItem
-from merit.testing.resources import clear_registry, resource
-from merit.testing.runner import (
+from merit.testing.environment import _filter_env_vars, capture_environment
+from merit.testing.models import (
     RunEnvironment,
-    Runner,
     RunResult,
     TestExecution,
+    TestItem,
     TestResult,
     TestStatus,
-    _filter_env_vars,
-    capture_environment,
 )
+from merit.testing.resources import clear_registry, resource
+from merit.testing.runner import Runner
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +37,7 @@ def make_item(
     skip_reason: str | None = None,
     xfail_reason: str | None = None,
     xfail_strict: bool = False,
+    id_suffix: str | None = None,
 ) -> TestItem:
     """Helper to create TestItem for testing."""
     return TestItem(
@@ -47,12 +47,12 @@ def make_item(
         is_async=is_async,
         params=params or [],
         class_name=None,
-        param_values=None,
-        id_suffix=None,
+        modifiers=[],
         tags=set(),
         skip_reason=skip_reason,
         xfail_reason=xfail_reason,
         xfail_strict=xfail_strict,
+        id_suffix=id_suffix,
     )
 
 
@@ -84,12 +84,30 @@ class TestRunResult:
         result = RunResult()
         items = [make_item(lambda: None) for _ in range(6)]
         result.executions = [
-            TestExecution(context=TestContext(item=items[0]), result=TestResult(status=TestStatus.PASSED, duration_ms=1)),
-            TestExecution(context=TestContext(item=items[1]), result=TestResult(status=TestStatus.FAILED, duration_ms=1)),
-            TestExecution(context=TestContext(item=items[2]), result=TestResult(status=TestStatus.ERROR, duration_ms=1)),
-            TestExecution(context=TestContext(item=items[3]), result=TestResult(status=TestStatus.SKIPPED, duration_ms=1)),
-            TestExecution(context=TestContext(item=items[4]), result=TestResult(status=TestStatus.XFAILED, duration_ms=1)),
-            TestExecution(context=TestContext(item=items[5]), result=TestResult(status=TestStatus.XPASSED, duration_ms=1)),
+            TestExecution(
+                context=TestContext(item=items[0]),
+                result=TestResult(status=TestStatus.PASSED, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[1]),
+                result=TestResult(status=TestStatus.FAILED, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[2]),
+                result=TestResult(status=TestStatus.ERROR, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[3]),
+                result=TestResult(status=TestStatus.SKIPPED, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[4]),
+                result=TestResult(status=TestStatus.XFAILED, duration_ms=1),
+            ),
+            TestExecution(
+                context=TestContext(item=items[5]),
+                result=TestResult(status=TestStatus.XPASSED, duration_ms=1),
+            ),
         ]
         assert result.passed == 1
         assert result.failed == 1
@@ -134,6 +152,7 @@ class TestEnvironmentCapture:
         assert env.python_version is not None
         assert env.platform is not None
         assert env.merit_version is not None
+
 
 class TestRunner:
     """Tests for Runner class."""
@@ -250,6 +269,18 @@ class TestResourceInjection:
         await runner.run(items=[item])
 
         assert captured == ["injected_value"]
+
+    @pytest.mark.asyncio
+    async def test_trace_context_requires_trace_flag(self):
+        def test_needs_trace(trace_context):
+            pass
+
+        item = make_item(test_needs_trace, params=["trace_context"])
+        runner = Runner(reporters=[])
+        result = await runner.run(items=[item])
+
+        assert result.result.errors == 1
+        assert "--trace" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
     async def test_ignores_unknown_params(self):

@@ -3,25 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
 from typing import Any
 
-
-@dataclass(frozen=True)
-class ParameterConfig:
-    """Definition of a single @parametrize decorator."""
-
-    names: tuple[str, ...]
-    values: tuple[tuple[Any, ...], ...]
-    ids: tuple[str, ...] | None = None
-
-
-@dataclass(frozen=True)
-class ParameterSet:
-    """Concrete parameter combination for an individual test run."""
-
-    values: dict[str, Any]
-    id_suffix: str
+from merit.testing.models import ParameterSet, ParametrizeModifier
 
 
 def _normalize_argnames(argnames: str | Sequence[str]) -> tuple[str, ...]:
@@ -77,6 +61,7 @@ def parametrize(
     if not values_list:
         msg = "parametrize() requires at least one value set"
         raise ValueError(msg)
+
     ids_tuple: tuple[str, ...] | None = None
     if ids is not None:
         ids_tuple = tuple(str(identifier) for identifier in ids)
@@ -84,45 +69,20 @@ def parametrize(
             msg = "parametrize() ids must match number of value sets"
             raise ValueError(msg)
 
-    config = ParameterConfig(names=names, values=values_list, ids=ids_tuple)
+    parameter_sets = tuple(
+        ParameterSet(
+            values=dict(zip(names, vals)),
+            id_suffix=ids_tuple[i] if ids_tuple else _format_id(names, vals),
+        )
+        for i, vals in enumerate(values_list)
+    )
+
+    modifier = ParametrizeModifier(parameter_sets=parameter_sets)
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-        configs: list[ParameterConfig] = getattr(fn, "__merit_parametrize__", [])
-        configs.append(config)
-        fn.__merit_parametrize__ = configs
+        modifiers: list = getattr(fn, "__merit_modifiers__", [])
+        modifiers.append(modifier)
+        fn.__merit_modifiers__ = modifiers
         return fn
 
     return decorator
-
-
-def get_parameter_sets(fn: Callable[..., Any]) -> list[ParameterSet]:
-    """Return all ParameterSet combinations for a callable."""
-    configs: list[ParameterConfig] = getattr(fn, "__merit_parametrize__", [])
-    if not configs:
-        return []
-
-    # Each decorator multiplies combinations (like pytest)
-    combos: list[tuple[dict[str, Any], list[str]]] = [({}, [])]
-
-    for config in configs:
-        next_combos: list[tuple[dict[str, Any], list[str]]] = []
-        for existing_values, existing_ids in combos:
-            for idx, value_tuple in enumerate(config.values):
-                values_dict = dict(zip(config.names, value_tuple))
-                merged_values = {**existing_values, **values_dict}
-
-                identifier: str
-                if config.ids:
-                    identifier = config.ids[idx]
-                else:
-                    identifier = _format_id(config.names, value_tuple)
-
-                next_combos.append((merged_values, [*existing_ids, identifier]))
-        combos = next_combos
-
-    parameter_sets: list[ParameterSet] = []
-    for value_dict, id_parts in combos:
-        suffix = "-".join(part for part in id_parts if part)
-        parameter_sets.append(ParameterSet(values=value_dict, id_suffix=suffix or "params"))
-
-    return parameter_sets

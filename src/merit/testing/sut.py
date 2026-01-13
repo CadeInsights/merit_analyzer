@@ -92,6 +92,8 @@ def _wrap_callable(fn: Callable[P, T], sut_name: str) -> Callable[[], Callable[P
         async def traced(*args: P.args, **kwargs: P.kwargs) -> T:
             tracer = get_tracer()
             with tracer.start_as_current_span(f"sut.{sut_name}") as span:
+                span.set_attribute("merit.sut", True)
+                span.set_attribute("merit.sut.name", sut_name)
                 _set_input_attrs(span, args, kwargs)
                 result = await fn(*args, **kwargs)
                 _set_output_attrs(span, result)
@@ -105,6 +107,8 @@ def _wrap_callable(fn: Callable[P, T], sut_name: str) -> Callable[[], Callable[P
         def traced(*args: P.args, **kwargs: P.kwargs) -> T:  # type: ignore[misc]
             tracer = get_tracer()
             with tracer.start_as_current_span(f"sut.{sut_name}") as span:
+                span.set_attribute("merit.sut", True)
+                span.set_attribute("merit.sut.name", sut_name)
                 _set_input_attrs(span, args, kwargs)
                 result = fn(*args, **kwargs)
                 _set_output_attrs(span, result)
@@ -136,6 +140,8 @@ def _wrap_class(cls: type, sut_name: str, method_name: str) -> Callable[[], Any]
                 async def _traced_method(self, *args: Any, **kwargs: Any) -> Any:
                     tracer = get_tracer()
                     with tracer.start_as_current_span(f"sut.{sut_name}") as span:
+                        span.set_attribute("merit.sut", True)
+                        span.set_attribute("merit.sut.name", sut_name)
                         _set_input_attrs(span, args, kwargs)
                         result = await self._original_method(*args, **kwargs)
                         _set_output_attrs(span, result)
@@ -160,6 +166,8 @@ def _wrap_class(cls: type, sut_name: str, method_name: str) -> Callable[[], Any]
             def _traced_method(self, *args: Any, **kwargs: Any) -> Any:
                 tracer = get_tracer()
                 with tracer.start_as_current_span(f"sut.{sut_name}") as span:
+                    span.set_attribute("merit.sut", True)
+                    span.set_attribute("merit.sut.name", sut_name)
                     _set_input_attrs(span, args, kwargs)
                     result = self._original_method(*args, **kwargs)
                     _set_output_attrs(span, result)

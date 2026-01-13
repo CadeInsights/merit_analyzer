@@ -6,7 +6,7 @@ import pytest
 
 from merit.testing.resources import ResourceResolver, Scope, clear_registry, get_registry
 from merit.testing.sut import sut
-from merit.tracing import clear_traces, init_tracing, set_trace_output_path
+from merit.tracing import clear_traces, set_trace_output_path
 
 
 @pytest.fixture(autouse=True)
@@ -264,3 +264,32 @@ class TestSnakeCaseConversion:
                 return "result"
 
         assert "agent" in get_registry()
+
+    @pytest.mark.asyncio
+    async def test_sut_spans_have_merit_attribute(self):
+        """Verify that SUT spans have the merit.sut attribute set."""
+        import json
+
+        @sut
+        def my_test_function(x: int) -> int:
+            return x
+
+        resolver = ResourceResolver(get_registry())
+        resolved = await resolver.resolve("my_test_function")
+        resolved(1)
+
+        from merit.tracing.lifecycle import _exporter
+        assert _exporter is not None
+        lines = _exporter.output_path.read_text().strip().splitlines()
+        
+        span = None
+        for line in lines:
+            s = json.loads(line)
+            if s["name"] == "sut.my_test_function":
+                span = s
+                break
+        
+        assert span is not None, "SUT span not found"
+        attributes = span["attributes"]
+        assert attributes.get("merit.sut") is True
+        assert attributes.get("merit.sut.name") == "my_test_function"

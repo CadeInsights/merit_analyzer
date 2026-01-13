@@ -3,12 +3,15 @@ from uuid import uuid4
 
 import pytest
 
-from merit.context import TestContext, test_context_scope as context_scope_ctx
-from merit.context import metrics as metrics_scope_ctx
-from merit.context import assertions_collector
-from merit.context import metric_results_collector
-from merit.testing.discovery import collect
+from merit.context import (
+    TestContext,
+    assertions_collector,
+    metric_results_collector,
+    metrics as metrics_scope_ctx,
+    test_context_scope as context_scope_ctx,
+)
 from merit.metrics.base import Metric
+from merit.testing.discovery import collect
 from merit.testing.resources import ResourceResolver, clear_registry
 
 
@@ -80,7 +83,7 @@ def merit_fail():
         assert "equals(1, 2)" in ar.expression_repr
     finally:
         sys.modules.pop(mod_name, None)
-        
+
 
 def test_rewritten_multiple_asserts_record_multiple_metric_values(tmp_path):
     mod_name = f"merit_{uuid4().hex}"
@@ -103,7 +106,11 @@ def merit_metric_capture_multi():
         [item] = collect(mod_path)
         ctx = TestContext(item=item)
         m = Metric(name="assert_outcomes")
-        with context_scope_ctx(ctx), metrics_scope_ctx([m]), assertions_collector(ctx.assertion_results):
+        with (
+            context_scope_ctx(ctx),
+            metrics_scope_ctx([m]),
+            assertions_collector(ctx.assertion_results),
+        ):
             item.fn()
 
         assert m.raw_values == [True, False]
@@ -153,4 +160,3 @@ def merit_dummy():
     finally:
         clear_registry()
         sys.modules.pop(mod_name, None)
-

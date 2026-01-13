@@ -1,5 +1,5 @@
-from merit.predicates.base import PredicateResult, PredicateMetadata
-from merit.predicates.client import get_predicate_api_client, PredicateType, PredicateAPIRequest
+from merit.predicates.base import PredicateMetadata, PredicateResult
+from merit.predicates.client import PredicateAPIRequest, PredicateType, get_predicate_api_client
 
 
 async def has_conflicting_facts(
@@ -7,8 +7,7 @@ async def has_conflicting_facts(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if any facts in the actual text contradict any facts in the reference text.
+    """Check if any facts in the actual text contradict any facts in the reference text.
 
     Parameters
     ----------
@@ -20,12 +19,12 @@ async def has_conflicting_facts(
         Whether to use strict matching (explicit contradictions) or
         lenient matching (allowing for semantic inference).
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result. `value` is True if contradictions are found.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("The apple is red.",)
     >>> reference = "The apple is green."
@@ -62,8 +61,7 @@ async def has_unsupported_facts(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if any facts in the actual text don't have evidence in the reference text.
+    """Check if any facts in the actual text don't have evidence in the reference text.
 
     Parameters
     ----------
@@ -74,12 +72,12 @@ async def has_unsupported_facts(
     strict : bool, default False
         Whether to require explicit support in the reference text.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result. `value` is True if unsupported facts are found.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("The apple is red and it was grown in France.",)
     >>> reference = "The apple is red. It costs $10."
@@ -116,8 +114,7 @@ async def has_facts(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if all facts from the reference text are present in the actual text.
+    """Check if all facts from the reference text are present in the actual text.
 
     Parameters
     ----------
@@ -128,12 +125,12 @@ async def has_facts(
     strict : bool, default False
         Whether to require an exact factual match.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("The apple is red. It costs $10.",)
     >>> reference = "The apple was grown in France."
@@ -167,8 +164,7 @@ async def matches_facts(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if the actual text and reference text have the same set of facts.
+    """Check if the actual text and reference text have the same set of facts.
 
     Parameters
     ----------
@@ -179,12 +175,12 @@ async def matches_facts(
     strict : bool, default False
         Whether to require strict semantic equality of facts.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result. `value` is True if the texts match factually.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("The capital of France is Paris. The apple is red.",)
     >>> reference = "Paris is the French capital. The apple is red."
@@ -218,8 +214,7 @@ async def has_topics(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if the actual text contains all topics from the reference text.
+    """Check if the actual text contains all topics from the reference text.
 
     Parameters
     ----------
@@ -230,12 +225,12 @@ async def has_topics(
     strict : bool, default False
         Whether to require an exact topic match.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("The apple is red.",)
     >>> reference = "Agriculture, Economics."
@@ -269,8 +264,7 @@ async def follows_policy(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if the actual text follows all rules and instructions in the reference text.
+    """Check if the actual text follows all rules and instructions in the reference text.
 
     Parameters
     ----------
@@ -281,12 +275,12 @@ async def follows_policy(
     strict : bool, default False
         Whether to enforce strict adherence to the policy.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result. `value` is True if the text is compliant.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("AI: Hello, how are you?",)
     >>> reference = "AI response must start with 'Hello'."
@@ -320,8 +314,7 @@ async def matches_writing_layout(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if the actual text follows the same structure and formatting as the reference.
+    """Check if the actual text follows the same structure and formatting as the reference.
 
     Parameters
     ----------
@@ -332,12 +325,12 @@ async def matches_writing_layout(
     strict : bool, default False
         Whether to require strict structural alignment.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result. `value` is True if the layout matches.
 
-    Examples
+    Examples:
     --------
     >>> result = await has_same_writing_layout(
     >>> actual = ("From: John Does; To: Jane Smith; Subject: Meeting Agenda",)
@@ -375,8 +368,7 @@ async def matches_writing_style(
     reference: str,
     strict: bool = False,
 ) -> PredicateResult:
-    """
-    Check if the actual text has the same writing style as the reference text.
+    """Check if the actual text has the same writing style as the reference text.
 
     Parameters
     ----------
@@ -387,12 +379,12 @@ async def matches_writing_style(
     strict : bool, default False
         Whether to require strict stylistic matching.
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The evaluation result. `value` is True if the style matches.
 
-    Examples
+    Examples:
     --------
     >>> actual = ("It's pretty cool, right?",)
     >>> reference = "Check out this new project proposal"

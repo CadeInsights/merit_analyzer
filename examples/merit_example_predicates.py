@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from dotenv import load_dotenv
-
 from merit.predicates import (
-    has_conflicting_facts,
-    has_unsupported_facts,
-    has_facts,
-    matches_facts,
-    has_topics,
     follows_policy,
-    matches_writing_style,
+    has_conflicting_facts,
+    has_facts,
+    has_topics,
+    has_unsupported_facts,
+    matches_facts,
     matches_writing_layout,
+    matches_writing_style,
 )
+
 
 # =============================== Define SUT ===============================
 
@@ -25,7 +24,7 @@ def simple_chatbot(text: str) -> str:
         Its capital city is Paris, which is known for the Eiffel 
         Tower and croissants.
         """
-    elif "Germany" in text:
+    if "Germany" in text:
         if "markdown" in text:
             return """
             # Germany
@@ -39,13 +38,12 @@ def simple_chatbot(text: str) -> str:
             ## Population
             Germany has a population of 83 million people.
             """
-        else:
-            return """
+        return """
             Germany, located in Central Europe, has Berlin as its capital. 
             Berlin is famous for its history, museums, and vibrant 
             cultural scene.
             """
-    elif "rock" in text:
+    if "rock" in text:
         if "verbose" in text:
             return """
             Metallica is the greatest rock band of all time. 
@@ -54,13 +52,11 @@ def simple_chatbot(text: str) -> str:
             Kirk Hammett is the lead guitarist.
             Robert Trujillo is the bass guitarist.
             """
-        else:
-            return """
+        return """
             Metallica is the greatest rock band of all time. 
             James Hetfield is the lead singer and rhythm guitarist.
             """
-    else:
-        return """
+    return """
         I don't know.
         """
 

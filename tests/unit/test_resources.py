@@ -1,12 +1,13 @@
 """Tests for merit.testing.resources module."""
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from merit.context import (
-    TestContext as Ctx,
     RESOLVER_CONTEXT,
     TEST_CONTEXT,
+    TestContext as Ctx,
     test_context_scope as context_scope,
 )
 from merit.testing.discovery import TestItem

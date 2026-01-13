@@ -1,20 +1,21 @@
-import pytest
 import math
 import statistics
 from pathlib import Path
-from merit.metrics.base import Metric, MetricResult, metric
-from merit.metrics.base import MetricMetadata
+
+import pytest
+
 from merit.assertions.base import AssertionResult
-from merit.testing.discovery import TestItem
-from merit.testing.resources import Scope, ResourceResolver, clear_registry
 from merit.context import (
     ResolverContext,
     TestContext as Ctx,
-    metric_values_collector,
     metric_results_collector,
+    metric_values_collector,
     resolver_context_scope,
     test_context_scope as context_scope,
 )
+from merit.metrics.base import Metric, MetricMetadata, MetricResult, metric
+from merit.testing.discovery import TestItem
+from merit.testing.resources import ResourceResolver, Scope, clear_registry
 
 
 def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:
@@ -35,7 +36,7 @@ def test_metric_recording():
     assert m.len == 1
     assert m.raw_values == [10]
 
-    m.add_record(([20, 30]))
+    m.add_record([20, 30])
     assert m.len == 3
     assert m.raw_values == [10, 20, 30]
 
@@ -87,15 +88,15 @@ def test_metric_confidence_intervals():
     # Data with mean=30, std=15.811388, n=5
     # CI 95% = 30 +/- 1.96 * 15.811388 / sqrt(5) = 30 +/- 1.96 * 7.071 = 30 +/- 13.859 = (16.141, 43.859)
     m.add_record(list([10, 20, 30, 40, 50]))
-    
+
     ci90 = m.ci_90
     ci95 = m.ci_95
     ci99 = m.ci_99
-    
+
     assert ci90[0] < m.mean < ci90[1]
     assert ci95[0] < m.mean < ci95[1]
     assert ci99[0] < m.mean < ci99[1]
-    
+
     # ci99 should be wider than ci95, which should be wider than ci90
     assert (ci99[1] - ci99[0]) > (ci95[1] - ci95[0]) > (ci90[1] - ci90[0])
 
@@ -105,14 +106,15 @@ def test_metric_timestamps():
     m = Metric("test_time")
     assert m.metadata.first_item_recorded_at is None
     assert m.metadata.last_item_recorded_at is None
-    
+
     m.add_record(10)
     t1 = m.metadata.first_item_recorded_at
     t2 = m.metadata.last_item_recorded_at
     assert t1 is not None
     assert t2 >= t1
-    
+
     import time
+
     time.sleep(0.01)
     m.add_record(20)
     assert m.metadata.first_item_recorded_at == t1
@@ -212,7 +214,7 @@ async def test_metric_on_injection_hook_with_context():
         return 0
 
     resolver = ResourceResolver()
-    ctx = Ctx(item=_make_item("my_merit", id_suffix="case_123"))
+    ctx = Ctx(item=_make_item("my_merit"))
     with context_scope(ctx):
         with resolver_context_scope(ResolverContext(consumer_name="some_resource")):
             m = await resolver.resolve("test_ctx_metric")
@@ -220,11 +222,9 @@ async def test_metric_on_injection_hook_with_context():
             assert "some_resource" in m.metadata.collected_from_resources
             # test data attribution is delegated to add_record
             assert "my_merit" not in m.metadata.collected_from_merits
-            assert "case_123" not in m.metadata.collected_from_cases
             m.add_record(1)
-    
+
     assert "my_merit" in m.metadata.collected_from_merits
-    assert "case_123" in m.metadata.collected_from_cases
     assert m.metadata.scope == Scope.CASE
 
 
@@ -239,18 +239,18 @@ async def test_metric_on_injection_cumulative_metadata():
         return 0
 
     resolver = ResourceResolver()
-    
+
     # First resolution with context A
     with context_scope(Ctx(item=_make_item("merit_a"))):
         m1 = await resolver.resolve("shared_metric")
         m1.add_record(1)
     assert "merit_a" in m1.metadata.collected_from_merits
-    
+
     # Second resolution with context B
     with context_scope(Ctx(item=_make_item("merit_b"))):
         m2 = await resolver.resolve("shared_metric")
         m2.add_record(2)
-    
+
     # Verify both are the same instance and contain accumulated metadata
     assert m1 is m2
     assert "merit_a" in m2.metadata.collected_from_merits

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import merit
-
 from pydantic import BaseModel
 
+import merit
 from merit import Case, valididate_cases_for_sut
 
 
@@ -19,14 +18,13 @@ def simple_chatbot(prompt: str) -> str:
         answer = ""
     if "France" in prompt:
         return answer + "Paris"
-    elif "Germany" in prompt:
+    if "Germany" in prompt:
         return answer + "Berlin"
-    elif "rock" in prompt:
+    if "rock" in prompt:
         return answer + "Metallica"
-    elif "pop" in prompt:
+    if "pop" in prompt:
         return answer + "Lady Gaga"
-    else:
-        raise ValueError(f"Unknown query: {prompt}")
+    raise ValueError(f"Unknown query: {prompt}")
 
 
 # =============================== Prepare test cases ===============================
@@ -37,6 +35,7 @@ class ExampleReferences(BaseModel):
     expected: str
     max_len: int
     min_len: int
+
 
 # Define all cases
 all_cases = [
@@ -85,7 +84,7 @@ def merit_iter_cases_basic_usage(case: Case[ExampleReferences]):
 @merit.iter_cases([c for c in all_cases if "geography" in c.tags])
 def merit_iter_cases_only_geography(case: Case[ExampleReferences]):
     response = simple_chatbot(**case.sut_input_values)
-    
+
     if case.references:
         assert case.references.expected in response
         assert len(response) <= case.references.max_len
@@ -93,12 +92,10 @@ def merit_iter_cases_only_geography(case: Case[ExampleReferences]):
 
 
 # Fail early if any case has invalid input
-@merit.iter_cases(
-    valididate_cases_for_sut(all_cases, simple_chatbot)
-    ) 
+@merit.iter_cases(valididate_cases_for_sut(all_cases, simple_chatbot))
 def merit_iter_cases_with_validation(case: Case[ExampleReferences]):
     response = simple_chatbot(**case.sut_input_values)
-    
+
     if case.references:
         assert case.references.expected in response
         assert len(response) <= case.references.max_len

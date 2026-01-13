@@ -2,13 +2,15 @@
 
 import inspect
 import logging
-from uuid import UUID, uuid4
+from collections.abc import Awaitable, Callable
 from functools import wraps
+from typing import Any, Protocol, cast, overload
+from uuid import UUID, uuid4
 
-from typing import Any, Protocol, overload, Callable, Awaitable, cast
-from pydantic import BaseModel, field_serializer, SerializationInfo, Field
+from pydantic import BaseModel, Field, SerializationInfo, field_serializer
 
-from merit.context import TEST_CONTEXT, PREDICATE_RESULTS_COLLECTOR
+from merit.context import PREDICATE_RESULTS_COLLECTOR, TEST_CONTEXT
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class SyncPredicate(Protocol):
     strict
         Whether to enforce strict comparison semantics (predicate-specific).
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The check outcome and metadata.
@@ -61,7 +63,7 @@ class AsyncPredicate(Protocol):
     strict
         Whether to enforce strict comparison semantics (predicate-specific).
 
-    Returns
+    Returns:
     -------
     PredicateResult
         The check outcome and metadata.
@@ -87,12 +89,12 @@ class PredicateMetadata(BaseModel):
     This model is attached to :class:`~merit.predicates.base.PredicateResult` and is
     intended to make results self-describing and debuggable.
 
-    Notes
+    Notes:
     -----
     - If ``predicate_name`` / ``merit_name`` are not provided, they may be
       auto-filled in :meth:`model_post_init` by inspecting the call stack.
 
-    Attributes
+    Attributes:
     ----------
     actual
         String representation of the observed value.
@@ -132,7 +134,7 @@ class PredicateResult(BaseModel):
     The result carries a boolean outcome (`value`), optional human-readable
     details (`message`), and structured metadata about the predicate execution.
 
-    Attributes
+    Attributes:
     ----------
     id
         Unique identifier for this result instance.
@@ -145,7 +147,7 @@ class PredicateResult(BaseModel):
     message
         Optional details about the outcome (e.g. mismatch explanation).
 
-    Notes
+    Notes:
     -----
     - ``bool(result)`` is equivalent to ``result.value``.
     - ``repr(result)`` returns JSON with ``None`` fields excluded and
@@ -173,9 +175,7 @@ class PredicateResult(BaseModel):
         return self.value
 
     def model_post_init(self, __context: Any) -> None:
-        """
-        Auto-fill the predicate_name and merit_name fields if not provided.
-        """
+        """Auto-fill the predicate_name and merit_name fields if not provided."""
         test_ctx = TEST_CONTEXT.get()
         if test_ctx is not None:
             if test_ctx.item.id_suffix:
@@ -245,7 +245,7 @@ def predicate(
                     "strict": strict,
                 },
             )
-            result = await cast(Any, func)(actual, reference, **extra)
+            result = await cast("Any", func)(actual, reference, **extra)
             predicate_result = PredicateResult(
                 predicate_metadata=PredicateMetadata(
                     actual=str(actual),
@@ -257,30 +257,30 @@ def predicate(
             predicate_result.predicate_metadata.predicate_name = func.__name__
             return predicate_result
 
-        return cast(AsyncPredicate, async_wrapper)
-    else:
-        @wraps(func)
-        def sync_wrapper(
-            actual: Any,
-            reference: Any,
-            strict: bool = False,
-        ) -> PredicateResult:
-            extra = _filter_supported_kwargs(
-                func,
-                {
-                    "strict": strict,
-                },
-            )
-            result = cast(Any, func)(actual, reference, **extra)
-            predicate_result = PredicateResult(
-                predicate_metadata=PredicateMetadata(
-                    actual=str(actual),
-                    reference=str(reference),
-                    strict=strict,
-                ),
-                value=bool(result),
-            )
-            predicate_result.predicate_metadata.predicate_name = func.__name__
-            return predicate_result
+        return cast("AsyncPredicate", async_wrapper)
 
-        return cast(SyncPredicate, sync_wrapper)
+    @wraps(func)
+    def sync_wrapper(
+        actual: Any,
+        reference: Any,
+        strict: bool = False,
+    ) -> PredicateResult:
+        extra = _filter_supported_kwargs(
+            func,
+            {
+                "strict": strict,
+            },
+        )
+        result = cast("Any", func)(actual, reference, **extra)
+        predicate_result = PredicateResult(
+            predicate_metadata=PredicateMetadata(
+                actual=str(actual),
+                reference=str(reference),
+                strict=strict,
+            ),
+            value=bool(result),
+        )
+        predicate_result.predicate_metadata.predicate_name = func.__name__
+        return predicate_result
+
+    return cast("SyncPredicate", sync_wrapper)
