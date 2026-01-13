@@ -1,0 +1,750 @@
+---
+title: "Merit"
+---
+
+**Merit functions** are the core building blocks of your AI system evaluations. Like pytest discovers `test_*` functions, Merit discovers and runs `merit_*` functions - each one checking how well your AI system performs using Merit's APIs and components.
+
+<Note>
+**Merit vs Test**: there are a lot of use cases where pytest would be a better choice than Merit. To help developers avoid chaos and separate these two things, we use "merit" instead of "test" whenever we mean a function that checks if your system is good enough.
+</Note>
+
+Using merit functions enables:
+- Evaluating AI systems with semantic assertions and quality metrics
+- Running comprehensive merit suites with a single CLI command
+- Automatic discovery and execution of merits across your codebase
+- Generating quality reports with statistical insights
+- Dependency injection of resources, SUTs, and metrics
+- Parametrization, async support, and flexible merit organization
+
+## Basic Usage
+
+The simplest merit function is a function whose name starts with `merit_`. Merit automatically discovers and executes these functions.
+
+```python
+import merit
+from merit.predicates import has_unsupported_facts
+
+# Define your AI system (or import from your codebase)
+def chatbot(prompt: str) -> str:
+    return call_llm(prompt)
+
+# Merit function: discovered and run automatically
+async def merit_chatbot_no_hallucinations():
+    context = "Our store hours are 9 AM to 6 PM Monday-Saturday."
+    response = chatbot("When are you open?")
+    
+    # Use semantic predicates to check output quality
+    assert not await has_unsupported_facts(response, context)
+```
+
+Run all merit functions in your project:
+
+```bash
+merit run
+```
+
+Merit discovers all `merit_*` functions, executes them, and generates a report - just like pytest but for AI system evaluation.
+
+## Merit Discovery
+
+Merit follows pytest's discovery patterns, finding merits in files, functions, and classes that follow naming conventions.
+
+### Files
+
+Merit discovers Python files starting with `merit_`:
+
+```
+project/
+├── merit_chatbot.py        ✓ Discovered
+├── merit_agent.py          ✓ Discovered
+├── tests/
+│   ├── merit_rag.py        ✓ Discovered
+│   └── helpers.py          ✗ Not discovered
+└── src/
+    └── agent.py            ✗ Not discovered
+```
+
+### Functions
+
+Within discovered files, Merit collects functions starting with `merit_`:
+
+```python
+# merit_agents.py
+
+def merit_weather_agent():     # ✓ Collected
+    pass
+
+def merit_calculator():        # ✓ Collected
+    pass
+
+def helper_function():         # ✗ Not collected (no merit_ prefix)
+    pass
+
+def test_something():          # ✗ Not collected (pytest convention)
+    pass
+```
+
+### Classes
+
+Classes starting with `Merit` are discovered, and their `merit_*` methods become merit cases:
+
+```python
+# merit_agents.py
+
+class MeritCustomerSupport:    # ✓ Class discovered
+    
+    def merit_greeting(self):   # ✓ Method collected
+        pass
+    
+    def merit_farewell(self):   # ✓ Method collected
+        pass
+    
+    def helper(self):           # ✗ Not collected (no merit_ prefix)
+        pass
+
+class TestSomething:           # ✗ Not discovered (pytest convention)
+    pass
+```
+
+## Dependency Injection
+
+Merit automatically injects dependencies by matching parameter names to registered resources, SUTs, and metrics.
+
+```python
+import merit
+from merit import Metric, metrics
+
+# Define resources (dependencies)
+@merit.resource
+def chatbot():
+    return ChatBot(model="gpt-4")
+
+@merit.metric
+def accuracy():
+    metric = Metric()
+    yield metric
+    assert metric.mean > 0.8
+
+# Merit function with injected dependencies
+def merit_chatbot_accuracy(chatbot, accuracy: Metric):
+    # chatbot and accuracy automatically injected by name
+    
+    test_cases = [
+        ("What's 2+2?", "4"),
+        ("Capital of France?", "Paris"),
+    ]
+    
+    for question, expected in test_cases:
+        answer = chatbot.ask(question)
+        with metrics([accuracy]):
+            assert expected.lower() in answer.lower()
+```
+
+No manual setup required - Merit resolves dependencies automatically. See [Resource](/docs/concepts/resource) and [Metric](/docs/concepts/metric) for details.
+
+## Parametrization
+
+Use `@merit.parametrize` to run the same merit with different inputs:
+
+```python
+import merit
+
+@merit.parametrize("city,state", [
+    ("Boston", "Massachusetts"),
+    ("Austin", "Texas"),
+    ("Miami", "Florida"),
+])
+def merit_geography_bot(city: str, state: str, geography_bot):
+    result = geography_bot.ask(f"What state is {city} in?")
+    assert state in result
+```
+
+This creates 3 merit cases:
+- `merit_geography_bot[Boston-Massachusetts]`
+- `merit_geography_bot[Austin-Texas]`
+- `merit_geography_bot[Miami-Florida]`
+
+Multiple parameters can be stacked:
+
+```python
+@merit.parametrize("model", ["gpt-4", "claude-3"])
+@merit.parametrize("temperature", [0.0, 0.7, 1.0])
+def merit_model_combinations(model: str, temperature: float):
+    # Runs 6 times: 2 models × 3 temperatures
+    pass
+```
+
+For large datasets, use `@merit.iter_cases`:
+
+```python
+from merit import Case
+import json
+
+# Load merit cases from file
+with open("merit_cases.json") as f:
+    cases = [Case(**item) for item in json.load(f)]
+
+@merit.iter_cases(cases)
+def merit_from_dataset(case: Case, classifier):
+    result = classifier(**case.sut_input_values)
+    
+    if case.references:
+        expected = case.references["expected_label"]
+        assert result == expected
+```
+
+See [Case](/docs/concepts/case) for typed references and validation.
+
+## Async Support
+
+Merit automatically detects and runs async functions:
+
+```python
+from merit.predicates import follows_policy
+
+# Sync merit function
+def merit_sync_test(calculator):
+    result = calculator.add(2, 2)
+    assert result == 4
+
+# Async merit function - automatically detected
+async def merit_async_test(chatbot):
+    response = await chatbot.ask_async("Hello")
+    
+    # Many predicates are async
+    policy = "Agent is friendly and professional"
+    assert await follows_policy(response, policy)
+```
+
+Resources can be async too:
+
+```python
+@merit.resource
+async def async_database():
+    conn = await connect_async()
+    yield conn
+    await conn.close()
+
+async def merit_query(async_database):
+    result = await async_database.query("SELECT 1")
+    assert result
+```
+
+Merit handles the async execution automatically - no `asyncio.run()` needed.
+
+## Organizing Merits with Tags
+
+Use `@merit.tag` to organize and filter merits:
+
+```python
+import merit
+
+@merit.tag("smoke", "fast")
+def merit_health_check(api_client):
+    response = api_client.get("/health")
+    assert response.status_code == 200
+
+@merit.tag("integration", "slow")
+def merit_end_to_end_workflow(system):
+    # Long-running integration merit
+    pass
+
+# Tag entire classes
+@merit.tag("customer-support")
+class MeritSupportBot:
+    
+    @merit.tag("greeting")
+    def merit_hello(self, support_bot):
+        pass
+    
+    @merit.tag("farewell")
+    def merit_goodbye(self, support_bot):
+        pass
+```
+
+Run specific tags from CLI:
+
+```bash
+merit run --tag smoke       # Only smoke merits
+merit run --tag slow        # Only slow merits
+```
+
+## Conditional Execution
+
+### Skipping Merits
+
+Skip merits with `@merit.skip`:
+
+```python
+import merit
+
+@merit.skip("Feature not implemented yet")
+def merit_upcoming_feature():
+    pass
+
+@merit.skip("Requires API key", when=lambda: not os.getenv("API_KEY"))
+def merit_external_api():
+    pass
+```
+
+### Expected Failures
+
+Mark merits expected to fail with `@merit.xfail`:
+
+```python
+@merit.xfail("Known bug #123")
+def merit_known_issue():
+    # This failure won't fail the merit suite
+    assert False
+
+@merit.xfail("Model not accurate yet", strict=True)
+def merit_strict_xfail():
+    # If this passes, the merit suite FAILS (unexpected pass)
+    pass
+```
+
+Use `strict=True` when the merit passing would be surprising and worth investigating.
+
+## Reliability Evaluation with Repeat
+
+Use `@merit.repeat` to run flaky merits multiple times:
+
+```python
+import merit
+
+@merit.repeat(10)  # Run 10 times, all must pass
+def merit_consistent_output(llm):
+    response = llm.generate("Say 'hello'")
+    assert "hello" in response.lower()
+
+@merit.repeat(10, min_passes=8)  # 8 out of 10 must pass
+def merit_mostly_correct(llm):
+    response = llm.generate("Translate 'hello' to Spanish")
+    assert "hola" in response.lower()
+```
+
+This is useful for:
+- Evaluating non-deterministic AI outputs for consistency
+- Measuring reliability percentages
+- Catching intermittent failures
+
+## Running Merits
+
+### CLI
+
+The primary way to run merits is via the command line:
+
+```bash
+# Run all merits in current directory
+merit run
+
+# Run merits in specific directory
+merit run tests/
+
+# Run specific file
+merit run merit_chatbot.py
+
+# Filter by tags
+merit run --tag smoke
+
+# Fail fast (stop on first failure)
+merit run --fail-fast
+
+# Stop after N failures
+merit run --maxfail 3
+
+# Concurrent execution
+merit run --concurrency 5
+
+# Enable tracing
+merit run --trace --trace-output traces.jsonl
+
+# Verbose output
+merit run -v
+merit run -vv  # Extra verbose
+```
+
+### Programmatic API
+
+Run merits from Python code:
+
+```python
+import asyncio
+from merit.testing import Runner
+
+async def main():
+    # Default runner
+    runner = Runner()
+    result = await runner.run(path="tests/")
+    
+    print(f"Passed: {result.result.passed}")
+    print(f"Failed: {result.result.failed}")
+    print(f"Total: {result.result.total}")
+
+asyncio.run(main())
+```
+
+Advanced runner configuration:
+
+```python
+from merit.testing import Runner
+from merit.reports import ConsoleReporter, JsonReporter
+
+runner = Runner(
+    reporters=[
+        ConsoleReporter(verbosity=2),
+        JsonReporter("results.json")
+    ],
+    maxfail=5,              # Stop after 5 failures
+    fail_fast=False,        # Run all merits
+    concurrency=10,         # 10 concurrent workers
+    timeout=30.0,           # 30s timeout per merit
+    enable_tracing=True,    # Enable OpenTelemetry tracing
+    trace_output="traces.jsonl"
+)
+
+result = await runner.run(path="tests/")
+```
+
+### Merit Results
+
+The `MeritRun` object contains comprehensive results:
+
+```python
+result = await runner.run(path="tests/")
+
+# Summary statistics
+print(f"Passed: {result.result.passed}")
+print(f"Failed: {result.result.failed}")
+print(f"Errors: {result.result.errors}")
+print(f"Skipped: {result.result.skipped}")
+print(f"Duration: {result.result.total_duration_ms}ms")
+
+# Environment metadata
+print(f"Git commit: {result.environment.commit_hash}")
+print(f"Branch: {result.environment.branch}")
+print(f"Python: {result.environment.python_version}")
+
+# Individual merit executions
+for execution in result.result.executions:
+    print(f"{execution.item.full_name}: {execution.status.value}")
+    if execution.result.error:
+        print(f"  Error: {execution.result.error}")
+    
+    # Assertion results
+    for assertion in execution.result.assertion_results:
+        print(f"  {assertion.predicate_name}: {assertion.outcome}")
+
+# Metric results
+for metric_result in result.result.metric_results:
+    print(f"Metric {metric_result.name}: {metric_result.value}")
+```
+
+## Recommendations
+
+### 1. Name functions descriptively
+
+Merit function names become merit case identifiers in reports. Use descriptive names that explain what's being evaluated.
+
+**Don't do this:**
+```python
+def merit_test1():
+    pass
+
+def merit_test2():
+    pass
+
+def merit_chatbot():  # Too vague
+    pass
+```
+
+**Do this:**
+```python
+def merit_chatbot_responds_to_greetings():
+    """Check that chatbot handles basic greetings appropriately."""
+    pass
+
+def merit_chatbot_no_hallucinations_in_faq():
+    """Verify chatbot doesn't invent facts when answering FAQ questions."""
+    pass
+
+def merit_chatbot_follows_brand_voice():
+    """Ensure chatbot responses match company's tone and style guidelines."""
+    pass
+```
+
+Descriptive names make reports self-documenting and help team members understand merit failures.
+
+### 2. Use dependency injection over global imports
+
+Merit's dependency injection system enables better resource management and merit isolation. Inject dependencies as parameters instead of importing globally.
+
+**Don't do this:**
+```python
+# merit_agent.py
+from app import agent  # Global import
+
+def merit_weather_queries():
+    # Using global - can't control lifecycle or swap implementations
+    response = agent("What's the weather?")
+    assert response
+```
+
+**Do this:**
+```python
+# merit_agent.py
+import merit
+from app import agent as production_agent
+
+@merit.resource
+def agent():
+    """Evaluation instance of agent with controlled lifecycle."""
+    instance = production_agent.create(env="test")
+    yield instance
+    instance.cleanup()
+
+def merit_weather_queries(agent):
+    # Injected - Merit manages lifecycle and can track usage
+    response = agent("What's the weather?")
+    assert response
+```
+
+This pattern enables:
+- Automatic setup and teardown
+- Resource scoping and reuse
+- Merit isolation
+- Better reporting and analytics
+
+### 3. Organize related merits in Merit classes
+
+Group related merits in classes for better organization and shared tags/setup:
+
+**Don't do this:**
+```python
+# merit_support.py - flat functions with repeated tags
+
+@merit.tag("customer-support", "greeting")
+def merit_support_greeting_casual():
+    pass
+
+@merit.tag("customer-support", "greeting")
+def merit_support_greeting_formal():
+    pass
+
+@merit.tag("customer-support", "farewell")
+def merit_support_farewell_casual():
+    pass
+
+@merit.tag("customer-support", "farewell")
+def merit_support_farewell_formal():
+    pass
+```
+
+**Do this:**
+```python
+# merit_support.py - organized in classes
+
+@merit.tag("customer-support")
+class MeritSupportGreetings:
+    """Evaluate support bot greeting scenarios."""
+    
+    @merit.tag("casual")
+    def merit_greeting_casual(self, support_bot):
+        pass
+    
+    @merit.tag("formal")
+    def merit_greeting_formal(self, support_bot):
+        pass
+
+@merit.tag("customer-support")
+class MeritSupportFarewells:
+    """Evaluate support bot farewell scenarios."""
+    
+    @merit.tag("casual")
+    def merit_farewell_casual(self, support_bot):
+        pass
+    
+    @merit.tag("formal")
+    def merit_farewell_formal(self, support_bot):
+        pass
+```
+
+Classes provide:
+- Logical grouping in reports
+- Shared tags that cascade to methods
+- Better code organization
+- Easier navigation in IDEs
+
+### 4. Use parametrization for data-driven merits
+
+When evaluating the same logic with different inputs, use parametrization instead of loops or duplicated functions.
+
+**Don't do this:**
+```python
+def merit_translation_spanish():
+    result = translator.translate("hello", "spanish")
+    assert "hola" in result
+
+def merit_translation_french():
+    result = translator.translate("hello", "french")
+    assert "bonjour" in result
+
+def merit_translation_german():
+    result = translator.translate("hello", "german")
+    assert "hallo" in result
+```
+
+**Do this:**
+```python
+@merit.parametrize("text,language,expected", [
+    ("hello", "spanish", "hola"),
+    ("hello", "french", "bonjour"),
+    ("hello", "german", "hallo"),
+    ("goodbye", "spanish", "adiós"),
+    ("goodbye", "french", "au revoir"),
+])
+async def merit_translation_accuracy(text: str, language: str, expected: str, translator):
+    result = translator.translate(text, language)
+    assert expected in result.lower()
+```
+
+This approach:
+- Reduces code duplication
+- Makes it easy to add new merit cases
+- Creates individual merit case results in reports
+- Allows running specific parameter combinations
+
+### 5. Combine merit functions with metrics for aggregate analysis
+
+Merit functions can both assert individual merit outcomes and collect data for aggregate metrics.
+
+```python
+import merit
+from merit import Metric, metrics
+
+@merit.metric
+def hallucination_rate():
+    """Track hallucination rate across all support responses."""
+    metric = Metric()
+    yield metric
+    
+    # After all merits run, check aggregate quality
+    false_count = metric.counter[False]  # Hallucinations
+    total = metric.len
+    rate = false_count / total if total > 0 else 0
+    
+    assert rate < 0.05  # Less than 5% hallucination rate
+
+@merit.parametrize("question,context", [
+    ("What's our return policy?", "Returns accepted within 30 days."),
+    ("Do you ship to Canada?", "We ship to US and Canada."),
+    ("What payment methods?", "We accept Visa, Mastercard, PayPal."),
+    # ... 50 more cases
+])
+async def merit_support_responses(
+    question: str, 
+    context: str, 
+    support_bot, 
+    hallucination_rate: Metric
+):
+    response = support_bot.answer(question, context=context)
+    
+    # Individual merit assertion
+    hallucination_check = await has_unsupported_facts(response, context)
+    
+    # Contribute to aggregate metric
+    with metrics([hallucination_rate]):
+        assert not hallucination_check
+```
+
+This pattern enables:
+- Individual merit pass/fail results for each case
+- Aggregate quality metrics across all cases
+- Statistical analysis (mean, p95, confidence intervals)
+- Quality gates based on overall system performance
+
+### 6. Use async for semantic predicates and I/O operations
+
+Semantic predicates are async and benefit from concurrent execution. Use async merit functions when working with predicates or performing I/O.
+
+**Don't do this:**
+```python
+# Sync function trying to use async predicate
+from merit.predicates import has_facts
+
+def merit_content_coverage(content_generator):
+    content = content_generator.create("AI safety")
+    
+    # Won't work - has_facts is async
+    assert has_facts(content, "alignment, interpretability")  # ❌ Error
+```
+
+**Do this:**
+```python
+from merit.predicates import has_facts
+
+# Async function for async operations
+async def merit_content_coverage(content_generator):
+    content = content_generator.create("AI safety")
+    
+    # Properly await async predicate
+    assert await has_facts(content, "alignment, interpretability")  # ✓ Works
+```
+
+Async functions also improve performance when running concurrent merits:
+
+```bash
+# 10 concurrent workers - async functions run efficiently
+merit run --concurrency 10
+```
+
+### 7. Tag merits for flexible execution
+
+Use tags strategically to enable different merit execution strategies in different contexts.
+
+```python
+import merit
+
+# Quick smoke merits for CI
+@merit.tag("smoke", "fast")
+def merit_api_health(api):
+    assert api.health_check()
+
+# Expensive integration merits for nightly runs
+@merit.tag("integration", "slow", "nightly")
+async def merit_full_conversation_flow(chatbot):
+    # Multi-turn conversation merit
+    pass
+
+# Merits requiring external services
+@merit.tag("external", "requires-api-key")
+def merit_translation_api(translator):
+    pass
+
+# Performance benchmarks
+@merit.tag("performance", "benchmark")
+def merit_latency_p95(system):
+    pass
+```
+
+Execute different subsets in different contexts:
+
+```bash
+# CI: fast smoke merits only
+merit run --tag smoke --tag fast
+
+# Nightly: comprehensive suite
+merit run --tag nightly
+
+# Local development: skip external dependencies
+merit run --exclude-tag external
+
+# Performance analysis
+merit run --tag performance --tag benchmark
+```
+
+This enables:
+- Fast feedback loops in CI (smoke merits)
+- Comprehensive validation in nightly builds (full suite)
+- Skipping merits with missing dependencies
+- Running performance benchmarks separately

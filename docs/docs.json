@@ -26,7 +26,7 @@
   },
   "announcement": {
     "title": "🎉 Merit Beta is now available!",
-    "href": "/quickstart"
+    "href": "/get-started/quick-start"
   },
   "anchors": [
     {
@@ -43,28 +43,36 @@
   "navigation": {
     "groups": [
       {
-        "group": "Getting Started",
-        "pages": ["index", "quickstart", "installation", "first-test", "configuration"]
+        "group": "Get Started",
+        "pages": [
+          "index",
+          "get-started/merit-vs-evals",
+          "get-started/installation",
+          "get-started/quick-start"
+        ]
       },
       {
-        "group": "Core Concepts",
-        "pages": ["core/writing-tests", "core/resources", "core/test-cases", "core/running-tests"]
+        "group": "Usage",
+        "pages": ["usage/writing-merits", "usage/running-merits", "usage/investigating-merits"]
       },
       {
-        "group": "AI Predicates",
-        "pages": ["predicates/overview", "predicates/fact-checking", "predicates/topics-policy", "predicates/style-structure"]
+        "group": "Concepts",
+        "pages": [
+          "concepts/merit",
+          "concepts/resource",
+          "concepts/sut",
+          "concepts/case",
+          "concepts/metric",
+          "concepts/semantic-predicates"
+        ]
       },
       {
-        "group": "Advanced Features",
-        "pages": ["advanced/parametrize", "advanced/tags-filters", "advanced/repeat-tests", "advanced/tracing"]
+        "group": "APIs",
+        "pages": ["apis/index"]
       },
       {
-        "group": "Error Analysis",
-        "pages": ["analyzer/overview", "analyzer/running-analyzer", "analyzer/reports"]
-      },
-      {
-        "group": "API Reference",
-        "pages": ["api-reference/testing", "api-reference/predicates", "api-reference/metrics"]
+        "group": "Examples",
+        "pages": ["examples/index"]
       }
     ]
   },

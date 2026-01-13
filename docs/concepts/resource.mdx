@@ -1,0 +1,396 @@
+---
+title: "Resource"
+---
+
+`Resource` is Merit's dependency injection system that provides reusable components to merit functions. It follows pytest's fixture pattern, matching function parameters by name to automatically inject dependencies.
+
+Using `@merit.resource` enables:
+- Injecting dependencies into merit functions without explicit instantiation
+- Sharing expensive setup across multiple merits (database connections, API clients)
+- Automatic teardown and cleanup with generator syntax
+- Scoping lifecycles at case, suite, or session level
+- Stacking resources to build complex dependency hierarchies
+
+## Basic Usage
+
+The most common pattern is to define a resource function and inject it into your merit tests by parameter name.
+
+```python
+import merit
+
+# Define a resource
+@merit.resource
+def api_client():
+    return APIClient(base_url="https://api.example.com")
+
+# Inject by parameter name
+def merit_api_endpoint(api_client):
+    response = api_client.get("/health")
+    assert response.status_code == 200
+```
+
+Merit automatically detects the `api_client` parameter, calls the resource function, and injects the result. No explicit wiring needed.
+
+## Generator Pattern for Setup and Teardown
+
+Resources can use generator syntax to define setup and teardown logic, similar to pytest fixtures with `yield`.
+
+```python
+import merit
+
+@merit.resource
+def database():
+    # Setup: runs before tests
+    conn = connect_to_db()
+    conn.execute("BEGIN TRANSACTION")
+    
+    yield conn  # Value injected into tests
+    
+    # Teardown: runs after tests complete
+    conn.execute("ROLLBACK")
+    conn.close()
+
+def merit_user_creation(database):
+    database.execute("INSERT INTO users (name) VALUES ('Alice')")
+    result = database.query("SELECT * FROM users WHERE name='Alice'")
+    assert result
+    # Transaction automatically rolls back after merit
+```
+
+The code after `yield` runs automatically after the merit completes, ensuring cleanup even if the merit fails.
+
+## Async Resources
+
+Resources support async functions and async generators for asynchronous setup/teardown.
+
+```python
+import merit
+
+@merit.resource
+async def async_client():
+    # Async setup
+    client = await create_async_client()
+    yield client
+    # Async teardown
+    await client.close()
+
+async def merit_async_endpoint(async_client):
+    response = await async_client.fetch("/data")
+    assert response.ok
+```
+
+Merit automatically detects async resources and awaits them appropriately.
+
+## Scopes: Case, Suite, Session
+
+Resources can be scoped to control their lifecycle and determine how instances are shared across merits.
+
+```python
+# Case scope: Fresh instance for each parametrized merit case (default)
+@merit.resource(scope="case")
+def isolated_db():
+    conn = setup_db()
+    yield conn
+    cleanup_db(conn)
+
+# Suite scope: Shared within a single merit file/module
+@merit.resource(scope="suite")
+def shared_api_client():
+    return APIClient()  # Reused across merits in same file
+
+# Session scope: Shared across the entire merit run
+@merit.resource(scope="session")
+def ml_model():
+    # Expensive model loaded once for all tests
+    return load_model("model.pkl")
+
+@merit.parametrize("user_id", [1, 2, 3, 4, 5])
+def merit_user_queries(user_id, isolated_db, shared_api_client, ml_model):
+    # isolated_db: new instance for each of 5 cases
+    # shared_api_client: same instance across all 5 cases in this file
+    # ml_model: same instance across entire merit suite
+    
+    user = isolated_db.get_user(user_id)
+    enriched = shared_api_client.enrich(user)
+    prediction = ml_model.predict(enriched)
+    assert prediction
+```
+
+Available scopes:
+- `"case"`: New instance per parametrized merit case (default)
+- `"suite"`: One instance per merit file/module
+- `"session"`: One instance for entire merit run
+
+## Stacking Resources: Dependency Injection
+
+Resources can depend on other resources by declaring them as parameters. This enables building complex dependency graphs and composing reusable components.
+
+```python
+import merit
+
+# Base resource
+@merit.resource(scope="session")
+def config():
+    return {"api_url": "https://api.example.com", "timeout": 30}
+
+# Resource that depends on config
+@merit.resource(scope="suite")
+def http_client(config):
+    return HTTPClient(
+        base_url=config["api_url"],
+        timeout=config["timeout"]
+    )
+
+# Resource that depends on http_client
+@merit.resource(scope="case")
+def authenticated_client(http_client):
+    client = http_client.clone()
+    client.set_auth_token("eval-token-123")
+    yield client
+    client.logout()
+
+# Merit uses the fully composed resource
+def merit_user_api(authenticated_client):
+    response = authenticated_client.get("/user/profile")
+    assert response.status_code == 200
+```
+
+This creates a dependency chain:
+```
+authenticated_client (case-level)
+└── http_client (suite-level)
+    └── config (session-level)
+```
+
+Merit resolves dependencies automatically, respecting scopes: `config` is created once per session, `http_client` once per suite, and `authenticated_client` fresh for each merit case.
+
+## Lifecycle Hooks
+
+Resources support three optional hooks for advanced control:
+
+```python
+import merit
+
+@merit.resource(
+    scope="session",
+    on_resolve=lambda client: setup_monitoring(client),      # Runs once on creation
+    on_injection=lambda client: client.refresh_token(),       # Runs every injection
+    on_teardown=lambda client: save_metrics(client)           # Runs after teardown
+)
+def monitored_client():
+    client = APIClient()
+    yield client
+    client.close()
+```
+
+Hook execution order:
+1. **on_resolve**: Called once when resource is first created (after factory runs, before caching)
+2. **on_injection**: Called every time the resource is injected into a merit (even from cache)
+3. **on_teardown**: Called after generator teardown code runs (post-yield)
+
+Hooks can be sync or async functions and can modify the resource value:
+
+```python
+@merit.resource(
+    on_injection=lambda db: db.start_transaction()  # Returns modified resource
+)
+def transactional_db():
+    return Database()
+```
+
+## Recommendations
+
+### 1. Use resources for expensive or stateful setup
+
+Resources shine when setup is costly or requires cleanup. For simple values, just use function parameters directly.
+
+**Don't do this:**
+```python
+import merit
+
+# Wrapping simple values in resources adds unnecessary complexity
+@merit.resource
+def user_id():
+    return 123
+
+def merit_simple(user_id):
+    assert user_id == 123
+```
+
+**Do this:**
+```python
+import merit
+
+# Simple values can be parametrized or hardcoded
+@merit.parametrize("user_id", [123, 456, 789])
+def merit_simple(user_id):
+    assert user_id > 0
+
+# Use resources for expensive or stateful setup
+@merit.resource(scope="session")
+def ml_model():
+    return load_expensive_model()  # Reuse across tests
+
+@merit.resource
+def temp_directory():
+    import tempfile
+    tmpdir = tempfile.mkdtemp()
+    yield tmpdir
+    shutil.rmtree(tmpdir)  # Automatic cleanup
+```
+
+### 2. Use generators for resources requiring cleanup
+
+Any resource that allocates external resources (files, connections, processes) should use the generator pattern to ensure cleanup.
+
+**Don't do this:**
+```python
+@merit.resource
+def database():
+    conn = connect_to_db()
+    return conn  # No cleanup - connection leaks!
+
+def merit_query(database):
+    result = database.query("SELECT 1")
+    # Connection never closed
+```
+
+**Do this:**
+```python
+@merit.resource
+def database():
+    conn = connect_to_db()
+    yield conn  # Injected into merits
+    conn.close()  # Always runs, even on merit failure
+
+def merit_query(database):
+    result = database.query("SELECT 1")
+    assert result
+    # Connection automatically closed after merit
+```
+
+### 3. Scope resources appropriately for performance and isolation
+
+Choose scope based on cost of creation and whether state should be shared. Wider scopes improve performance but reduce isolation.
+
+```python
+import merit
+
+# Session scope: Expensive to create, no state mutations
+@merit.resource(scope="session")
+def ml_model():
+    """Load once, share everywhere - model is immutable"""
+    return load_model("classifier.pkl")  # Expensive operation
+
+# Suite scope: Moderate cost, isolated per file
+@merit.resource(scope="suite")
+def api_client():
+    """Share within file, fresh per file - moderate state"""
+    return APIClient()  # May accumulate some state
+
+# Case scope: Cheap to create, must be isolated
+@merit.resource(scope="case")
+def temp_directory():
+    """Fresh for each merit case - mutable state"""
+    import tempfile
+    tmpdir = tempfile.mkdtemp()
+    yield tmpdir
+    shutil.rmtree(tmpdir)  # Each case gets clean directory
+
+def merit_classifier(temp_directory, api_client, ml_model):
+    # temp_directory: isolated per merit
+    # api_client: shared across merits in this file
+    # ml_model: shared across entire merit run
+    pass
+```
+
+### 4. Stack resources to build reusable components
+
+Break complex setup into smaller resources that depend on each other. This improves reusability and makes merit code more maintainable.
+
+**Don't do this:**
+```python
+# Monolithic resource mixing concerns
+@merit.resource
+def test_environment():
+    # Everything in one giant function
+    config = load_config()
+    db = connect_db(config.db_url)
+    api = APIClient(config.api_url)
+    api.authenticate(config.api_key)
+    cache = RedisCache(config.redis_url)
+    
+    return {
+        "db": db,
+        "api": api,
+        "cache": cache,
+        "config": config
+    }
+
+def merit_complex(test_environment):
+    # Must unpack and use dictionary
+    result = test_environment["api"].get("/data")
+    test_environment["db"].save(result)
+```
+
+**Do this:**
+```python
+# Composable resources with clear dependencies
+@merit.resource(scope="session")
+def config():
+    return load_config()
+
+@merit.resource(scope="suite")
+def database(config):
+    db = connect_db(config.db_url)
+    yield db
+    db.close()
+
+@merit.resource(scope="suite")
+def cache(config):
+    cache = RedisCache(config.redis_url)
+    yield cache
+    cache.clear()
+
+@merit.resource
+def api_client(config):
+    client = APIClient(config.api_url)
+    client.authenticate(config.api_key)
+    return client
+
+def merit_complex(api_client, database, cache):
+    # Clean, focused parameters with automatic DI
+    result = api_client.get("/data")
+    database.save(result)
+    cache.set("result", result)
+```
+
+### 5. Use hooks for cross-cutting concerns
+
+Lifecycle hooks enable instrumentation, monitoring, and side effects without cluttering merit logic.
+
+```python
+import merit
+import logging
+
+# Track resource usage
+usage_stats = []
+
+@merit.resource(
+    scope="session",
+    on_resolve=lambda model: logging.info(f"Model loaded: {model.version}"),
+    on_injection=lambda model: usage_stats.append({"model": model.name, "time": time.time()}),
+    on_teardown=lambda model: logging.info(f"Model used {len(usage_stats)} times")
+)
+def ml_model():
+    model = load_model()
+    yield model
+    save_performance_metrics(model)
+
+# Tests remain clean - monitoring happens automatically
+def merit_predictions(ml_model):
+    prediction = ml_model.predict([1, 2, 3])
+    assert prediction
+```
+
+Hooks are also useful for refreshing tokens, starting transactions, or resetting state between injections.

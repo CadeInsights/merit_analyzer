@@ -1,0 +1,144 @@
+---
+title: "Quick Start"
+---
+
+## Installation
+
+```bash
+uv add appmerit
+```
+
+## Create your first merit
+
+Create `merit_store_chatbot.py`:
+
+```python
+import merit
+from merit.predicates import has_unsupported_facts, follows_policy
+
+@merit.sut
+def store_chatbot(prompt: str) -> str:
+    return call_llm(prompt)
+
+async def merit_chatbot_no_hallucinations(store_chatbot):
+    context = "Store hours: 9 AM - 6 PM, Monday-Saturday. Closed Sundays."
+    response = store_chatbot("When are you open?")
+    
+    assert not await has_unsupported_facts(response, context)
+    assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
+```
+
+## Cover more questions
+
+Add cases to test multiple scenarios:
+
+```python
+import merit
+from merit import Case
+from merit.predicates import has_unsupported_facts, follows_policy
+
+@merit.sut
+def store_chatbot(prompt: str) -> str:
+    return call_llm(prompt)
+
+cases = [
+    Case(sut_input_values={"prompt": "When are you open?"}, references={"context": "Store hours: 9 AM - 6 PM, Monday-Saturday. Closed Sundays."}),
+    Case(sut_input_values={"prompt": "Return policy?"}, references={"context": "30-day returns with receipt."}),
+    Case(sut_input_values={"prompt": "Shipping cost?"}, references={"context": "Free shipping over $50."}),
+]
+
+@merit.iter_cases(cases)
+async def merit_chatbot_no_hallucinations(case: Case, store_chatbot):
+    response = store_chatbot(**case.sut_input_values)
+    
+    assert not await has_unsupported_facts(response, case.references["context"])
+    assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
+```
+
+## Track quality with metrics
+
+Add a metric to enforce 80% accuracy across all cases:
+
+```python
+import merit
+from merit import Case, Metric, metrics
+from merit.predicates import has_unsupported_facts, follows_policy
+
+@merit.sut
+def store_chatbot(prompt: str) -> str:
+    return call_llm(prompt)
+
+@merit.metric
+def accuracy():
+    metric = Metric()
+    yield metric
+    assert metric.mean > 0.8
+
+cases = [
+    Case(sut_input_values={"prompt": "When are you open?"}, references={"context": "Store hours: 9 AM - 6 PM, Monday-Saturday. Closed Sundays."}),
+    Case(sut_input_values={"prompt": "Return policy?"}, references={"context": "30-day returns with receipt."}),
+    Case(sut_input_values={"prompt": "Shipping cost?"}, references={"context": "Free shipping over $50."}),
+]
+
+@merit.iter_cases(cases)
+async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric):
+    response = store_chatbot(**case.sut_input_values)
+    
+    with metrics([accuracy]):
+        assert not await has_unsupported_facts(response, case.references["context"])
+        assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
+```
+
+## Assert on trace spans
+
+Inject `trace_context` to verify the chatbot actually called the right tools:
+
+```python
+import merit
+from merit import Case, Metric, metrics
+from merit.predicates import has_unsupported_facts, follows_policy
+
+@merit.sut
+def store_chatbot(prompt: str) -> str:
+    return call_llm(prompt)
+
+@merit.metric
+def accuracy():
+    metric = Metric()
+    yield metric
+    assert metric.mean > 0.8
+
+cases = [
+    Case(sut_input_values={"prompt": "When are you open?"}, references={"context": "Store hours: 9 AM - 6 PM, Monday-Saturday. Closed Sundays."}),
+    Case(sut_input_values={"prompt": "Return policy?"}, references={"context": "30-day returns with receipt."}),
+    Case(sut_input_values={"prompt": "How much for the Nike Air Max?"}, references={"context": "Nike Air Max: $129.99", "expected_tool": "offer_product"}),
+]
+
+@merit.iter_cases(cases)
+async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric, trace_context):
+    response = store_chatbot(**case.sut_input_values)
+    
+    with metrics([accuracy]):
+        assert not await has_unsupported_facts(response, case.references["context"])
+    
+    # Verify tool was called when expected
+    if expected_tool := case.references.get("expected_tool"):
+        spans = trace_context.get_sut_spans(store_chatbot)
+        tool_called = spans[1].attributes.get("llm.request.functions.0.name")
+        assert tool_called == expected_tool
+```
+
+## Run
+
+```bash
+uv run merit test
+```
+
+<CardGroup cols={2}>
+  <Card title="Writing Merits" icon="pen" href="/usage/writing-merits">
+    Deep dive into merit patterns
+  </Card>
+  <Card title="Semantic Predicates" icon="brain" href="/concepts/semantic-predicates">
+    LLM-powered assertions
+  </Card>
+</CardGroup>

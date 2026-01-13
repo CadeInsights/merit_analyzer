@@ -1,0 +1,128 @@
+---
+title: "SUT"
+---
+
+<Note>SUT stands for *System Under Test*</Note>
+<Note>The SUT decorator is completely optional and not required to run merits.</Note>
+
+Developers can pass any number of callables to a `merit` function, but usually only some of these represent the actual agents or workflows being evaluated. Decorating these AI systems with `@merit.sut` helps Merit better understand and analyze your merit suite.
+
+Using the decorator enables:
+- Accessing trace spans for assertions
+- Quality reports for AI systems
+- Automatic error analysis
+- Synthetic test case generation
+
+
+```python
+import merit
+
+@merit.sut
+def chatbot(prompt: str) -> str:
+    return f"Response to: {prompt}"
+
+def merit_chatbot_works(chatbot):
+    out = chatbot("hello")
+    assert "hello" in out
+```
+
+## Basic Usage
+The most common use case for the `@merit.sut` decorator is accessing trace spans for assertions. 
+
+<Steps>
+<Step title="Decorate the system under test">
+
+```python
+# merits/merit_agent.py
+import merit
+
+from demo_app import agent
+
+@merit.sut
+def weather_agent(prompt: str):
+    # Pass arguments to your production agent
+    return agent(prompt, tools=['get_weather'])
+```
+</Step>
+<Step title="Inject into a `merit` and assert on the trace">
+
+```python
+# merits/merit_agent.py
+
+def merit_weather_agent_calls_tools(weather_agent, trace_context):
+    out = weather_agent("What's the weather in SF?")
+
+    # Retrieve spans specifically for this SUT
+    spans = trace_context.get_sut_spans(weather_agent)
+
+    # Assert that the agent called a tool instead of using internal knowledge
+    assert spans[1].attributes.get("llm.request.functions.0.name") == "get_weather"
+```
+</Step>
+</Steps>
+
+## Recommendations
+
+### 1. Create isolated helpers; don't touch your production code
+
+Many evaluation frameworks require developers to modify their production codebase to instrument traces. Merit avoids this pattern. The best way to introduce SUTs to your suite is to create isolated wrapper functions within your `merit_` files.
+
+**Don't do this:**
+```python
+# src/app/agent.py
+import merit
+
+@merit.sut
+def agent(prompt: str, domain: Literal["marketing", "coding"]) -> str:
+    answer = call_llm(prompt=prompt, domain=domain)
+    return f"Agent response: {prompt}"
+```
+
+**Do this:** 
+```python
+# merits/merit_agent.py
+import merit
+
+from app import agent
+
+@merit.sut
+def marketing_agent(prompt: str) -> str:
+    """Q&A system that answers questions about marketing concepts"""
+    return agent(prompt, domain='marketing')
+
+def merit_marketing_agent_invokes(marketing_agent):
+    out = marketing_agent("What's CAC?")
+    assert out
+```
+
+### 2. Pass using Dependency Injection; don't call directly
+
+The Merit engine tracks how `merit` items consume resources. Using dependency injection helps Merit build more accurate reports and provide better code suggestions. 
+
+**Don't do this:**
+```python
+import merit
+
+@merit.sut
+def chatbot(prompt: str) -> str:
+    return f"Bot response: {prompt}"
+
+def merit_chatbot_runs():
+    # Calling the global SUT directly hides it from Merit's analyzer
+    out = chatbot("Hello!")
+    assert "Hello!" in out
+```
+
+**Do this:** 
+```python
+import merit
+
+@merit.sut
+def chatbot(prompt: str) -> str:
+    return f"Bot response: {prompt}"
+
+def merit_chatbot_runs(chatbot):
+    # Injecting the SUT allows Merit to track its execution
+    out = chatbot("Hello!")
+    assert "Hello!" in out
+```

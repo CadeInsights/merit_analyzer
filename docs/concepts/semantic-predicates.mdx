@@ -1,0 +1,492 @@
+---
+title: "Semantic Predicates"
+---
+
+`Semantic Predicates` are LLM-powered comparison functions that evaluate text based on meaning rather than exact string matching. They enable evaluating natural language outputs by checking for factual accuracy, topic coverage, policy compliance, and stylistic consistency.
+
+Using Semantic Predicates enables:
+- Asserting on semantic properties like factual consistency and topic coverage
+- Comparing text by meaning instead of exact string matching
+- Validating LLM outputs against reference text or policies
+- Building custom predicates with the `@predicate` decorator
+- Automatic result collection with confidence scores and reasoning
+
+## Basic Usage
+
+Merit provides 8 built-in semantic predicates for common LLM evaluation scenarios. All predicates are async functions that return `PredicateResult` objects with boolean values, confidence scores, and explanatory messages.
+
+```python
+import merit
+from merit.predicates import has_unsupported_facts, follows_policy
+
+async def merit_customer_faq_bot(faq_bot):
+    # Knowledge base the bot should use
+    knowledge = """
+    Our store hours are 9 AM to 6 PM, Monday through Saturday.
+    We're closed on Sundays and major holidays.
+    Free shipping on orders over $50.
+    """
+    
+    # Customer asks a question, bot generates response
+    response = faq_bot.answer("When are you open?", context=knowledge)
+    # Example output: "We're open Monday through Saturday, 9 AM to 6 PM. 
+    # We're closed Sundays and holidays."
+    
+    # Verify response doesn't hallucinate facts not in knowledge base
+    assert not await has_unsupported_facts(response, knowledge)
+    
+    # Verify response follows customer service guidelines
+    conversation_policy = "Agent always asks if they can help with any other questions."
+    assert await follows_policy(response, conversation_policy)
+```
+
+When predicates are used inside merit functions, results are automatically collected for reporting - including what was compared, confidence scores, and reasoning for the outcome.
+
+## Built-in Semantic Predicates
+
+Merit provides predicates covering factual accuracy, topic coverage, policy compliance, and style matching.
+
+### Factual Accuracy
+
+#### has_conflicting_facts
+
+Detects when generated text contradicts source material.
+
+```python
+from merit.predicates import has_conflicting_facts
+
+async def merit_rag_no_contradictions(rag_system):
+    # Source document about a company
+    source = """
+    Acme Corp was founded in 2018. The company has 150 employees 
+    and is headquartered in Austin, Texas. Revenue was $12M in 2023.
+    """
+    
+    # LLM generates an answer based on retrieved context
+    answer = rag_system.query("Tell me about Acme Corp")
+    
+    # Passes: answer doesn't contradict
+    assert not await has_conflicting_facts(answer, source)
+    
+    # Bad output: "Acme Corp was founded in 2015 in San Francisco..."
+    # Would fail: contradicts founding year and location
+```
+
+#### has_unsupported_facts
+
+Catches hallucinations - facts the LLM invented that aren't grounded in source material.
+
+```python
+from merit.predicates import has_unsupported_facts
+
+async def merit_no_hallucinations(rag_system):
+    # Knowledge base only contains this information
+    source = "Python 3.12 was released in October 2023. It introduced f-string improvements."
+    
+    answer = rag_system.query("What's new in Python 3.12?")
+    # Example output: "Python 3.12 came out in October 2023 with better f-strings."
+    
+    # Passes: all facts are grounded in source
+    assert not await has_unsupported_facts(answer, source)
+    
+    # Bad output: "Python 3.12 released October 2023 with f-string improvements 
+    # and a new JIT compiler for 2x faster performance."
+    # Would fail: JIT compiler claim is hallucinated
+```
+
+#### has_facts
+
+Verifies that required information appears in the output. Use when certain facts must be mentioned.
+
+```python
+from merit.predicates import has_facts
+
+async def merit_includes_required_info(medical_summary_bot):
+    # Patient notes that must be summarized
+    patient_notes = """
+    Patient: John Doe, 45M
+    Chief complaint: Chest pain for 2 hours
+    Vitals: BP 150/95, HR 88, O2 98%
+    Assessment: Rule out MI, start workup
+    """
+    
+    summary = medical_summary_bot.summarize(patient_notes)
+    # Example: "45-year-old male presenting with 2-hour chest pain. 
+    # Elevated BP at 150/95. Cardiac workup initiated."
+    
+    # Critical facts that must appear in any summary
+    required = "chest pain, elevated blood pressure, cardiac workup"
+    assert await has_facts(summary, required)
+```
+
+#### matches_facts
+
+Checks bidirectional factual equivalence - both texts convey the same information.
+
+```python
+from merit.predicates import matches_facts
+
+async def merit_translation_preserves_meaning(translator):
+    original = "The quarterly report shows 23% growth in European markets."
+    
+    translated = translator.translate(original, target="spanish")
+    back_translated = translator.translate(translated, target="english")
+    # Example: "The quarterly report indicates 23% growth in European markets."
+    
+    # Facts should match despite rewording
+    assert await matches_facts(back_translated, original)
+```
+
+### Topic Coverage
+
+#### has_topics
+
+Verifies output covers required subjects. Useful for content generation where specific themes must be addressed.
+
+```python
+from merit.predicates import has_topics
+
+async def merit_onboarding_covers_topics(onboarding_bot):
+    # New employee asks about benefits
+    response = onboarding_bot.chat("What benefits do I get?")
+    # Example: "Welcome! Your benefits include comprehensive health insurance 
+    # with dental and vision, a 401k with 4% company match, and 20 days PTO. 
+    # You're also eligible for our annual bonus program."
+    
+    # Response must cover these key topics
+    assert await has_topics(response, "health insurance, retirement plan, paid time off")
+```
+
+### Policy Compliance
+
+#### follows_policy
+
+Ensures LLM outputs adhere to business rules, safety guidelines, or content policies.
+
+```python
+from merit.predicates import follows_policy
+
+async def merit_support_follows_guidelines(support_bot):
+    # Customer asking about competitor
+    response = support_bot.chat("Is your product better than CompetitorX?")
+    # Example: "I'd be happy to tell you about our product's strengths! 
+    # We offer 24/7 support, 99.9% uptime, and flexible pricing. 
+    # I can't compare directly to other products, but I can answer 
+    # any questions about what we offer."
+    
+    policy = """
+    - Never disparage competitors by name
+    - Focus on our product's strengths, not competitor weaknesses  
+    - Don't make claims about competitor products
+    - Redirect to our features when asked for comparisons
+    """
+    
+    assert await follows_policy(response, policy)
+```
+
+### Style and Structure
+
+#### matches_writing_style
+
+Validates tone, formality, and voice match a reference example.
+
+```python
+from merit.predicates import matches_writing_style
+
+async def merit_maintains_brand_voice(marketing_bot):
+    # Generate product description
+    description = marketing_bot.generate("Describe our new running shoes")
+    # Example: "Meet the CloudRunner Pro. Engineered for the long haul. 
+    # 47% lighter than last gen. Zero compromises."
+    
+    # Brand voice reference: punchy, confident, minimal
+    brand_voice = """
+    Built different. The UltraFrame bike handles like nothing else. 
+    Carbon fiber. Precision engineering. Pure speed.
+    """
+    
+    assert await matches_writing_style(description, brand_voice)
+    
+    # Would fail with: "Our new running shoes are very comfortable and 
+    # lightweight, offering great support for runners of all levels..."
+    # (too generic and wordy for this brand voice)
+```
+
+#### matches_writing_layout
+
+Checks document structure and formatting patterns match a template.
+
+```python
+from merit.predicates import matches_writing_layout
+
+async def merit_follows_report_structure(report_generator):
+    report = report_generator.create_weekly_report(data=metrics)
+    # Example output:
+    # "## Weekly Summary\n\nKey metrics improved across the board.\n\n
+    # ## Highlights\n- Revenue up 12%\n- Churn down 3%\n\n
+    # ## Action Items\n1. Review pricing\n2. Update dashboard"
+    
+    # Template showing expected structure
+    template = """
+    ## Weekly Summary
+    [Overview paragraph]
+    
+    ## Highlights  
+    - [Bullet points]
+    
+    ## Action Items
+    1. [Numbered list]
+    """
+    
+    assert await matches_writing_layout(report, template)
+```
+
+## Automatic Result Collection
+
+When predicates are used inside merit functions, results are automatically collected for reporting. No manual registration required.
+
+```python
+import merit
+from merit.predicates import has_facts, has_unsupported_facts, follows_policy
+
+@merit.parametrize("question,context", [
+    ("What's the return window?", "Returns accepted within 30 days with receipt."),
+    ("Do you offer warranties?", "All electronics have 1-year manufacturer warranty."),
+])
+async def merit_support_responses(question, context, support_bot):
+    answer = support_bot.respond(question, knowledge=context)
+    # Example: "You can return items within 30 days - just bring your receipt!"
+    
+    # All predicate results automatically collected
+    assert await has_facts(answer, context)          # Key info present
+    assert not await has_unsupported_facts(answer, context)  # No hallucinations
+    assert await follows_policy(answer, "Be helpful and concise")
+    
+    # Each result is captured with:
+    # - predicate name ("has_facts", "has_unsupported_facts", etc.)
+    # - actual text (the bot's answer)
+    # - reference text (context or policy)
+    # - confidence score
+    # - pass/fail outcome
+    # - case_id linking to specific question/context pair
+```
+
+Result collection happens through context variables that track the currently executing merit function. Results are attached to the merit case and included in reports.
+
+## Building Custom Predicates
+
+Use the `@predicate` decorator to create custom semantic checks while maintaining the same interface and automatic result collection.
+
+```python
+from merit.predicates import predicate
+
+@predicate
+def mentions_price(actual: str, reference: str) -> bool:
+    """Check if actual mentions the expected price from reference."""
+    # Extract price pattern like $XX.XX or $XXX
+    import re
+    prices_in_actual = re.findall(r'\$[\d,]+(?:\.\d{2})?', actual)
+    return reference in prices_in_actual
+
+@predicate
+def within_word_limit(actual: str, reference: str) -> bool:
+    """Check if actual is within word limit specified in reference."""
+    max_words = int(reference)
+    return len(actual.split()) <= max_words
+
+# Use custom predicates
+async def merit_product_summary(summarizer):
+    product_info = "ThermoPro X500, premium model, retails at $299.99"
+    
+    summary = summarizer(product_info)
+    # Output: "The ThermoPro X500 is available for $299.99"
+    
+    # Verify price is mentioned correctly
+    assert mentions_price(summary, "$299.99")
+    
+    # Verify summary stays concise (under 50 words)
+    assert within_word_limit(summary, "50")
+```
+
+The `@predicate` decorator automatically:
+- Wraps return value in `PredicateResult`
+- Handles the optional `strict` parameter
+- Registers results when used in merit functions
+- Populates metadata with predicate name and inputs
+- Works with both sync and async functions
+
+## Recommendations
+
+### 1. Use semantic predicates for natural language assertions
+
+Semantic predicates shine when evaluating LLM outputs where exact string matching is too brittle. For structured outputs, use standard assertions.
+
+**Don't do this:**
+```python
+# Using semantic predicates for exact matching
+from merit.predicates import has_facts
+
+async def merit_json_output(api):
+    result = api.get_user(id=123)
+    
+    # Semantic predicate overkill for structured data
+    assert await has_facts(str(result), '{"name": "Alice"}')
+```
+
+**Do this:**
+```python
+# Use standard assertions for structured data
+def merit_json_output(api):
+    result = api.get_user(id=123)
+    assert result["name"] == "Alice"
+    assert result["id"] == 123
+
+# Use semantic predicates for natural language
+from merit.predicates import has_facts, has_unsupported_facts
+
+async def merit_text_generation(llm):
+    context = "The company was founded in 2020."
+    summary = llm.summarize(context)
+    
+    # Semantic checks for flexible language matching
+    assert await has_facts(summary, "founded in 2020")
+    assert not await has_unsupported_facts(summary, context)
+```
+
+### 2. Combine multiple predicates for comprehensive validation
+
+Layer semantic checks to validate different aspects of LLM outputs. This provides stronger guarantees than single assertions.
+
+```python
+from merit.predicates import (
+    has_unsupported_facts,
+    has_conflicting_facts,
+    has_topics,
+    follows_policy
+)
+
+async def merit_product_description(product_copilot):
+    # Source: product database entry
+    product_data = """
+    Name: ThermoPro X500
+    Price: $299
+    Features: Temperature sensing, WiFi connectivity, Mobile app
+    Warranty: 2 years
+    """
+    
+    description = product_copilot.generate_description(product_data)
+    # Example output: "The ThermoPro X500 ($299) brings smart temperature 
+    # monitoring to your home. Connect via WiFi, control from our mobile app, 
+    # and enjoy peace of mind with a 2-year warranty."
+    
+    # Layer 1: No hallucinated features or specs
+    assert not await has_unsupported_facts(description, product_data)
+    
+    # Layer 2: Price and warranty not misstated  
+    assert not await has_conflicting_facts(description, product_data)
+    
+    # Layer 3: Must mention key selling points
+    assert await has_topics(description, "WiFi, mobile app, warranty")
+    
+    # Layer 4: Follow marketing guidelines
+    marketing_policy = "No superlatives like 'best' or 'revolutionary'. No competitor mentions."
+    assert await follows_policy(description, marketing_policy)
+```
+
+### 3. Use strict mode appropriately
+
+The `strict` parameter controls comparison sensitivity. Use `strict=False` (default) for semantic flexibility, and `strict=True` when precision matters.
+
+```python
+from merit.predicates import has_facts
+
+async def merit_financial_report(report_bot):
+    # Financial data requires precision
+    quarterly_data = "Q3 revenue: $4.2M. Operating margin: 23.5%. Headcount: 142."
+    
+    report = report_bot.summarize(quarterly_data)
+    # Example: "Third quarter brought in $4.2M revenue with healthy 23.5% margins. 
+    # Team size stable at 142 employees."
+    
+    # Lenient: "brought in $4.2M" semantically matches "$4.2M revenue"
+    assert await has_facts(report, "revenue was $4.2M", strict=False)
+    
+    # Strict: exact figures must appear - "around 24%" would fail
+    assert await has_facts(report, "23.5%", strict=True)
+    assert await has_facts(report, "142", strict=True)
+```
+
+Use `strict=False` for:
+- Paraphrased content where exact wording varies
+- Summaries that convey facts differently
+- Style matching with some flexibility
+
+Use `strict=True` for:
+- Financial figures, dates, names requiring precision
+- Policy compliance with zero tolerance
+- Critical facts that must not be paraphrased
+
+
+### 4. Leverage automatic result collection for analytics
+
+Predicate results are automatically collected with metadata, enabling post-run analysis of LLM behavior patterns.
+
+```python
+import merit
+from merit import Metric, metrics, Case
+from merit.predicates import has_unsupported_facts
+
+# Test cases from your QA dataset
+qa_cases = [
+    Case(
+        sut_input_values={"question": "What's the refund policy?"},
+        references={"context": "Full refunds within 30 days. After 30 days, store credit only."}
+    ),
+    Case(
+        sut_input_values={"question": "Do you ship internationally?"},
+        references={"context": "We ship to US, Canada, and EU. Shipping takes 5-10 business days."}
+    ),
+    Case(
+        sut_input_values={"question": "What payment methods accepted?"},
+        references={"context": "We accept Visa, Mastercard, and PayPal. No crypto or wire transfers."}
+    ),
+]
+
+@merit.metric
+def hallucination_rate():
+    """Track hallucination rate across customer support scenarios."""
+    metric = Metric()
+    yield metric
+    
+    # Fail if more than 5% of responses contain hallucinations
+    assert metric.distribution[False] >= 0.95
+
+@merit.iter_cases(qa_cases)
+async def merit_support_bot_accuracy(case: Case, support_bot, hallucination_rate: Metric):
+    context = case.references["context"]
+    question = case.sut_input_values["question"]
+    
+    answer = support_bot.answer(question, context=context)
+    # Example: "You can get a full refund within the first 30 days!"
+    
+    # Check for hallucinated information
+    hallucination_check = await has_unsupported_facts(answer, context)
+    
+    # Track pass/fail across all cases
+    with metrics([hallucination_rate]):
+        assert not hallucination_check  # False = no hallucinations = pass
+```
+
+Results include:
+- Which predicate was called
+- Actual and reference text
+- Confidence scores
+- Pass/fail outcomes
+- Associated case IDs (linking to specific Q&A pairs)
+- Timestamps and merit function names
+
+This data enables analyzing patterns like:
+- Which question types trigger more hallucinations
+- Confidence score distributions across topics
+- Whether certain context lengths correlate with failures
+- Aggregate quality metrics for go/no-go deployment decisions

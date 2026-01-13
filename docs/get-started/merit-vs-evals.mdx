@@ -1,0 +1,392 @@
+---
+title: "Merit vs Evals vs Tests"
+---
+
+## TL;DR
+
+| Approach | Mindset | Weakness with AI |
+|----------|---------|------------------|
+| **Evals** | "Tune until metrics improve" | Great for training, fails when you need to *constrain* behavior to specific use cases |
+| **Tests** | "Assert explicit behavior" | Assumes determinism—one pass means all similar inputs pass. AI doesn't work that way |
+| **Merit** | "Assert behavior + measure reliability" | Combines explicit behavioral checks with statistical coverage and semantic understanding |
+
+---
+
+## The Problem with Evals
+
+Evals come from data science. The workflow is:
+
+1. Define a metric (accuracy, F1, BLEU, etc.)
+2. Run your model on a benchmark dataset
+3. Tweak parameters until the metric improves
+4. Repeat
+
+This works when you're *training* a model. But when you're *building a product*, you need something different.
+
+### Evals treat AI as a black box
+
+Evals don't care *why* your system fails—they just measure aggregate outcomes. A 95% accuracy score tells you nothing about:
+- Which 5% of cases fail
+- Whether failures are random or systematic
+- If your system violates specific business rules
+- How to reproduce and fix individual failures
+
+### Evals optimize for averages, not constraints
+
+When building products, you often need to *constrain* behavior:
+- "Never mention competitor X"
+- "Always include a disclaimer for financial advice"
+- "Don't hallucinate facts outside the provided context"
+
+Evals can't express these constraints—they can only measure how often you violate them *on average*. A system with 99% policy compliance still fails 1% of the time, and you have no way to assert specific rules.
+
+---
+
+## The Problem with Tests
+
+Traditional tests come from software engineering. The workflow is:
+
+1. Write an assertion: `assert result == expected`
+2. Run the test
+3. If it passes once, ship it
+
+This works when code is deterministic. Call `add(2, 2)` and you always get `4`.
+
+### Tests assume determinism
+
+AI systems are stochastic. The same input can produce different outputs:
+
+```python
+# This might pass 9 out of 10 times
+def test_greeting():
+    response = chatbot("Hello!")
+    assert "hello" in response.lower()  # Sometimes it says "Hi there!" instead
+```
+
+A single passing test doesn't tell you anything about reliability. You need to run the same test multiple times and measure the success rate.
+
+### Tests can't express semantic equivalence
+
+How do you assert that a response is "friendly but professional"? Or that it "contains the key facts from the source document"? String matching is too brittle:
+
+```python
+# Too brittle - fails on valid paraphrases
+assert response == "Our store is open Monday through Friday, 9 AM to 5 PM."
+
+# What about: "We're open weekdays from 9-5"? Same meaning, different words.
+```
+
+Traditional tests lack the vocabulary to express semantic properties.
+
+### Tests don't scale to coverage requirements
+
+AI systems need thousands of test cases to achieve reasonable coverage. Writing each one manually is impractical:
+
+```python
+# Do you really want to write 500 of these?
+def test_translation_1():
+    assert translator.translate("hello", "spanish") == "hola"
+
+def test_translation_2():
+    assert translator.translate("goodbye", "spanish") == "adiós"
+
+# ... 498 more
+```
+
+Without dataset abstractions and parametrization, test files become unmanageable.
+
+---
+
+## How Merit Solves Both Problems
+
+Merit combines the precision of tests with the statistical rigor of evals—while providing the tools you need for AI-specific challenges.
+
+| Capability | Evals | Tests | Merit |
+|------------|-------|-------|-------|
+| Explicit behavioral assertions | ❌ | ✅ | ✅ |
+| Statistical metrics (mean, p95, CI) | ✅ | ❌ | ✅ |
+| Semantic understanding | ❌ | ❌ | ✅ |
+| Dataset abstractions | ✅ | ❌ | ✅ |
+| Run same test N times | ❌ | ❌ | ✅ |
+| Policy/constraint checking | ❌ | ❌ | ✅ |
+| Deterministic code support | ❌ | ✅ | ✅ |
+| Dependency injection | ❌ | ✅ | ✅ |
+| CI/CD integration | ⚠️ | ✅ | ✅ |
+| Actionable failure reports | ❌ | ✅ | ✅ |
+
+### Semantic Predicates: Assert meaning, not strings
+
+Merit's [semantic predicates](/docs/concepts/semantic-predicates) let you assert on meaning:
+
+```python
+from merit.predicates import has_unsupported_facts, follows_policy
+
+async def merit_customer_support(support_bot):
+    context = "Returns accepted within 30 days with receipt."
+    response = support_bot.answer("What's the return policy?")
+    
+    # Assert the response doesn't hallucinate facts
+    assert not await has_unsupported_facts(response, context)
+    
+    # Assert the response follows company guidelines
+    assert await follows_policy(response, "Always offer to help with other questions")
+```
+
+No string matching. No brittle assertions. Just semantic understanding.
+
+### Repeat: Measure reliability, not single outcomes
+
+Merit's [`@merit.repeat`](/docs/concepts/merit#reliability-evaluation-with-repeat) runs the same merit multiple times:
+
+```python
+@merit.repeat(10, min_passes=8)  # 8 out of 10 must pass
+async def merit_consistent_greeting(chatbot):
+    response = chatbot("Hello!")
+    assert await follows_policy(response, "Greeting is friendly and professional")
+```
+
+Now you're measuring *reliability*, not just a single outcome.
+
+### Metrics: Aggregate statistics with quality gates
+
+Merit's [metrics](/docs/concepts/metric) give you statistical power with explicit thresholds:
+
+```python
+@merit.metric
+def hallucination_rate():
+    metric = Metric()
+    yield metric
+    assert metric.distribution[False] >= 0.95  # 95% must pass
+
+@merit.iter_cases(qa_dataset)
+async def merit_rag_accuracy(case: Case, rag_system, hallucination_rate: Metric):
+    response = rag_system.query(case.sut_input_values["question"])
+    
+    with metrics([hallucination_rate]):
+        assert not await has_unsupported_facts(response, case.references["context"])
+```
+
+You get both individual pass/fail results *and* aggregate statistics.
+
+### Cases: Dataset-driven testing without the mess
+
+Merit's [Case](/docs/concepts/case) abstraction lets you load test data from external sources:
+
+```python
+cases = [Case(**item) for item in json.load(open("test_cases.json"))]
+
+@merit.iter_cases(cases)
+async def merit_translation(case: Case, translator):
+    result = translator.translate(**case.sut_input_values)
+    assert case.references["expected"] in result.lower()
+```
+
+Thousands of test cases. One merit function. Type-safe references.
+
+---
+
+## Example: Testing a Customer Support Bot
+
+Let's see how the same system would be tested with each approach.
+
+### The System
+
+A customer support chatbot that answers questions using a knowledge base:
+
+```python
+class SupportBot:
+    def __init__(self, knowledge_base: str):
+        self.knowledge_base = knowledge_base
+    
+    def answer(self, question: str) -> str:
+        # LLM-powered response using knowledge_base as context
+        return llm_call(question, context=self.knowledge_base)
+```
+
+### With Traditional Tests
+
+```python
+# test_support_bot.py
+import pytest
+
+def test_returns_policy():
+    bot = SupportBot("Returns accepted within 30 days.")
+    response = bot.answer("What's your return policy?")
+    
+    # Brittle: fails if wording changes
+    assert "30 days" in response
+
+def test_shipping_info():
+    bot = SupportBot("Free shipping on orders over $50.")
+    response = bot.answer("Do you offer free shipping?")
+    
+    # Brittle: what if it says "$50" vs "fifty dollars"?
+    assert "50" in response
+
+def test_no_competitor_mentions():
+    bot = SupportBot("We offer 24/7 support.")
+    response = bot.answer("Are you better than CompetitorX?")
+    
+    # How do you even check this reliably?
+    assert "CompetitorX" not in response  # Too simple
+    # What about "Competitor X" or "that other company"?
+
+# Problems:
+# - Each test runs once. What if it passes 9/10 times?
+# - String matching is brittle
+# - Can't express semantic constraints
+# - Need to manually write every case
+```
+
+### With Evals
+
+```python
+# eval_support_bot.py
+import pandas as pd
+from some_eval_framework import evaluate
+
+# Load benchmark dataset
+dataset = pd.read_csv("support_qa_benchmark.csv")
+
+# Run evaluation
+results = evaluate(
+    model=SupportBot(knowledge_base),
+    dataset=dataset,
+    metrics=["accuracy", "relevance_score", "hallucination_rate"]
+)
+
+print(f"Accuracy: {results['accuracy']:.2%}")
+print(f"Relevance: {results['relevance_score']:.2f}")
+print(f"Hallucination Rate: {results['hallucination_rate']:.2%}")
+
+# Problems:
+# - No explicit assertions—just aggregate numbers
+# - Can't enforce specific policies
+# - Which cases failed? Why?
+# - Not CI-friendly: what's the pass/fail threshold?
+# - Black box: no insight into individual failures
+```
+
+### With Merit
+
+```python
+# merit_support_bot.py
+import merit
+from merit import Case, Metric, metrics
+from merit.predicates import has_unsupported_facts, follows_policy, has_facts
+
+# Define your system under test
+@merit.resource
+def support_bot():
+    knowledge = """
+    Returns accepted within 30 days with receipt.
+    Free shipping on orders over $50.
+    We offer 24/7 customer support.
+    """
+    return SupportBot(knowledge_base=knowledge)
+
+# Define quality metrics with explicit thresholds
+@merit.metric
+def accuracy():
+    metric = Metric()
+    yield metric
+    assert metric.mean >= 0.9  # 90% of responses must be accurate
+
+@merit.metric
+def hallucination_rate():
+    metric = Metric()
+    yield metric
+    assert metric.distribution[True] < 0.05  # Less than 5% hallucinations
+
+# Load test cases from dataset
+cases = [
+    Case(
+        sut_input_values={"question": "What's your return policy?"},
+        references={"context": "Returns accepted within 30 days with receipt.", 
+                    "required_facts": "30 days, receipt"}
+    ),
+    Case(
+        sut_input_values={"question": "Do you have free shipping?"},
+        references={"context": "Free shipping on orders over $50.",
+                    "required_facts": "$50, free shipping"}
+    ),
+    Case(
+        sut_input_values={"question": "What support do you offer?"},
+        references={"context": "We offer 24/7 customer support.",
+                    "required_facts": "24/7, support"}
+    ),
+]
+
+# Single merit function with semantic assertions
+@merit.iter_cases(cases)
+async def merit_factual_accuracy(
+    case: Case, 
+    support_bot, 
+    accuracy: Metric,
+    hallucination_rate: Metric
+):
+    response = support_bot.answer(case.sut_input_values["question"])
+    context = case.references["context"]
+    
+    # Semantic assertion: no hallucinations
+    hallucinated = await has_unsupported_facts(response, context)
+    with metrics([hallucination_rate]):
+        assert not hallucinated
+    
+    # Semantic assertion: contains required facts
+    with metrics([accuracy]):
+        assert await has_facts(response, case.references["required_facts"])
+
+# Policy compliance with repeated runs
+@merit.repeat(10, min_passes=9)  # 9/10 must pass
+async def merit_no_competitor_mentions(support_bot):
+    response = support_bot.answer("Are you better than CompetitorX?")
+    
+    policy = """
+    - Never mention competitors by name
+    - Don't compare to other companies
+    - Focus on our own strengths
+    """
+    assert await follows_policy(response, policy)
+
+# Reliability check: same question, multiple runs
+@merit.repeat(5)
+async def merit_consistent_tone(support_bot):
+    response = support_bot.answer("I'm frustrated with my order!")
+    
+    tone_policy = "Response is empathetic, apologetic, and offers help"
+    assert await follows_policy(response, tone_policy)
+```
+
+Run with:
+```bash
+merit run merit_support_bot.py
+```
+
+**What you get:**
+- ✅ Individual pass/fail for each case
+- ✅ Aggregate metrics with explicit thresholds
+- ✅ Semantic assertions that understand meaning
+- ✅ Reliability testing with `@merit.repeat`
+- ✅ Dataset-driven testing with typed `Case` objects
+- ✅ CI-friendly: clear pass/fail based on your quality gates
+- ✅ Actionable reports: which cases failed and why
+
+---
+
+## When to Use What
+
+| Use Case | Recommended Approach |
+|----------|---------------------|
+| Training ML models | Evals |
+| Deterministic code (APIs, utilities) | Traditional tests (pytest) |
+| AI/LLM systems in production | **Merit** |
+| Hybrid systems (AI + deterministic) | Merit for AI parts, pytest for the rest |
+
+Merit doesn't replace pytest—it complements it. Use pytest for your deterministic code, and Merit for the parts that involve AI behavior.
+
+---
+
+## Getting Started
+
+Ready to try Merit? Check out the [Quick Start](/docs/get-started/quick-start) guide.
