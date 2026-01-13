@@ -1,0 +1,499 @@
+---
+title: "Merit Predicates APIs"
+---
+
+## Decorator
+
+### @predicate
+
+Convert a comparison function into a full predicate with automatic result wrapping.
+
+**Signature:**
+```python
+@predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]])
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `func` | `Callable` | Function that takes `(actual, reference)` and returns `bool` |
+
+**Returns:** `Predicate` - Function that returns `PredicateResult` with optional `strict` parameter
+
+**Example:**
+```python
+from merit.predicates import predicate
+
+@predicate
+def mentions_price(actual: str, reference: str) -> bool:
+    """Check if actual mentions the expected price."""
+    import re
+    prices = re.findall(r'\$[\d,]+(?:\.\d{2})?', actual)
+    return reference in prices
+
+@predicate
+async def custom_semantic_check(actual: str, reference: str) -> bool:
+    """Custom async predicate using LLM."""
+    return await llm.evaluate(actual, reference)
+
+# Use like built-in predicates
+def merit_test():
+    summary = "The product costs $299.99"
+    assert mentions_price(summary, "$299.99")
+```
+
+---
+
+## Result Classes
+
+### PredicateResult
+
+Result of a predicate evaluation with metadata and confidence.
+
+**Attributes:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | `UUID` | Unique identifier for this result |
+| `case_id` | `UUID \| None` | ID of the test case this result belongs to |
+| `predicate_metadata` | `PredicateMetadata` | Metadata about the evaluation |
+| `confidence` | `float` | Confidence score in `[0, 1]` |
+| `value` | `bool` | Boolean outcome of the check |
+| `message` | `str \| None` | Optional explanation or reasoning |
+
+**Methods:**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `__bool__()` | `bool` | Returns `value` (allows `if result:` checks) |
+| `__repr__()` | `str` | JSON representation with truncated fields |
+
+**Example:**
+```python
+from merit.predicates import has_facts
+
+async def merit_test():
+    result = await has_facts(
+        actual="Paris is the capital of France",
+        reference="capital of France"
+    )
+    
+    print(result.value)         # True
+    print(result.confidence)    # 0.95
+    print(result.message)       # "All facts present"
+    
+    # Use as boolean
+    if result:
+        print("Check passed!")
+    
+    # Access metadata
+    print(result.predicate_metadata.predicate_name)  # "has_facts"
+```
+
+---
+
+### PredicateMetadata
+
+Metadata describing how a predicate was executed.
+
+**Attributes:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `actual` | `str` | String representation of observed value |
+| `reference` | `str` | String representation of expected value |
+| `strict` | `bool` | Strictness flag used in evaluation |
+| `predicate_name` | `str \| None` | Name of the predicate function (auto-filled) |
+| `merit_name` | `str \| None` | Name of the enclosing merit function (auto-filled) |
+
+**Example:**
+```python
+async def merit_example():
+    result = await has_facts("Text", "Reference")
+    
+    meta = result.predicate_metadata
+    print(meta.predicate_name)  # "has_facts"
+    print(meta.merit_name)      # "merit_example"
+    print(meta.actual)          # "Text"
+    print(meta.reference)       # "Reference"
+    print(meta.strict)          # False
+```
+
+---
+
+## Built-in Semantic Predicates
+
+All built-in predicates are async functions that return `PredicateResult`.
+
+### has_conflicting_facts
+
+Check if actual text contradicts facts in reference text.
+
+**Signature:**
+```python
+async def has_conflicting_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Source text or context for grounding |
+| `strict` | `bool` | `False` | Whether to require explicit contradictions |
+
+**Returns:** `PredicateResult` - `value` is `True` if contradictions found
+
+**Example:**
+```python
+from merit.predicates import has_conflicting_facts
+
+async def merit_no_contradictions(rag_system):
+    source = "Acme Corp was founded in 2018 in Austin, Texas."
+    answer = rag_system.query("Tell me about Acme Corp")
+    
+    # Passes if answer doesn't contradict source
+    assert not await has_conflicting_facts(answer, source)
+    
+    # Would fail: "Acme Corp was founded in 2015..."
+```
+
+---
+
+### has_unsupported_facts
+
+Check if actual text contains facts not found in reference text (hallucinations).
+
+**Signature:**
+```python
+async def has_unsupported_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Source text that should ground all facts |
+| `strict` | `bool` | `False` | Whether to require explicit support |
+
+**Returns:** `PredicateResult` - `value` is `True` if unsupported facts found
+
+**Example:**
+```python
+from merit.predicates import has_unsupported_facts
+
+async def merit_no_hallucinations(chatbot):
+    knowledge = "Our store hours are 9 AM to 6 PM, Monday-Saturday."
+    response = chatbot.answer("When are you open?", context=knowledge)
+    
+    # Fails if response invents facts not in knowledge base
+    assert not await has_unsupported_facts(response, knowledge)
+```
+
+---
+
+### has_facts
+
+Check if actual text contains all facts from reference text.
+
+**Signature:**
+```python
+async def has_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Required facts that must be present |
+| `strict` | `bool` | `False` | Whether to require exact factual match |
+
+**Returns:** `PredicateResult` - `value` is `True` if all required facts present
+
+**Example:**
+```python
+from merit.predicates import has_facts
+
+async def merit_required_info(summarizer):
+    notes = "Patient: 45M, chest pain for 2 hours, BP 150/95"
+    summary = summarizer.summarize(notes)
+    
+    # Must mention critical information
+    required = "chest pain, elevated blood pressure"
+    assert await has_facts(summary, required)
+```
+
+---
+
+### matches_facts
+
+Check if actual and reference texts convey the same set of facts (bidirectional).
+
+**Signature:**
+```python
+async def matches_facts(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Ground truth to compare against |
+| `strict` | `bool` | `False` | Whether to require strict semantic equality |
+
+**Returns:** `PredicateResult` - `value` is `True` if texts are factually equivalent
+
+**Example:**
+```python
+from merit.predicates import matches_facts
+
+async def merit_translation(translator):
+    original = "Q3 revenue was $4.2M with 23% margins."
+    translated = translator.translate(original, target="spanish")
+    back = translator.translate(translated, target="english")
+    
+    # Should preserve meaning despite rewording
+    assert await matches_facts(back, original)
+```
+
+---
+
+### has_topics
+
+Check if actual text covers all topics from reference text.
+
+**Signature:**
+```python
+async def has_topics(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Required topics (comma-separated or description) |
+| `strict` | `bool` | `False` | Whether to require exact topic match |
+
+**Returns:** `PredicateResult` - `value` is `True` if all topics covered
+
+**Example:**
+```python
+from merit.predicates import has_topics
+
+async def merit_coverage(content_bot):
+    response = content_bot.generate("Write about AI safety")
+    
+    # Must cover these themes
+    assert await has_topics(response, "alignment, interpretability, robustness")
+```
+
+---
+
+### follows_policy
+
+Check if actual text adheres to rules/policies in reference text.
+
+**Signature:**
+```python
+async def follows_policy(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Policies, rules, or requirements |
+| `strict` | `bool` | `False` | Whether to enforce strict adherence |
+
+**Returns:** `PredicateResult` - `value` is `True` if compliant with policy
+
+**Example:**
+```python
+from merit.predicates import follows_policy
+
+async def merit_compliance(support_bot):
+    response = support_bot.chat("Is your product better than CompetitorX?")
+    
+    policy = """
+    - Never disparage competitors
+    - Focus on our product's strengths
+    - Redirect comparisons to our features
+    """
+    
+    assert await follows_policy(response, policy)
+```
+
+---
+
+### matches_writing_style
+
+Check if actual text has the same writing style as reference text.
+
+**Signature:**
+```python
+async def matches_writing_style(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Example showing desired style |
+| `strict` | `bool` | `False` | Whether to require strict stylistic match |
+
+**Returns:** `PredicateResult` - `value` is `True` if style matches
+
+**Example:**
+```python
+from merit.predicates import matches_writing_style
+
+async def merit_brand_voice(marketing_bot):
+    description = marketing_bot.generate("Describe our shoes")
+    
+    # Brand voice: punchy, confident, minimal
+    brand_voice = """
+    Built different. The UltraFrame bike handles like nothing else.
+    Carbon fiber. Precision engineering. Pure speed.
+    """
+    
+    assert await matches_writing_style(description, brand_voice)
+```
+
+---
+
+### matches_writing_layout
+
+Check if actual text follows the same structure as reference template.
+
+**Signature:**
+```python
+async def matches_writing_layout(
+    actual: str,
+    reference: str,
+    strict: bool = False,
+) -> PredicateResult
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `actual` | `str` | - | Text produced by the system under test |
+| `reference` | `str` | - | Template showing desired structure |
+| `strict` | `bool` | `False` | Whether to require strict structural match |
+
+**Returns:** `PredicateResult` - `value` is `True` if layout matches
+
+**Example:**
+```python
+from merit.predicates import matches_writing_layout
+
+async def merit_report_structure(report_bot):
+    report = report_bot.create_weekly_report(metrics)
+    
+    template = """
+    ## Weekly Summary
+    [Overview paragraph]
+    
+    ## Highlights
+    - [Bullet points]
+    
+    ## Action Items
+    1. [Numbered list]
+    """
+    
+    assert await matches_writing_layout(report, template)
+```
+
+---
+
+## Usage Patterns
+
+### Combining Multiple Predicates
+
+```python
+from merit.predicates import (
+    has_unsupported_facts,
+    has_conflicting_facts,
+    has_topics,
+    follows_policy,
+)
+
+async def merit_comprehensive_check(product_bot):
+    product_data = "ThermoPro X500, $299, WiFi enabled, 2-year warranty"
+    description = product_bot.generate(product_data)
+    
+    # Layer multiple checks
+    assert not await has_unsupported_facts(description, product_data)
+    assert not await has_conflicting_facts(description, product_data)
+    assert await has_topics(description, "WiFi, warranty")
+    assert await follows_policy(description, "No superlatives like 'best'")
+```
+
+### Using Strict Mode
+
+```python
+from merit.predicates import has_facts
+
+async def merit_precision(report_bot):
+    data = "Q3 revenue: $4.2M, margins: 23.5%"
+    report = report_bot.summarize(data)
+    
+    # Lenient: semantic matching OK
+    assert await has_facts(report, "$4.2M revenue", strict=False)
+    
+    # Strict: exact figures required
+    assert await has_facts(report, "23.5%", strict=True)
+```
+
+### Accessing Result Details
+
+```python
+from merit.predicates import has_facts
+
+async def merit_detailed_analysis(bot):
+    result = await has_facts("Text", "Reference")
+    
+    if not result.value:
+        print(f"Check failed with confidence {result.confidence}")
+        print(f"Reason: {result.message}")
+        print(f"Predicate: {result.predicate_metadata.predicate_name}")
+    
+    # Results automatically collected for reporting
+    # No manual registration needed
+```

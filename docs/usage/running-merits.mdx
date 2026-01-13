@@ -2,3 +2,304 @@
 title: "Running Merits"
 ---
 
+Merit provides a pytest-inspired CLI for running tests, filtering by tags or keywords, controlling concurrency, and reporting results.
+
+This page covers **how to run merits** and **how the reporting system works**, referencing where the behavior lives in the codebase.
+
+## Basic Usage
+
+Run all discovered merits in the current directory:
+
+```bash
+merit test
+```
+
+Run merits from specific paths:
+
+```bash
+merit test tests/
+merit test merit_chatbot.py merit_agent.py
+```
+
+**Discovery**: Merit follows pytest-style patterns. See [Merit > Discovery](/concepts/merit#merit-discovery) for complete rules.
+
+## Filtering Tests
+
+### By Keyword Expression
+
+Use `-k` to filter tests by name with boolean expressions:
+
+```bash
+# Run tests with "chatbot" in the name
+merit test -k chatbot
+
+# Boolean operators: and, or, not
+merit test -k "chatbot and not slow"
+merit test -k "gpt4 or claude"
+
+# Grouping with parentheses
+merit test -k "(fast or smoke) and not flaky"
+```
+
+Keyword matching is substring-based: `-k agent` matches `merit_agent_response`, `merit_weather_agent`, etc.
+
+### By Tags
+
+Use `-t`/`--tag` to include tests with specific tags:
+
+```bash
+# Run tests tagged "smoke"
+merit test --tag smoke
+
+# Multiple tags (OR logic)
+merit test --tag smoke --tag fast
+```
+
+Use `--skip-tag` to exclude tests:
+
+```bash
+# Skip slow tests
+merit test --skip-tag slow
+
+# Skip multiple tags
+merit test --skip-tag slow --skip-tag flaky
+```
+
+**Combine filters**:
+
+```bash
+# Run fast smoke tests about chatbots
+merit test --tag smoke --tag fast -k chatbot
+```
+
+## Controlling Execution
+
+### Stop on Failure
+
+**`--maxfail N`** - Stop after N failures:
+
+```bash
+merit test --maxfail 3  # Stop after 3 failures
+```
+
+**`--fail-fast`** - Stop at the first failed assertion within a test:
+
+```bash
+merit test --fail-fast
+```
+
+Without `--fail-fast`, Merit collects all assertion failures in a test. With it, the test stops at the first failure.
+
+### Concurrency
+
+Control parallel test execution with `--concurrency`:
+
+```bash
+# Sequential (default)
+merit test --concurrency 1
+
+# 5 concurrent tests
+merit test --concurrency 5
+
+# Unlimited (capped at 10)
+merit test --concurrency 0
+```
+
+**When to use concurrency**:
+- **Sequential (1)**: Default. Predictable output, easier debugging.
+- **Concurrent (>1)**: Faster runs for independent tests. Use with stateless SUTs.
+- **Unlimited (0)**: Maximum parallelism for large test suites.
+
+### Verbosity
+
+Control output detail with `-v` (verbose) or `-q` (quiet):
+
+```bash
+# Minimal output (only failures)
+merit test -q
+
+# Very minimal
+merit test -qq
+
+# Verbose output
+merit test -v
+
+# Very verbose
+merit test -vv
+```
+
+**Verbosity levels**:
+- `-qq` or lower: Only failed/errored tests shown
+- `-q`: Less output
+- Default (0): Standard output
+- `-v`, `-vv`: More detail
+
+## Tracing
+
+Enable OpenTelemetry tracing to capture spans from your SUT and tests:
+
+```bash
+# Enable tracing (writes to traces.jsonl)
+merit test --trace
+
+# Custom output path
+merit test --trace --trace-output my-traces.jsonl
+```
+
+**Use traces for**:
+- Asserting tool calls in agent tests
+- Debugging LLM request/response flows
+- Performance analysis
+
+See [SUT](/concepts/sut) for trace assertions.
+
+## Configuration Files
+
+Define default options in `pyproject.toml` or `merit.toml`:
+
+**pyproject.toml**:
+
+```toml
+[tool.merit]
+test-paths = ["tests", "integrations"]
+include-tags = ["smoke"]
+exclude-tags = ["slow", "flaky"]
+maxfail = 5
+verbosity = 1
+concurrency = 4
+addopts = ["--fail-fast"]
+```
+
+**merit.toml**:
+
+```toml
+test_paths = ["tests"]
+verbosity = 1
+concurrency = 4
+```
+
+**Precedence**: CLI args override config files. Config files are discovered by walking up the directory tree from the current working directory.
+
+## Understanding Test Output
+
+Merit reports test status as tests complete:
+
+```
+Collected 12 tests
+
+  ✓ merit_chatbot_greeting (45.2ms)
+  ✓ merit_chatbot_context (123.8ms)
+  ✗ merit_agent_tool_call (234.1ms)
+    AssertionError: Expected tool_name == 'get_weather', got 'search'
+  ! merit_database_query (12.3ms)
+    ValueError: Connection refused
+  - merit_upcoming_feature skipped (Feature not implemented)
+  x merit_known_bug xfailed (Bug #123)
+
+6 passed, 1 failed, 1 errors, 1 skipped, 1 xfailed in 892ms
+```
+
+**Status symbols**:
+- `✓` (green): PASSED - Test succeeded
+- `✗` (red): FAILED - Assertion failed
+- `!` (yellow): ERROR - Unexpected exception
+- `-` (yellow): SKIPPED - Test was skipped
+- `x` (blue): XFAILED - Expected failure occurred
+- `!` (magenta): XPASSED - Expected failure passed (usually bad)
+
+**Exit codes**:
+- `0`: All tests passed (or only skipped/xfailed)
+- `1`: At least one test failed or errored
+- `2`: Invalid CLI usage or configuration error
+
+### Repeated Tests
+
+For tests with `@merit.repeat()`, output shows aggregated results:
+
+```
+  ✓ merit_llm_consistency (1234.5ms) 10/10 passed (≥10 required)
+  ✗ merit_flaky_api (567.8ms) 7/10 passed (≥8 required)
+```
+
+The individual run results are stored in `result.repeat_runs` but not displayed by default.
+
+## Reporter System
+
+Merit uses an async reporter architecture for flexible output handling.
+
+### The Reporter Interface
+
+All reporters implement the `Reporter` ABC from `src/merit/reports/base.py`:
+
+```python
+class Reporter(ABC):
+    @abstractmethod
+    async def on_no_tests_found(self) -> None:
+        """Called when test collection finds no tests."""
+
+    @abstractmethod
+    async def on_collection_complete(self, items: list[TestItem]) -> None:
+        """Called after test collection completes."""
+
+    @abstractmethod
+    async def on_test_complete(self, execution: TestExecution) -> None:
+        """Called after each test completes."""
+
+    @abstractmethod
+    async def on_run_complete(self, merit_run: MeritRun) -> None:
+        """Called after all tests complete."""
+
+    @abstractmethod
+    async def on_run_stopped_early(self, failure_count: int) -> None:
+        """Called when run stops early due to maxfail limit."""
+
+    @abstractmethod
+    async def on_tracing_enabled(self, output_path: Path) -> None:
+        """Called when tracing is enabled to report output location."""
+```
+
+### Built-in Reporters
+
+**ConsoleReporter** (default): Outputs to terminal with Rich formatting.
+
+```python
+from merit.reports import ConsoleReporter
+
+reporter = ConsoleReporter(verbosity=1)
+```
+
+## Examples
+
+**Run smoke tests concurrently**:
+```bash
+merit test --tag smoke --concurrency 5
+```
+
+**Debug a specific test with tracing**:
+```bash
+merit test -k "agent_tool_call" --trace -vv
+```
+
+**Run fast tests, stop on first failure**:
+```bash
+merit test --tag fast --fail-fast
+```
+
+**CI configuration** (pyproject.toml):
+```toml
+[tool.merit]
+test-paths = ["tests"]
+exclude-tags = ["manual", "slow"]
+maxfail = 10
+concurrency = 4
+addopts = ["--fail-fast"]
+```
+
+<CardGroup cols={2}>
+  <Card title="Writing Merits" icon="code" href="/usage/writing-merits">
+    Learn how to write merit functions and use decorators
+  </Card>
+  <Card title="Merit Concept" icon="book" href="/concepts/merit">
+    Deep dive into discovery, parametrization, and execution
+  </Card>
+</CardGroup>
