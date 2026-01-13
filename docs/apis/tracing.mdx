@@ -1,0 +1,480 @@
+---
+title: "Merit Tracing APIs"
+---
+
+## Setup Function
+
+### init_tracing
+
+Initialize OpenTelemetry tracing with streaming file export.
+
+**Signature:**
+```python
+def init_tracing(
+    *,
+    service_name: str = "merit",
+    trace_content: bool | None = None,
+    output_path: Path | str = "traces.jsonl",
+) -> None
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `service_name` | `str` | `"merit"` | Service name in trace metadata |
+| `trace_content` | `bool \| None` | `None` | Whether to capture request/response content (defaults to `MERIT_TRACE_CONTENT` env var or `True`) |
+| `output_path` | `Path \| str` | `"traces.jsonl"` | File path for trace export |
+
+**Returns:** `None`
+
+**Side Effects:**
+- Sets up OpenTelemetry tracer provider
+- Instruments OpenAI and Anthropic clients
+- Creates/truncates output file
+
+**Important:** Must be called before instantiating LLM clients to ensure instrumentation captures all calls.
+
+**Example:**
+```python
+from merit import init_tracing
+
+# Basic setup
+init_tracing()
+
+# Custom configuration
+init_tracing(
+    service_name="my-ai-system",
+    trace_content=True,
+    output_path="traces/run_001.jsonl"
+)
+
+# Now create LLM clients - they'll be automatically traced
+from openai import OpenAI
+client = OpenAI()  # All calls traced
+
+from anthropic import Anthropic
+claude = Anthropic()  # All calls traced
+```
+
+**Environment Variables:**
+- `MERIT_TRACE_CONTENT`: Set to `"false"` to disable content capture (defaults to `"true"`)
+
+---
+
+## Context Manager
+
+### trace_step
+
+Create a custom span for tracing application logic.
+
+**Signature:**
+```python
+@contextmanager
+def trace_step(
+    name: str,
+    attributes: dict[str, Any] | None = None
+) -> Iterator[Span]
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `name` | `str` | - | Name of the span |
+| `attributes` | `dict[str, Any] \| None` | `None` | Optional attributes to attach to span |
+
+**Yields:** `Span` - OpenTelemetry span object
+
+**Example:**
+```python
+from merit import trace_step
+
+async def merit_agent_pipeline(agent):
+    with trace_step("retrieve_context", {"query": "user question"}):
+        context = agent.retrieve("user question")
+    
+    with trace_step("generate_response", {"context_length": len(context)}) as span:
+        response = await agent.generate(context)
+        span.set_attribute("response_length", len(response))
+    
+    assert response
+```
+
+**Nested Spans:**
+```python
+from merit import trace_step
+
+def complex_pipeline():
+    with trace_step("pipeline"):
+        with trace_step("stage_1"):
+            result_1 = process_stage_1()
+        
+        with trace_step("stage_2"):
+            result_2 = process_stage_2(result_1)
+        
+        with trace_step("stage_3"):
+            return process_stage_3(result_2)
+```
+
+---
+
+## Utility Functions
+
+### get_tracer
+
+Get an OpenTelemetry tracer instance for creating custom spans.
+
+**Signature:**
+```python
+def get_tracer(name: str = "merit") -> Tracer
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `name` | `str` | `"merit"` | Tracer name |
+
+**Returns:** `Tracer` - OpenTelemetry tracer instance
+
+**Example:**
+```python
+from merit.tracing import get_tracer
+
+tracer = get_tracer("my-component")
+
+def custom_function():
+    with tracer.start_as_current_span("custom_operation") as span:
+        span.set_attribute("custom_key", "custom_value")
+        # Your code here
+        result = do_work()
+        span.set_attribute("result_size", len(result))
+        return result
+```
+
+---
+
+### clear_traces
+
+Clear the trace output file.
+
+**Signature:**
+```python
+def clear_traces() -> None
+```
+
+**Parameters:** None
+
+**Returns:** `None`
+
+**Example:**
+```python
+from merit.tracing import clear_traces, init_tracing
+
+# Setup tracing
+init_tracing(output_path="traces.jsonl")
+
+# Run some tests...
+merit_run_1()
+
+# Clear traces before next run
+clear_traces()
+
+# Run more tests with fresh trace file
+merit_run_2()
+```
+
+---
+
+### set_trace_output_path
+
+Change the trace output path for the current exporter.
+
+**Signature:**
+```python
+def set_trace_output_path(output_path: Path | str) -> None
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `output_path` | `Path \| str` | New file path for trace export |
+
+**Returns:** `None`
+
+**Example:**
+```python
+from merit.tracing import set_trace_output_path, init_tracing
+
+# Initial setup
+init_tracing(output_path="traces.jsonl")
+
+# Change output path mid-run
+set_trace_output_path("traces/experiment_2.jsonl")
+```
+
+---
+
+## Automatic Tracing
+
+### LLM Client Instrumentation
+
+When `init_tracing()` is called, Merit automatically instruments:
+- **OpenAI** - `openai` package
+- **Anthropic** - `anthropic` package
+
+All LLM calls are captured with:
+- Request parameters (model, temperature, messages, etc.)
+- Response content (if `trace_content=True`)
+- Timing information
+- Token usage
+- Error details
+
+**Example:**
+```python
+from merit import init_tracing
+from openai import OpenAI
+
+# Enable tracing
+init_tracing()
+
+# Create client - automatically instrumented
+client = OpenAI()
+
+# This call is automatically traced
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+# Trace includes:
+# - Model name: "gpt-4"
+# - Messages: [{"role": "user", "content": "Hello"}]
+# - Response content: "Hi there!"
+# - Tokens used
+# - Latency
+```
+
+---
+
+### SUT Tracing
+
+Functions and classes decorated with `@sut` are automatically traced:
+
+```python
+from merit import sut
+
+@sut
+async def my_agent(prompt: str) -> str:
+    # This entire function execution is traced as "sut.my_agent"
+    return await llm.generate(prompt)
+
+@sut
+class RAGSystem:
+    def __call__(self, query: str) -> str:
+        # Traced as "sut.rag_system"
+        context = self.retrieve(query)
+        return self.generate(context)
+
+def merit_test(my_agent, rag_system):
+    # Both calls create spans with input/output
+    result1 = await my_agent("Hello")
+    result2 = rag_system("Question")
+```
+
+**Captured Information:**
+- Input arguments (args and kwargs)
+- Output values
+- Execution time
+- Nested LLM calls (as child spans)
+
+---
+
+## Usage Patterns
+
+### Basic Setup
+
+```python
+from merit import init_tracing, sut
+
+# Initialize tracing
+init_tracing(output_path="traces.jsonl")
+
+@sut
+async def chatbot(prompt: str) -> str:
+    from openai import OpenAI
+    client = OpenAI()
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
+
+async def merit_chatbot(chatbot):
+    response = await chatbot("Hello")
+    assert "hello" in response.lower()
+```
+
+**Trace Structure:**
+```
+merit_chatbot
+└── sut.chatbot
+    └── openai.chat.completions.create
+```
+
+---
+
+### Custom Steps
+
+```python
+from merit import init_tracing, trace_step, sut
+
+init_tracing()
+
+@sut
+class RAGPipeline:
+    def __call__(self, query: str) -> str:
+        with trace_step("retrieve", {"query": query}):
+            docs = self.retrieve(query)
+        
+        with trace_step("rerank", {"doc_count": len(docs)}):
+            top_docs = self.rerank(docs, query)
+        
+        with trace_step("generate"):
+            return self.generate(query, top_docs)
+
+def merit_rag(rag_pipeline):
+    result = rag_pipeline("What is Python?")
+    assert result
+```
+
+**Trace Structure:**
+```
+merit_rag
+└── sut.rag_pipeline
+    ├── retrieve
+    ├── rerank
+    └── generate
+        └── openai.chat.completions.create
+```
+
+---
+
+### Debugging with Traces
+
+```python
+from merit import init_tracing, trace_step
+import json
+
+# Enable tracing
+init_tracing(output_path="debug_traces.jsonl")
+
+# Run merit
+# ... merit functions execute ...
+
+# Analyze traces
+with open("debug_traces.jsonl") as f:
+    traces = [json.loads(line) for line in f]
+
+for trace in traces:
+    name = trace.get("name")
+    duration_ms = trace.get("duration_ms")
+    attributes = trace.get("attributes", {})
+    
+    print(f"{name}: {duration_ms}ms")
+    
+    if "llm.model" in attributes:
+        print(f"  Model: {attributes['llm.model']}")
+        print(f"  Tokens: {attributes.get('llm.usage.total_tokens')}")
+```
+
+---
+
+### Privacy Controls
+
+```python
+from merit import init_tracing
+import os
+
+# Disable content capture for sensitive data
+os.environ["MERIT_TRACE_CONTENT"] = "false"
+
+init_tracing()
+
+# Or set explicitly
+init_tracing(trace_content=False)
+
+# Now traces capture:
+# - Timing information
+# - Model names
+# - Token counts
+# - Parameter counts
+# But NOT:
+# - Actual messages/prompts
+# - Response content
+```
+
+---
+
+### CI/CD Integration
+
+```python
+from merit import init_tracing
+import os
+
+# Trace to different files per run
+run_id = os.environ.get("CI_RUN_ID", "local")
+init_tracing(
+    service_name=f"merit-{run_id}",
+    output_path=f"traces/run_{run_id}.jsonl"
+)
+
+# Run merit suite
+# ... 
+
+# Upload traces to analysis platform
+# upload_traces(f"traces/run_{run_id}.jsonl")
+```
+
+---
+
+## Trace File Format
+
+Traces are exported as JSONL (JSON Lines) where each line is a complete span:
+
+```json
+{
+  "name": "sut.chatbot",
+  "trace_id": "a1b2c3d4...",
+  "span_id": "e5f6g7h8...",
+  "parent_span_id": "i9j0k1l2...",
+  "start_time": "2024-01-15T10:30:00.000Z",
+  "end_time": "2024-01-15T10:30:02.000Z",
+  "duration_ms": 2000,
+  "attributes": {
+    "sut.input.args": "('Hello',)",
+    "sut.output": "Hi there! How can I help?",
+    "llm.model": "gpt-4",
+    "llm.usage.total_tokens": 25
+  }
+}
+```
+
+---
+
+## CLI Integration
+
+Merit CLI automatically enables tracing when `--trace` flag is used:
+
+```bash
+# Enable tracing
+merit run --trace
+
+# Custom output path
+merit run --trace --trace-output my_traces.jsonl
+
+# Disable content (only metadata)
+MERIT_TRACE_CONTENT=false merit run --trace
+```

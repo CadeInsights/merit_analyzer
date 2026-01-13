@@ -1,0 +1,506 @@
+---
+title: "Merit Definitions API"
+---
+
+## Decorators
+
+### @resource
+
+Register a function as a dependency injection resource.
+
+**Signature:**
+```python
+@resource(
+    fn: Callable | None = None,
+    *,
+    scope: Scope | str = Scope.CASE,
+    on_resolve: Callable[[Any], Any] | None = None,
+    on_injection: Callable[[Any], Any] | None = None,
+    on_teardown: Callable[[Any], Any] | None = None,
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `fn` | `Callable \| None` | `None` | The resource factory function |
+| `scope` | `Scope \| str` | `Scope.CASE` | Lifecycle scope: `"case"`, `"suite"`, or `"session"` |
+| `on_resolve` | `Callable \| None` | `None` | Hook called once when resource is first created |
+| `on_injection` | `Callable \| None` | `None` | Hook called every time resource is injected |
+| `on_teardown` | `Callable \| None` | `None` | Hook called after generator teardown runs |
+
+**Returns:** Decorated function registered as a resource
+
+**Example:**
+```python
+import merit
+
+@merit.resource
+def api_client():
+    return APIClient()
+
+@merit.resource(scope="session")
+async def database():
+    conn = await connect()
+    yield conn
+    await conn.close()
+
+@merit.resource(
+    scope="suite",
+    on_injection=lambda client: client.refresh_token()
+)
+def authenticated_client():
+    client = APIClient()
+    client.login()
+    yield client
+    client.logout()
+
+def merit_test(api_client, database, authenticated_client):
+    # All resources automatically injected
+    pass
+```
+
+---
+
+### @sut
+
+Register a callable or class as a traced system-under-test resource.
+
+**Signature:**
+```python
+@sut(
+    fn: Callable | type | None = None,
+    *,
+    name: str | None = None,
+    method: str = "__call__",
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `fn` | `Callable \| type \| None` | `None` | The callable or class to register as SUT |
+| `name` | `str \| None` | `None` | Optional name override (defaults to function/class name) |
+| `method` | `str` | `"__call__"` | Method name to trace for class-based SUTs |
+
+**Returns:** Traced resource automatically registered with session scope
+
+**Example:**
+```python
+import merit
+
+@merit.sut
+async def my_agent(prompt: str) -> str:
+    return await llm.generate(prompt)
+
+@merit.sut
+class RAGPipeline:
+    def __call__(self, query: str) -> str:
+        return self.generate(self.retrieve(query))
+
+@merit.sut(method="run")
+class Agent:
+    def run(self, task: str) -> str:
+        return self.execute(task)
+
+def merit_test(my_agent, rag_pipeline, agent):
+    # All SUTs automatically traced
+    result = my_agent("Hello")
+    output = rag_pipeline("Query")
+    agent.run("Task")
+```
+
+**Note:** For classes, resource names are converted from CamelCase to snake_case (e.g., `MyAgent` → `my_agent`).
+
+---
+
+### @parametrize
+
+Run a merit function with multiple parameter combinations.
+
+**Signature:**
+```python
+@parametrize(
+    argnames: str | Sequence[str],
+    argvalues: Iterable[Any],
+    *,
+    ids: Sequence[str] | None = None,
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `argnames` | `str \| Sequence[str]` | - | Parameter name(s) as string or sequence |
+| `argvalues` | `Iterable[Any]` | - | List of value tuples for each parameter combination |
+| `ids` | `Sequence[str] \| None` | `None` | Optional custom IDs for each test case |
+
+**Returns:** Decorator that applies parametrization to the target function
+
+**Example:**
+```python
+import merit
+
+@merit.parametrize("city,state", [
+    ("Boston", "Massachusetts"),
+    ("Austin", "Texas"),
+    ("Miami", "Florida"),
+])
+def merit_geography(city: str, state: str, bot):
+    result = bot.ask(f"What state is {city} in?")
+    assert state in result
+
+# Stacked parametrization (creates cartesian product)
+@merit.parametrize("model", ["gpt-4", "claude-3"])
+@merit.parametrize("temperature", [0.0, 0.7])
+def merit_combinations(model: str, temperature: float):
+    # Runs 4 times: 2 models × 2 temperatures
+    pass
+
+# Custom IDs
+@merit.parametrize("value", [1, 2, 3], ids=["one", "two", "three"])
+def merit_custom_ids(value: int):
+    assert value > 0
+```
+
+---
+
+### @repeat
+
+Run a merit function multiple times to test consistency.
+
+**Signature:**
+```python
+@repeat(
+    count: int,
+    *,
+    min_passes: int | None = None,
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `count` | `int` | - | Number of times to run the merit |
+| `min_passes` | `int \| None` | `count` | Minimum passes required (defaults to all) |
+
+**Returns:** Decorator that applies repeat configuration to the target
+
+**Example:**
+```python
+import merit
+
+@merit.repeat(10)
+def merit_consistent(llm):
+    # All 10 runs must pass
+    response = llm.generate("Say hello")
+    assert "hello" in response.lower()
+
+@merit.repeat(10, min_passes=8)
+def merit_mostly_reliable(llm):
+    # At least 8 out of 10 must pass
+    response = llm.generate("Translate 'hello' to Spanish")
+    assert "hola" in response.lower()
+```
+
+---
+
+### @tag
+
+Add tags to merit functions or classes for filtering and organization.
+
+**Signature:**
+```python
+@tag(*names: str)
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `*names` | `str` | Tag names to apply |
+
+**Returns:** Decorator that adds tags to the target
+
+**Example:**
+```python
+import merit
+
+@merit.tag("smoke", "fast")
+def merit_health_check(api):
+    assert api.health_check()
+
+@merit.tag("integration", "slow")
+def merit_end_to_end(system):
+    pass
+
+# Tag entire classes
+@merit.tag("customer-support")
+class MeritSupportBot:
+    @merit.tag("greeting")
+    def merit_hello(self, bot):
+        pass
+    
+    @merit.tag("farewell")
+    def merit_goodbye(self, bot):
+        pass
+```
+
+**CLI Usage:**
+```bash
+merit run --tag smoke    # Only smoke tests
+merit run --tag slow     # Only slow tests
+```
+
+---
+
+### @tag.skip
+
+Skip a merit function with an optional reason.
+
+**Signature:**
+```python
+@tag.skip(*, reason: str | None = None)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `reason` | `str \| None` | `None` | Optional explanation for why merit is skipped |
+
+**Returns:** Decorator that marks the target as skipped
+
+**Example:**
+```python
+import merit
+
+@merit.tag.skip(reason="Feature not implemented yet")
+def merit_upcoming_feature():
+    pass
+
+@merit.tag.skip(reason="Requires API key")
+def merit_external_api():
+    pass
+```
+
+---
+
+### @tag.xfail
+
+Mark a merit as expected to fail.
+
+**Signature:**
+```python
+@tag.xfail(
+    *,
+    reason: str | None = None,
+    strict: bool = False,
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `reason` | `str \| None` | `None` | Optional explanation for expected failure |
+| `strict` | `bool` | `False` | If `True`, passing is treated as a failure (unexpected pass) |
+
+**Returns:** Decorator that marks the target as expected to fail
+
+**Example:**
+```python
+import merit
+
+@merit.tag.xfail(reason="Known bug #123")
+def merit_known_issue():
+    # This failure won't fail the merit suite
+    assert False
+
+@merit.tag.xfail(reason="Model not accurate yet", strict=True)
+def merit_strict_xfail():
+    # If this passes, it's an error (unexpected)
+    pass
+```
+
+---
+
+## Classes
+
+### Case
+
+Container for test case inputs and reference data.
+
+**Attributes:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | `UUID` | Unique identifier (auto-generated) |
+| `tags` | `set[str]` | Tags for filtering or categorization |
+| `metadata` | `dict[str, str \| int \| float \| bool \| None]` | Arbitrary key-value pairs |
+| `references` | `RefsT \| None` | Reference data for validation (typed or dict) |
+| `sut_input_values` | `dict[str, Any]` | Input arguments to pass to the SUT |
+
+**Example:**
+```python
+from merit import Case
+import json
+
+# Create cases programmatically
+cases = [
+    Case(
+        tags={"smoke"},
+        metadata={"category": "greeting"},
+        sut_input_values={"prompt": "Hello"},
+        references={"expected": "Hi there!"}
+    ),
+    Case(
+        sut_input_values={"prompt": "Goodbye"},
+        references={"expected": "See you later!"}
+    ),
+]
+
+# Load from JSON
+with open("cases.json") as f:
+    cases = [Case(**item) for item in json.load(f)]
+
+# Typed references
+from typing import TypedDict
+
+class MyRefs(TypedDict):
+    expected_label: str
+    confidence_threshold: float
+
+case = Case[MyRefs](
+    sut_input_values={"text": "Sample input"},
+    references={"expected_label": "positive", "confidence_threshold": 0.8}
+)
+```
+
+---
+
+### Scope
+
+Enum defining resource lifecycle scopes.
+
+**Values:**
+
+| Value | Description |
+|-------|-------------|
+| `Scope.CASE` | Fresh instance per parametrized merit case |
+| `Scope.SUITE` | Shared within a single merit file/module |
+| `Scope.SESSION` | Shared across entire merit run |
+
+**Example:**
+```python
+from merit import resource
+from merit.testing.resources import Scope
+
+@resource(scope=Scope.SESSION)
+def expensive_model():
+    return load_model()  # Loaded once
+
+@resource(scope=Scope.SUITE)
+def api_client():
+    return APIClient()  # Shared within file
+
+@resource(scope=Scope.CASE)
+def temp_dir():
+    import tempfile
+    tmpdir = tempfile.mkdtemp()
+    yield tmpdir
+    shutil.rmtree(tmpdir)  # Fresh per case
+```
+
+---
+
+## Functions
+
+### iter_cases
+
+Decorator to run a merit function for each case in a sequence.
+
+**Signature:**
+```python
+def iter_cases(cases: Sequence[Case[RefsT]]) -> Callable
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `cases` | `Sequence[Case[RefsT]]` | Sequence of test cases to iterate over |
+
+**Returns:** Decorator that applies parametrization using the cases
+
+**Example:**
+```python
+from merit import Case, iter_cases
+import json
+
+# Load test cases
+with open("test_cases.json") as f:
+    cases = [Case(**item) for item in json.load(f)]
+
+@iter_cases(cases)
+def merit_from_dataset(case: Case, classifier):
+    result = classifier(**case.sut_input_values)
+    
+    if case.references:
+        expected = case.references["expected_label"]
+        assert result == expected
+```
+
+---
+
+### valididate_cases_for_sut
+
+Validate that test cases match the SUT's signature.
+
+**Signature:**
+```python
+def valididate_cases_for_sut(
+    cases: Sequence[Case[RefsT]],
+    sut: Callable[..., Any],
+    raise_on_error: bool = True,
+) -> Sequence[Case[RefsT]]
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `cases` | `Sequence[Case[RefsT]]` | - | Test cases to validate |
+| `sut` | `Callable[..., Any]` | - | System under test to validate against |
+| `raise_on_error` | `bool` | `True` | Whether to raise on validation errors |
+
+**Returns:** `Sequence[Case[RefsT]]` - Valid cases (or all cases if validation passed)
+
+**Raises:** `ValidationError` if any case's inputs don't match SUT signature (when `raise_on_error=True`)
+
+**Example:**
+```python
+from merit import Case, valididate_cases_for_sut
+
+def my_agent(prompt: str, temperature: float = 0.7) -> str:
+    return llm.generate(prompt, temperature=temperature)
+
+cases = [
+    Case(sut_input_values={"prompt": "Hello", "temperature": 0.5}),
+    Case(sut_input_values={"prompt": "Hi"}),  # temperature optional
+    Case(sut_input_values={"invalid": "param"}),  # Invalid!
+]
+
+# Validate before running
+try:
+    valid_cases = valididate_cases_for_sut(cases, my_agent)
+except ValidationError as e:
+    print(f"Invalid case: {e}")
+
+# Or filter out invalid cases
+valid_cases = valididate_cases_for_sut(cases, my_agent, raise_on_error=False)
+```
