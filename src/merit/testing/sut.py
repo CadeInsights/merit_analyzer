@@ -11,7 +11,7 @@ import re
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
 
-from merit.testing.resources import Scope, resource
+from merit.resources import Scope, resource
 from merit.tracing import get_tracer
 
 

@@ -2,8 +2,8 @@ import asyncio
 from pathlib import Path
 
 from merit.testing import Runner
+from merit.testing.decorators.tags import get_tag_data, tag
 from merit.testing.discovery import TestItem
-from merit.testing.tags import get_tag_data, tag
 
 
 def test_tag_decorator_records_metadata():

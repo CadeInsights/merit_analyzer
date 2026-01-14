@@ -61,7 +61,8 @@ class TraceContext:
         Filters child spans by known LLM instrumentation prefixes.
         """
         return [
-            s for s in self.get_child_spans()
+            s
+            for s in self.get_child_spans()
             if s.name.startswith(("openai.", "anthropic.", "gen_ai."))
         ]
 
@@ -72,8 +73,7 @@ class TraceContext:
             name: Optional SUT name to filter by (case-sensitive).
         """
         spans = [
-            s for s in self.get_child_spans()
-            if s.attributes and s.attributes.get("merit.sut")
+            s for s in self.get_child_spans() if s.attributes and s.attributes.get("merit.sut")
         ]
         if name:
             spans = [s for s in spans if s.attributes.get("merit.sut.name") == name]

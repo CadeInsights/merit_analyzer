@@ -3,9 +3,8 @@
 import json
 
 import pytest
-from opentelemetry import trace
 
-from merit.testing.resources import ResourceResolver, get_registry
+from merit.resources import ResourceResolver, get_registry
 from merit.tracing import (
     TraceContext,
     clear_traces,
@@ -131,7 +130,8 @@ class TestTraceContext:
             ctx = await resolver.resolve("trace_context")
             trace_id = ctx.trace_id
 
-            with trace_step("step_1"): pass
+            with trace_step("step_1"):
+                pass
 
             assert len(ctx.get_child_spans()) > 0
 
@@ -141,6 +141,6 @@ class TestTraceContext:
 
             # Verify spans are cleared from collector for this trace
             from merit.tracing import get_span_collector
+
             collector = get_span_collector()
             assert len(collector.get_spans(trace_id)) == 0
-

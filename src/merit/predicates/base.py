@@ -178,8 +178,12 @@ class PredicateResult(BaseModel):
         """Auto-fill the predicate_name and merit_name fields if not provided."""
         test_ctx = TEST_CONTEXT.get()
         if test_ctx is not None:
-            if test_ctx.item.id_suffix:
-                self.case_id = UUID(test_ctx.item.id_suffix)
+            suffix = test_ctx.item.id_suffix
+            if suffix:
+                try:
+                    self.case_id = UUID(suffix)
+                except ValueError:
+                    pass  # suffix is not a valid UUID, leave case_id as None
             if test_ctx.item.name:
                 self.predicate_metadata.merit_name = test_ctx.item.name
 

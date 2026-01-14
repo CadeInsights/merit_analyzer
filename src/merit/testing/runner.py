@@ -6,33 +6,30 @@ import asyncio
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from merit.context import (
+    TestContext,
     merit_run_scope,
     metric_results_collector,
 )
+from merit.metrics.base import MetricResult
 from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
 )
+from merit.reports import ConsoleReporter, Reporter
+from merit.resources import ResourceResolver, Scope, get_registry
 from merit.testing.discovery import collect
 from merit.testing.environment import capture_environment
-from merit.testing.executor import TestExecutor
+from merit.testing.execution import DefaultTestFactory, ResultBuilder, TestTracer
 from merit.testing.models import (
     MeritRun,
+    MeritTestDefinition,
     TestExecution,
-    TestItem,
     TestResult,
     TestStatus,
 )
-from merit.testing.resources import ResourceResolver, Scope, get_registry
 from merit.tracing import clear_traces, init_tracing
-
-
-if TYPE_CHECKING:
-    from merit.metrics.base import MetricResult
-    from merit.reports.base import Reporter
 
 
 class Runner:
@@ -52,8 +49,8 @@ class Runner:
         result = await runner.run(path="tests/")
 
         # Custom reporters
-        from merit.reports import ConsoleReporter, JsonReporter
-        runner = Runner(reporters=[ConsoleReporter(), JsonReporter("results.json")])
+        from merit.reports import ConsoleReporter
+        runner = Runner(reporters=[ConsoleReporter()])
         result = await runner.run(path="tests/")
     """
 
@@ -71,11 +68,10 @@ class Runner:
         enable_tracing: bool = False,
         trace_output: Path | str | None = None,
     ) -> None:
-        from merit.reports import ConsoleReporter
-
         self.reporters: list[Reporter] = (
             reporters if reporters is not None else [ConsoleReporter(verbosity=verbosity)]
         )
+
         self.maxfail = maxfail if maxfail and maxfail > 0 else None
         self.fail_fast = fail_fast
         self.verbosity = verbosity
@@ -83,12 +79,18 @@ class Runner:
         self.concurrency = concurrency if concurrency > 0 else self.DEFAULT_MAX_CONCURRENCY
         self.enable_tracing = enable_tracing
         self.trace_output = Path(trace_output) if trace_output else Path("traces.jsonl")
-        self._executor = TestExecutor(enable_tracing=enable_tracing)
+
+        self._tracer = TestTracer(enabled=enable_tracing)
+        self._result_builder = ResultBuilder()
+        self._factory = DefaultTestFactory(
+            tracer=self._tracer,
+            result_builder=self._result_builder,
+        )
 
     async def _notify_no_tests_found(self) -> None:
         await asyncio.gather(*[r.on_no_tests_found() for r in self.reporters])
 
-    async def _notify_collection_complete(self, items: list[TestItem]) -> None:
+    async def _notify_collection_complete(self, items: list[MeritTestDefinition]) -> None:
         await asyncio.gather(*[r.on_collection_complete(items) for r in self.reporters])
 
     async def _notify_test_complete(self, execution: TestExecution) -> None:
@@ -103,7 +105,9 @@ class Runner:
     async def _notify_tracing_enabled(self, output_path: Path) -> None:
         await asyncio.gather(*[r.on_tracing_enabled(output_path) for r in self.reporters])
 
-    async def run(self, items: list[TestItem] | None = None, path: str | None = None) -> MeritRun:
+    async def run(
+        self, items: list[MeritTestDefinition] | None = None, path: str | None = None
+    ) -> MeritRun:
         """Run tests and return results.
 
         Args:
@@ -162,13 +166,15 @@ class Runner:
         return merit_run
 
     async def _run_sequential(
-        self, items: list[TestItem], resolver: ResourceResolver, merit_run: MeritRun
+        self, items: list[MeritTestDefinition], resolver: ResourceResolver, merit_run: MeritRun
     ) -> None:
         """Run tests sequentially."""
         failures = 0
         for item in items:
-            ctx = self._executor.create_test_context(item)
-            result = await self._executor.run_test(item, resolver, ctx)
+            test = self._factory.build(item)
+            result = await test.execute(resolver)
+
+            ctx = TestContext(item=item)
             execution = TestExecution(context=ctx, result=result)
             await self._notify_test_complete(execution)
             await resolver.teardown_scope(Scope.CASE)
@@ -183,7 +189,7 @@ class Runner:
                     break
 
     async def _run_concurrent(
-        self, items: list[TestItem], resolver: ResourceResolver, merit_run: MeritRun
+        self, items: list[MeritTestDefinition], resolver: ResourceResolver, merit_run: MeritRun
     ) -> None:
         """Run tests concurrently with semaphore control."""
         semaphore = asyncio.Semaphore(self.concurrency)
@@ -191,7 +197,7 @@ class Runner:
         failures = 0
         stop_flag = False
 
-        async def run_one(idx: int, item: TestItem) -> tuple[int, TestExecution | None]:
+        async def run_one(idx: int, item: MeritTestDefinition) -> tuple[int, TestExecution | None]:
             nonlocal failures, stop_flag
             if stop_flag:
                 return (idx, None)
@@ -199,17 +205,17 @@ class Runner:
                 if stop_flag:
                     return (idx, None)
                 child_resolver = resolver.fork_for_case()
-                ctx = self._executor.create_test_context(item)
                 result: TestResult
                 t_start = time.perf_counter()
                 try:
+                    test = self._factory.build(item)
                     if self.timeout:
                         result = await asyncio.wait_for(
-                            self._executor.run_test(item, child_resolver, ctx),
+                            test.execute(child_resolver),
                             timeout=self.timeout,
                         )
                     else:
-                        result = await self._executor.run_test(item, child_resolver, ctx)
+                        result = await test.execute(child_resolver)
                 except TimeoutError:
                     duration = (time.perf_counter() - t_start) * 1000
                     result = TestResult(
@@ -222,6 +228,7 @@ class Runner:
                     result = TestResult(status=TestStatus.ERROR, duration_ms=duration, error=e)
                 await child_resolver.teardown_scope(Scope.CASE)
 
+                ctx = TestContext(item=item)
                 execution = TestExecution(context=ctx, result=result)
 
                 if result.status.is_failure:

@@ -1,7 +1,7 @@
-"""Resource system for dependency injection in tests.
+"""Resource system for dependency injection.
 
 Similar to pytest fixtures, resources provide injectable dependencies
-to test functions based on parameter name matching.
+based on parameter name matching.
 """
 
 import inspect
@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, ParamSpec, TypeVar
 
 from merit.context import ResolverContext, resolver_context_scope
+from merit.tracing import TraceContext, get_span_collector
 
 
 P = ParamSpec("P")
@@ -53,26 +54,7 @@ def resource(
     on_injection: Callable[[Any], Any] | None = None,
     on_teardown: Callable[[Any], Any] | None = None,
 ) -> Any:
-    """Register a function as a resource for dependency injection.
-
-    Args:
-        fn: The resource factory function.
-        scope: Lifecycle scope - "case", "suite", or "session".
-        on_resolve: Callback invoked only when the resource is first created.
-        on_injection: Callback invoked every time the resource is injected.
-        on_teardown: Callback invoked after generator teardown (post-yield code) runs.
-
-    Example:
-        @resource
-        def api_client():
-            return APIClient()
-
-        @resource(scope="suite")
-        async def db_connection():
-            conn = await connect()
-            yield conn
-            await conn.close()
-    """
+    """Register a function as a resource for dependency injection."""
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         nonlocal scope
@@ -134,13 +116,8 @@ class ResourceResolver:
         self._parent = parent
 
     def fork_for_case(self) -> "ResourceResolver":
-        """Create a child resolver for isolated CASE-scope execution.
-
-        Shares SUITE/SESSION cache with parent. SUITE/SESSION teardowns
-        are registered with the parent to ensure proper cleanup.
-        """
+        """Create a child resolver for isolated CASE-scope execution."""
         child = ResourceResolver(self._registry, parent=self)
-        # Share higher-scope cached values
         for key, value in self._cache.items():
             if key[0] in {Scope.SUITE, Scope.SESSION}:
                 child._cache[key] = value
@@ -149,14 +126,12 @@ class ResourceResolver:
     def _register_teardown(
         self, scope: Scope, name: str, gen: Generator[Any, None, None] | AsyncGenerator[Any, None]
     ) -> None:
-        """Register a teardown, delegating to parent for SUITE/SESSION scopes."""
         if scope in {Scope.SUITE, Scope.SESSION} and self._parent:
             self._parent._register_teardown(scope, name, gen)
         else:
             self._teardowns.append((scope, name, gen))
 
     async def resolve(self, name: str) -> Any:
-        """Resolve a resource by name, including its dependencies."""
         if name not in self._registry:
             msg = f"Unknown resource: {name}"
             raise ValueError(msg)
@@ -166,8 +141,6 @@ class ResourceResolver:
 
         if cache_key in self._cache:
             value = self._cache[cache_key]
-
-            # hook returns updated value on resource injection from cache
             if defn.on_injection:
                 try:
                     value = defn.on_injection(value)
@@ -180,16 +153,12 @@ class ResourceResolver:
                     ) from e
             return value
 
-        # Resolve dependencies first
         kwargs = {}
-        resolver_ctx = ResolverContext(
-            consumer_name=name,
-        )
+        resolver_ctx = ResolverContext(consumer_name=name)
         with resolver_context_scope(resolver_ctx):
             for dep in defn.dependencies:
                 kwargs[dep] = await self.resolve(dep)
 
-        # Call the factory
         if defn.is_async_generator:
             gen = defn.fn(**kwargs)
             value = await gen.__anext__()
@@ -203,7 +172,6 @@ class ResourceResolver:
         else:
             value = defn.fn(**kwargs)
 
-        # hook returns updated value on resource creation
         if defn.on_resolve:
             try:
                 value = defn.on_resolve(value)
@@ -215,11 +183,9 @@ class ResourceResolver:
                 ) from e
 
         self._cache[cache_key] = value
-        # Sync cache to parent for SUITE/SESSION scopes
         if defn.scope in {Scope.SUITE, Scope.SESSION} and self._parent:
             self._parent._cache[cache_key] = value
 
-        # hook returns updated value on resource injection
         if defn.on_injection:
             try:
                 value = defn.on_injection(value)
@@ -233,43 +199,13 @@ class ResourceResolver:
         return value
 
     async def resolve_many(self, names: list[str]) -> dict[str, Any]:
-        """Resolve multiple resources."""
         return {name: await self.resolve(name) for name in names}
 
     async def teardown(self) -> None:
-        """Run teardown for all generator-based resources (LIFO order)."""
+        teardown_errors: list[Exception] = []
+
         for s, name, gen in reversed(self._teardowns):
-            if isinstance(gen, AsyncGenerator):
-                try:
-                    await gen.__anext__()
-                except StopAsyncIteration:
-                    pass
-            else:
-                try:
-                    next(gen)
-                except StopIteration:
-                    pass
-
-            defn = self._registry.get(name)
-            if defn and defn.on_teardown:
-                cache_key = (s, name)
-                if cache_key in self._cache:
-                    try:
-                        result = defn.on_teardown(self._cache[cache_key])
-                        if inspect.iscoroutine(result):
-                            await result
-                    except Exception as e:
-                        raise RuntimeError(
-                            f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
-                        ) from e
-
-        self._teardowns.clear()
-
-    async def teardown_scope(self, scope: Scope) -> None:
-        """Run teardown for resources in a specific scope and clear cache."""
-        remaining = []
-        for s, name, gen in reversed(self._teardowns):
-            if s == scope:
+            try:
                 if isinstance(gen, AsyncGenerator):
                     try:
                         await gen.__anext__()
@@ -280,6 +216,54 @@ class ResourceResolver:
                         next(gen)
                     except StopIteration:
                         pass
+            except Exception as e:
+                teardown_errors.append(
+                    RuntimeError(f"Generator teardown failed for resource '{name}': {e}")
+                )
+
+            defn = self._registry.get(name)
+            if defn and defn.on_teardown:
+                cache_key = (s, name)
+                if cache_key in self._cache:
+                    try:
+                        result = defn.on_teardown(self._cache[cache_key])
+                        if inspect.iscoroutine(result):
+                            await result
+                    except Exception as e:
+                        teardown_errors.append(
+                            RuntimeError(
+                                f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
+                            )
+                        )
+
+        self._teardowns.clear()
+
+        if teardown_errors:
+            if len(teardown_errors) == 1:
+                raise RuntimeError(teardown_errors[0])
+            raise ExceptionGroup("Teardown errors occurred", teardown_errors)
+
+    async def teardown_scope(self, scope: Scope) -> None:
+        remaining = []
+        teardown_errors: list[Exception] = []
+
+        for s, name, gen in reversed(self._teardowns):
+            if s == scope:
+                try:
+                    if isinstance(gen, AsyncGenerator):
+                        try:
+                            await gen.__anext__()
+                        except StopAsyncIteration:
+                            pass
+                    else:
+                        try:
+                            next(gen)
+                        except StopIteration:
+                            pass
+                except Exception as e:
+                    teardown_errors.append(
+                        RuntimeError(f"Generator teardown failed for resource '{name}': {e}")
+                    )
 
                 defn = self._registry.get(name)
                 if defn and defn.on_teardown:
@@ -290,9 +274,11 @@ class ResourceResolver:
                             if inspect.iscoroutine(result):
                                 await result
                         except Exception as e:
-                            raise RuntimeError(
-                                f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
-                            ) from e
+                            teardown_errors.append(
+                                RuntimeError(
+                                    f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
+                                )
+                            )
             else:
                 remaining.append((s, name, gen))
 
@@ -302,21 +288,15 @@ class ResourceResolver:
         for key in keys_to_remove:
             del self._cache[key]
 
-
-# Built-in resources
+        if teardown_errors:
+            if len(teardown_errors) == 1:
+                raise RuntimeError(teardown_errors[0])
+            raise ExceptionGroup("Teardown errors occurred", teardown_errors)
 
 
 @resource(scope=Scope.CASE)
 def trace_context():
-    """Provide access to trace data for the current test.
-
-    Yields a TraceContext that allows querying child spans, LLM calls,
-    and setting custom attributes on the test span.
-
-    Automatically clears captured spans on teardown.
-    """
-    from merit.tracing import TraceContext, get_span_collector
-
+    """Provide access to trace data for the current test."""
     collector = get_span_collector()
     if collector is None:
         raise RuntimeError("Tracing is not enabled; cannot resolve trace_context resource.")
@@ -327,4 +307,3 @@ def trace_context():
 
 
 _builtin_registry["trace_context"] = _registry["trace_context"]
-

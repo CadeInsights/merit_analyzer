@@ -1,14 +1,23 @@
-"""Testing framework for AI agents.
+"""Testing framework for AI agents."""
 
-Provides pytest-like test discovery and resource injection.
-"""
-
-from .case import Case, iter_cases, valididate_cases_for_sut
-from .discovery import collect
-from .environment import capture_environment
-from .executor import TestExecutor
-from .models import (
+from merit.resources import ResourceResolver, Scope, resource
+from merit.testing.case import Case, iter_cases, valididate_cases_for_sut
+from merit.testing.decorators import parametrize, repeat, tag
+from merit.testing.discovery import collect
+from merit.testing.environment import capture_environment
+from merit.testing.execution import (
+    DefaultTestFactory,
+    MeritTest,
+    ParametrizedMeritTest,
+    RepeatedMeritTest,
+    ResultBuilder,
+    SingleMeritTest,
+    TestFactory,
+    TestTracer,
+)
+from merit.testing.models import (
     MeritRun,
+    MeritTestDefinition,
     Modifier,
     ParameterSet,
     ParametrizeModifier,
@@ -16,34 +25,40 @@ from .models import (
     RunEnvironment,
     RunResult,
     TestExecution,
-    TestItem,
     TestResult,
     TestStatus,
 )
-from .parametrize import parametrize
-from .repeat import repeat
-from .resources import ResourceResolver, Scope, resource
-from .runner import Runner, run
-from .tags import tag
+from merit.testing.runner import Runner, run
 
+
+# Backwards compatibility alias
+TestItem = MeritTestDefinition
 
 __all__ = [
     "Case",
+    "DefaultTestFactory",
     "MeritRun",
+    "MeritTest",
+    "MeritTestDefinition",
     "Modifier",
     "ParameterSet",
     "ParametrizeModifier",
+    "ParametrizedMeritTest",
     "RepeatModifier",
+    "RepeatedMeritTest",
     "ResourceResolver",
+    "ResultBuilder",
     "RunEnvironment",
     "RunResult",
     "Runner",
     "Scope",
+    "SingleMeritTest",
     "TestExecution",
-    "TestExecutor",
-    "TestItem",
+    "TestFactory",
+    "TestItem",  # alias
     "TestResult",
     "TestStatus",
+    "TestTracer",
     "capture_environment",
     "collect",
     "iter_cases",

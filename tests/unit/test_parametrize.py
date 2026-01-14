@@ -1,10 +1,10 @@
 import asyncio
 from pathlib import Path
 
+from merit.resources import clear_registry, resource
 from merit.testing import Runner
+from merit.testing.decorators import parametrize
 from merit.testing.models import ParameterSet, ParametrizeModifier, TestItem
-from merit.testing.parametrize import parametrize
-from merit.testing.resources import clear_registry, resource
 
 
 def test_parametrize_decorator_records_modifier():

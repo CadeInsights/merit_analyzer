@@ -14,7 +14,7 @@ from merit.reports.base import Reporter
 
 if TYPE_CHECKING:
     from merit.metrics.base import MetricResult
-    from merit.testing.discovery import TestItem
+    from merit.testing import MeritTestDefinition
     from merit.testing.models import TestResult
     from merit.testing.runner import MeritRun, TestExecution
 
@@ -31,7 +31,7 @@ class ConsoleReporter(Reporter):
     async def on_no_tests_found(self) -> None:
         self.console.print("[yellow]No tests found.[/yellow]")
 
-    async def on_collection_complete(self, items: list[TestItem]) -> None:
+    async def on_collection_complete(self, items: list[MeritTestDefinition]) -> None:
         self.console.print(f"[bold]Collected {len(items)} tests[/bold]\n")
 
     async def on_test_complete(self, execution: TestExecution) -> None:

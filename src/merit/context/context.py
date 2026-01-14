@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
     from merit.metrics.base import Metric, MetricResult, MetricSnapshot
     from merit.predicates.base import PredicateResult
-    from merit.testing.models import MeritRun, TestItem
+    from merit.testing.models import MeritRun, MeritTestDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +31,7 @@ class TestContext:
 
     __test__ = False  # Prevent pytest from collecting this as a test class
 
-    item: TestItem
+    item: MeritTestDefinition
     assertion_results: list[AssertionResult] = field(default_factory=list)
 
 

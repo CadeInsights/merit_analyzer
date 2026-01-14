@@ -11,8 +11,12 @@ from collections.abc import Callable, Sequence
 from rich.console import Console
 
 from merit.config import MeritConfig, load_config
-from merit.testing.discovery import TestItem, collect
+from merit.testing import MeritTestDefinition, collect
 from merit.testing.runner import Runner
+
+
+# Backwards compatibility alias
+TestItem = MeritTestDefinition
 
 
 def main() -> None:

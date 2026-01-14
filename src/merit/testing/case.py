@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from pydantic_core import SchemaValidator
 from typing_extensions import TypeVar
 
-from merit.testing.parametrize import parametrize
+from merit.testing.decorators import parametrize
 
 
 RefsT = TypeVar("RefsT", default=dict[str, Any])

@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from merit.context import TestContext
+from merit.resources import clear_registry, resource
 from merit.testing.environment import _filter_env_vars, capture_environment
 from merit.testing.models import (
     RunEnvironment,
@@ -17,7 +18,6 @@ from merit.testing.models import (
     TestResult,
     TestStatus,
 )
-from merit.testing.resources import clear_registry, resource
 from merit.testing.runner import Runner
 
 
@@ -280,7 +280,7 @@ class TestResourceInjection:
         result = await runner.run(items=[item])
 
         assert result.result.errors == 1
-        assert "--trace" in str(result.result.executions[0].result.error)
+        assert "Tracing is not enabled" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
     async def test_ignores_unknown_params(self):

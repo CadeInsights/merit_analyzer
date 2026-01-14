@@ -82,7 +82,7 @@ def parametrize(
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         modifiers: list = getattr(fn, "__merit_modifiers__", [])
         modifiers.append(modifier)
-        fn.__merit_modifiers__ = modifiers
+        fn.__merit_modifiers__ = modifiers  # type: ignore[attr-defined]
         return fn
 
     return decorator

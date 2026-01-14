@@ -29,7 +29,7 @@ from merit.context import (
     TEST_CONTEXT,
     assertions_collector,
 )
-from merit.testing.resources import Scope, resource
+from merit.resources import Scope, resource
 
 
 if TYPE_CHECKING:
@@ -570,7 +570,7 @@ def metric(
     """Register a metric resource and capture its final result.
 
     This decorator wraps a **generator** or **async generator** function into a
-    managed resource via `merit.testing.resources.resource`. The wrapped function
+    managed resource via `merit.resources.resource`. The wrapped function
     must:
 
     - `yield` a single `Metric` instance first (this is what gets injected and

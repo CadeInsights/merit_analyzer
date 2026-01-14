@@ -1,4 +1,4 @@
-"""Tests for merit.testing.resources module."""
+"""Tests for merit.resources module."""
 
 from pathlib import Path
 
@@ -10,14 +10,14 @@ from merit.context import (
     TestContext as Ctx,
     test_context_scope as context_scope,
 )
-from merit.testing.discovery import TestItem
-from merit.testing.resources import (
+from merit.resources import (
     ResourceResolver,
     Scope,
     clear_registry,
     get_registry,
     resource,
 )
+from merit.testing.discovery import TestItem
 
 
 def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:

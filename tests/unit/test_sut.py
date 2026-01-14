@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from merit.testing.resources import ResourceResolver, Scope, clear_registry, get_registry
+from merit.resources import ResourceResolver, Scope, clear_registry, get_registry
 from merit.testing.sut import sut
 from merit.tracing import clear_traces, set_trace_output_path
 
@@ -279,16 +279,17 @@ class TestSnakeCaseConversion:
         resolved(1)
 
         from merit.tracing.lifecycle import _exporter
+
         assert _exporter is not None
         lines = _exporter.output_path.read_text().strip().splitlines()
-        
+
         span = None
         for line in lines:
             s = json.loads(line)
             if s["name"] == "sut.my_test_function":
                 span = s
                 break
-        
+
         assert span is not None, "SUT span not found"
         attributes = span["attributes"]
         assert attributes.get("merit.sut") is True

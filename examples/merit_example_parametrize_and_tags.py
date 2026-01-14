@@ -6,8 +6,10 @@ import merit
 def simple_chatbot(prompt: str) -> str:
     return f"Hello, {prompt}!"
 
+
 def goodbye_chatbot(prompt: str) -> str:
     return f"Goodbye, {prompt}!"
+
 
 @merit.parametrize(
     "prompt,expected",
@@ -23,6 +25,7 @@ def merit_chatbot_greetings(prompt: str, expected: str) -> None:
     """This test runs three times, once per parameter set."""
     assert simple_chatbot(prompt) == expected
 
+
 @merit.repeat(count=2)
 @merit.parametrize(
     "prompt,expected",
@@ -37,6 +40,7 @@ def merit_chatbot_greetings(prompt: str, expected: str) -> None:
 def merit_chatbot_goodbyes(prompt: str, expected: str) -> None:
     """This test runs three times, once per parameter set."""
     assert goodbye_chatbot(prompt) == expected
+
 
 @merit.tag.skip(reason="Dependency still offline")
 def merit_external_dependency() -> None:

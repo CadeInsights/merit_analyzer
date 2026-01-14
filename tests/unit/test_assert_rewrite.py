@@ -11,8 +11,8 @@ from merit.context import (
     test_context_scope as context_scope_ctx,
 )
 from merit.metrics.base import Metric
+from merit.resources import ResourceResolver, clear_registry
 from merit.testing.discovery import collect
-from merit.testing.resources import ResourceResolver, clear_registry
 
 
 def test_rewritten_assert_collects_predicate_results_and_metric_values(tmp_path):

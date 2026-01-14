@@ -8,24 +8,26 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from merit.testing.loader import MeritModuleLoader
-from merit.testing.models import Modifier, TestItem
-from merit.testing.tags import TagData, get_tag_data, merge_tag_data
+from merit.testing.decorators.tags import TagData, get_tag_data, merge_tag_data
+from merit.testing.discovery.loader import MeritModuleLoader
+from merit.testing.models import MeritTestDefinition, Modifier
 
 
 def _load_module(path: Path) -> ModuleType:
     """Dynamically load a Python module from path."""
+    # Use unique module name to avoid collisions
+    module_name = f"merit_discovery.{path.stem}_{hash(path)}"
     spec = importlib.util.spec_from_file_location(
-        path.stem,
+        module_name,
         path,
-        loader=MeritModuleLoader(fullname=path.stem, path=path),
+        loader=MeritModuleLoader(fullname=module_name, path=path),
     )
     if spec is None or spec.loader is None:
         msg = f"Cannot load module from {path}"
         raise ImportError(msg)
 
     module = importlib.util.module_from_spec(spec)
-    sys.modules[path.stem] = module
+    sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -41,9 +43,9 @@ def _get_modifiers(fn: Callable[..., Any]) -> list[Modifier]:
     return getattr(fn, "__merit_modifiers__", [])
 
 
-def _collect_from_module(module: ModuleType, module_path: Path) -> list[TestItem]:
+def _collect_from_module(module: ModuleType, module_path: Path) -> list[MeritTestDefinition]:
     """Collect all merit_* tests from a module."""
-    items: list[TestItem] = []
+    items: list[MeritTestDefinition] = []
 
     for name, obj in inspect.getmembers(module):
         if name.startswith("merit_") and inspect.isfunction(obj):
@@ -72,12 +74,12 @@ def _build_item_for_callable(
     module_path: Path,
     class_name: str | None = None,
     parent_tags: TagData | None = None,
-) -> TestItem:
-    """Create a single TestItem for a callable with modifiers attached."""
+) -> MeritTestDefinition:
+    """Create a single MeritTestDefinition for a callable with modifiers attached."""
     combined_tags = merge_tag_data(parent_tags, get_tag_data(fn))
     modifiers = reversed(_get_modifiers(fn))
 
-    return TestItem(
+    return MeritTestDefinition(
         name=name,
         fn=fn,
         module_path=module_path,
@@ -92,14 +94,14 @@ def _build_item_for_callable(
     )
 
 
-def collect(path: Path | str | None = None) -> list[TestItem]:
+def collect(path: Path | str | None = None) -> list[MeritTestDefinition]:
     """Discover all merit_* tests from path.
 
     Args:
         path: File or directory to search. Defaults to current directory.
 
     Returns:
-        List of discovered TestItem objects.
+        List of discovered MeritTestDefinition objects.
 
     Example:
         items = collect()  # Current directory
@@ -112,7 +114,7 @@ def collect(path: Path | str | None = None) -> list[TestItem]:
         path = Path(path)
 
     path = path.resolve()
-    items: list[TestItem] = []
+    items: list[MeritTestDefinition] = []
 
     if path.is_file():
         if path.name.startswith("merit_") and path.suffix == ".py":

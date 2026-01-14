@@ -5,8 +5,7 @@ from .metrics import Metric, metric
 from .predicates import Predicate, PredicateMetadata, PredicateResult, predicate
 from .testing import Case, iter_cases, parametrize, repeat, resource, tag, valididate_cases_for_sut
 from .testing.sut import sut
-from .tracing import init_tracing, trace_step, TraceContext
-from .version import __version__
+from .tracing import TraceContext, init_tracing, trace_step
 
 
 __all__ = [

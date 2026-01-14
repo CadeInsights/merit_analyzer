@@ -11,16 +11,17 @@ convenience context manager `trace_step`.
 
 import os
 from collections import defaultdict
+from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Lock
-from typing import Any, Sequence
+from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider, ReadableSpan
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
 
 from merit.tracing.exporters import StreamingFileSpanExporter
@@ -139,7 +140,6 @@ def clear_traces() -> None:
         _exporter.output_path.write_text("")
     if _collector is not None:
         _collector.clear_all()
-
 
 
 @contextmanager

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from merit.testing.discovery import TestItem
+    from merit.testing import MeritTestDefinition
     from merit.testing.runner import MeritRun, TestExecution
 
 
@@ -23,7 +23,7 @@ class Reporter(ABC):
         """Called when test collection finds no tests."""
 
     @abstractmethod
-    async def on_collection_complete(self, items: list[TestItem]) -> None:
+    async def on_collection_complete(self, items: list[MeritTestDefinition]) -> None:
         """Called after test collection completes."""
 
     @abstractmethod

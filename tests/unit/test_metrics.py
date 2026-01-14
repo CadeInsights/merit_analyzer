@@ -14,8 +14,8 @@ from merit.context import (
     test_context_scope as context_scope,
 )
 from merit.metrics.base import Metric, MetricMetadata, MetricResult, metric
+from merit.resources import ResourceResolver, Scope, clear_registry
 from merit.testing.discovery import TestItem
-from merit.testing.resources import ResourceResolver, Scope, clear_registry
 
 
 def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:

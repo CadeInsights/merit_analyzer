@@ -17,8 +17,8 @@ from merit.context import (
 )
 from merit.metrics.base import Metric, metric
 from merit.predicates.base import PredicateMetadata, PredicateResult
+from merit.resources import ResourceResolver, Scope, clear_registry
 from merit.testing.discovery import TestItem
-from merit.testing.resources import ResourceResolver, Scope, clear_registry
 
 
 def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:

@@ -117,6 +117,7 @@ def merit_assert_on_trace_data(multi_step_pipeline, trace_context):
             assert span.status.status_code.name == "UNSET" or span.status.status_code.name == "OK"
             break
 
+
 # Detailed SUT span inspection
 def merit_inspect_sut_span(simple_pipeline, trace_context: merit.TraceContext):
     """Demonstrate inspecting the SUT span itself."""
@@ -125,18 +126,19 @@ def merit_inspect_sut_span(simple_pipeline, trace_context: merit.TraceContext):
 
     sut_spans = trace_context.get_sut_spans()
     assert len(sut_spans) == 1
-    
+
     span = sut_spans[0]
     assert span.name == "sut.simple_pipeline"
     assert span.attributes.get("merit.sut") is True
-    
+
     # Check automatically captured inputs/outputs
     # Note: Attribute keys might depend on configuration, but "sut.input.args" is standard
     if "sut.input.args" in span.attributes:
         assert query in span.attributes["sut.input.args"]
-    
+
     if "sut.output" in span.attributes:
         assert result in span.attributes["sut.output"]
+
 
 # Filter SUT spans by name
 def merit_filter_sut_spans(simple_pipeline, multi_step_pipeline, trace_context):
@@ -150,8 +152,8 @@ def merit_filter_sut_spans(simple_pipeline, multi_step_pipeline, trace_context):
 
     assert len(simple_spans) == 1
     assert simple_spans[0].name == "sut.simple_pipeline"
-    
+
     assert len(multi_spans) == 1
     assert multi_spans[0].name == "sut.multi_step_pipeline"
-    
+
     assert len(all_sut_spans) == 2
