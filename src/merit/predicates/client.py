@@ -6,7 +6,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import warnings
 from enum import Enum
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -79,8 +81,8 @@ class PredicateAPISettings(BaseSettings):
         Whether 5xx responses should be retried.
     """
 
-    base_url: HttpUrl = Field(validation_alias="MERIT_API_BASE_URL")
-    api_key: SecretStr = Field(validation_alias="MERIT_API_KEY")
+    base_url: HttpUrl = Field(validation_alias="MERIT_API_BASE_URL", default=HttpUrl("https://api.appmerit.com/api/v1/"))
+    api_key: SecretStr = Field(validation_alias="MERIT_API_KEY", default=SecretStr(""))
     debugging_mode: bool = Field(default=False, validation_alias="MERIT_DEBUGGING_MODE")
     connect_timeout: float = 5.0
     read_timeout: float = 30.0
@@ -101,6 +103,11 @@ class PredicateAPISettings(BaseSettings):
         env_prefix="",
     )
 
+    def model_post_init(self, __context: Any) -> None:
+        if self.api_key.get_secret_value() == "":
+            warnings.warn(
+                "MERIT_API_KEY is not set. Premium features will raise an exception if used."
+            )
 
 class PredicateAPIClient:
     """Thin wrapper around an httpx.AsyncClient."""
@@ -144,6 +151,13 @@ class PredicateAPIClient:
         """
         s = self._settings
 
+        if s.api_key.get_secret_value() == "":
+            err_msg = """
+            Merit Semantic Predicates is a premium feature and requires a Merit API key. 
+            Get an API key from appmerit.com and set it in the MERIT_API_KEY environment variable.
+            """
+            raise RuntimeError(err_msg)
+
         if s.debugging_mode:
             request.enable_reasoning = True
 
@@ -174,6 +188,14 @@ class PredicateAPIClient:
                 ) + random.uniform(0, s.retry_jitter_s)
                 await asyncio.sleep(delay_s)
                 continue
+
+            if resp.status_code in {401, 403}:
+                await resp.aread()
+                raise RuntimeError(
+                    f"""Authentication failed. 
+                    Check if your API key is correct and has the necessary permissions.
+                    (HTTP {resp.status_code} from {resp.request.url})"""
+                )
 
             resp.raise_for_status()
             final_response = PredicateAPIResponse.model_validate(resp.json())
