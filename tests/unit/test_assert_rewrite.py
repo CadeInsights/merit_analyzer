@@ -10,7 +10,7 @@ from merit.context import (
     metrics as metrics_scope_ctx,
     test_context_scope as context_scope_ctx,
 )
-from merit.metrics.base import Metric
+from merit.metrics_.base import Metric
 from merit.resources import ResourceResolver, clear_registry
 from merit.testing.discovery import collect
 
@@ -20,7 +20,7 @@ def test_rewritten_assert_collects_predicate_results_and_metric_values(tmp_path)
     mod_path = tmp_path / f"{mod_name}.py"
     mod_path.write_text(
         """
-from merit.metrics.base import Metric
+from merit.metrics_.base import Metric
 from merit.predicates.base import predicate
 
 @predicate
@@ -130,7 +130,7 @@ async def test_rewritten_asserts_inside_metric_functions_are_collected(tmp_path)
     mod_path.write_text(
         """
 import merit
-from merit.metrics.base import Metric
+from merit.metrics_.base import Metric
 
 @merit.metric
 def my_metric():

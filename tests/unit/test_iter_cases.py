@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from merit.testing.case import Case, iter_cases, valididate_cases_for_sut
+from merit.testing.case import Case, iter_cases, validate_cases_for_sut
 from merit.testing.models import ParametrizeModifier
 
 
@@ -31,8 +31,8 @@ def test_case_generic_basemodel():
     assert case.references.score == 1.0
 
 
-def test_valididate_cases_for_sut_valid():
-    """Test valididate_cases_for_sut with valid inputs."""
+def test_validate_cases_for_sut_valid():
+    """Test validate_cases_for_sut with valid inputs."""
 
     def my_sut(name: str, age: int, *args, **kwargs):
         pass
@@ -42,11 +42,11 @@ def test_valididate_cases_for_sut_valid():
         Case(sut_input_values={"name": "Bob", "age": 25}),
     ]
 
-    assert valididate_cases_for_sut(cases, my_sut) == cases
+    assert validate_cases_for_sut(cases, my_sut) == cases
 
 
-def test_valididate_cases_for_sut_invalid():
-    """Test valididate_cases_for_sut with invalid inputs."""
+def test_validate_cases_for_sut_invalid():
+    """Test validate_cases_for_sut with invalid inputs."""
 
     def my_sut(name: str, age: int):
         pass
@@ -55,7 +55,7 @@ def test_valididate_cases_for_sut_invalid():
     cases = [Case(sut_input_values={"name": "Alice", "age": "not-an-int"})]
 
     with pytest.raises(ValidationError):
-        valididate_cases_for_sut(cases, my_sut)
+        validate_cases_for_sut(cases, my_sut)
 
 
 def test_iter_cases_decorator():

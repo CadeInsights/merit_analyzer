@@ -12,7 +12,7 @@ from merit.context import (
     merit_run_scope,
     metric_results_collector,
 )
-from merit.metrics.base import MetricResult
+from merit.metrics_.base import MetricResult
 from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,

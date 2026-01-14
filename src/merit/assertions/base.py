@@ -7,7 +7,7 @@ from merit.context import ASSERTION_RESULTS_COLLECTOR, METRIC_CONTEXT, TEST_CONT
 
 
 if TYPE_CHECKING:
-    from merit.metrics.base import MetricSnapshot
+    from merit.metrics_.base import MetricSnapshot
     from merit.predicates.base import PredicateResult
 
 

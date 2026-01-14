@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
-    from merit.metrics.base import Metric, MetricResult, MetricSnapshot
+    from merit.metrics_.base import Metric, MetricResult, MetricSnapshot
     from merit.predicates.base import PredicateResult
     from merit.testing.models import MeritRun, MeritTestDefinition
 

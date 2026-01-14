@@ -1,7 +1,7 @@
 """Merit - Testing framework for AI agents."""
 
 from .context import metrics
-from .metrics import Metric, metric
+from .metrics_ import Metric, metric
 from .predicates import Predicate, PredicateMetadata, PredicateResult, predicate
 from .testing import Case, iter_cases, parametrize, repeat, resource, tag, validate_cases_for_sut
 from .testing.sut import sut
