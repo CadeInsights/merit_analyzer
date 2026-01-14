@@ -176,15 +176,14 @@ class PredicateResult(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         """Auto-fill the predicate_name and merit_name fields if not provided."""
-        import re
-
-        _UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
-
         test_ctx = TEST_CONTEXT.get()
         if test_ctx is not None:
             suffix = test_ctx.item.id_suffix
-            if suffix and _UUID_RE.fullmatch(suffix):
-                self.case_id = UUID(suffix)
+            if suffix:
+                try:
+                    self.case_id = UUID(suffix)
+                except ValueError:
+                    pass  # suffix is not a valid UUID, leave case_id as None
             if test_ctx.item.name:
                 self.predicate_metadata.merit_name = test_ctx.item.name
 

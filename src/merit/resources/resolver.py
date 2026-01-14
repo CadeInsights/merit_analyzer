@@ -203,7 +203,7 @@ class ResourceResolver:
 
     async def teardown(self) -> None:
         teardown_errors: list[Exception] = []
-        
+
         for s, name, gen in reversed(self._teardowns):
             try:
                 if isinstance(gen, AsyncGenerator):
@@ -231,21 +231,22 @@ class ResourceResolver:
                             await result
                     except Exception as e:
                         teardown_errors.append(
-                            RuntimeError(f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}")
+                            RuntimeError(
+                                f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
+                            )
                         )
 
         self._teardowns.clear()
-        
+
         if teardown_errors:
             if len(teardown_errors) == 1:
                 raise RuntimeError(teardown_errors[0])
             raise ExceptionGroup("Teardown errors occurred", teardown_errors)
-        
 
     async def teardown_scope(self, scope: Scope) -> None:
         remaining = []
         teardown_errors: list[Exception] = []
-        
+
         for s, name, gen in reversed(self._teardowns):
             if s == scope:
                 try:
@@ -260,7 +261,9 @@ class ResourceResolver:
                         except StopIteration:
                             pass
                 except Exception as e:
-                    teardown_errors.append(RuntimeError(f"Generator teardown failed for resource '{name}': {e}"))
+                    teardown_errors.append(
+                        RuntimeError(f"Generator teardown failed for resource '{name}': {e}")
+                    )
 
                 defn = self._registry.get(name)
                 if defn and defn.on_teardown:
@@ -272,7 +275,9 @@ class ResourceResolver:
                                 await result
                         except Exception as e:
                             teardown_errors.append(
-                                RuntimeError(f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}")
+                                RuntimeError(
+                                    f"Hook {defn.on_teardown.__name__} failed for resource '{name}': {e}"
+                                )
                             )
             else:
                 remaining.append((s, name, gen))
@@ -282,7 +287,7 @@ class ResourceResolver:
         keys_to_remove = [k for k in self._cache if k[0] == scope]
         for key in keys_to_remove:
             del self._cache[key]
-            
+
         if teardown_errors:
             if len(teardown_errors) == 1:
                 raise RuntimeError(teardown_errors[0])

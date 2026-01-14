@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from merit.resources import ResourceResolver
+from merit.testing.execution.interfaces import MeritTest, TestFactory
 from merit.testing.models import MeritTestDefinition, RepeatModifier, TestResult, TestStatus
 
 
-if TYPE_CHECKING:
-    from merit.testing.execution.protocol import TestFactory
-
-
 @dataclass
-class RepeatedMeritTest:
+class RepeatedMeritTest(MeritTest):
     """Executes test N times, aggregates results."""
 
     definition: MeritTestDefinition
@@ -25,7 +22,9 @@ class RepeatedMeritTest:
 
     def __post_init__(self) -> None:
         """Validate that the first modifier is RepeatModifier."""
-        if not self.definition.modifiers or not isinstance(self.definition.modifiers[0], RepeatModifier):
+        if not self.definition.modifiers or not isinstance(
+            self.definition.modifiers[0], RepeatModifier
+        ):
             raise ValueError("RepeatedMeritTest requires RepeatModifier as first modifier")
 
     async def execute(self, resolver: ResourceResolver) -> TestResult:

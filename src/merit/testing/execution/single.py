@@ -15,13 +15,14 @@ from merit.context import (
     test_context_scope,
 )
 from merit.resources import ResourceResolver
+from merit.testing.execution.interfaces import MeritTest
 from merit.testing.execution.result_builder import ResultBuilder
 from merit.testing.execution.tracer import TestTracer
 from merit.testing.models import MeritTestDefinition, TestResult, TestStatus
 
 
 @dataclass
-class SingleMeritTest:
+class SingleMeritTest(MeritTest):
     """Executes a single test directly."""
 
     definition: MeritTestDefinition
@@ -80,12 +81,12 @@ class SingleMeritTest:
 
         if self.definition.class_name:
             cls = fn.__globals__.get(self.definition.class_name)
-            
+
             if cls is None:
                 raise RuntimeError(
                     f"Test class '{self.definition.class_name}' not found for test '{self.definition.name}'"
                 )
-            
+
             instance = cls()
 
         if instance:

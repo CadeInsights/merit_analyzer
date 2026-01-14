@@ -6,12 +6,18 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from merit.resources import ResourceResolver
-from merit.testing.execution.protocol import TestFactory
-from merit.testing.models import MeritTestDefinition, ParameterSet, ParametrizeModifier, TestResult, TestStatus
+from merit.testing.execution.interfaces import MeritTest, TestFactory
+from merit.testing.models import (
+    MeritTestDefinition,
+    ParameterSet,
+    ParametrizeModifier,
+    TestResult,
+    TestStatus,
+)
 
 
 @dataclass
-class ParametrizedMeritTest:
+class ParametrizedMeritTest(MeritTest):
     """Executes test for each parameter set, aggregates results."""
 
     definition: MeritTestDefinition
@@ -21,7 +27,9 @@ class ParametrizedMeritTest:
 
     def __post_init__(self) -> None:
         """Validate that the first modifier is ParametrizeModifier."""
-        if not self.definition.modifiers or not isinstance(self.definition.modifiers[0], ParametrizeModifier):
+        if not self.definition.modifiers or not isinstance(
+            self.definition.modifiers[0], ParametrizeModifier
+        ):
             raise ValueError("ParametrizedMeritTest requires ParametrizeModifier as first modifier")
 
     async def execute(self, resolver: ResourceResolver) -> TestResult:
