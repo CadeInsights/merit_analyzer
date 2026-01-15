@@ -72,16 +72,16 @@ with open("test_cases.json") as f:
 cases: list[Case[AgentReference]] = [Case(**item) for item in raw_data]
 
 # Validate cases match your SUT's signature
-from merit.testing.case import valididate_cases_for_sut
+from merit.testing.case import validate_cases_for_sut
 
 def my_agent(prompt: str, context: str = "") -> str:
     return f"Response to {prompt}"
 
 # Only keep valid cases, discard malformed ones
-valid_cases = valididate_cases_for_sut(
+valid_cases = validate_cases_for_sut(
     cases, 
     sut=my_agent,
-    raise_on_error=False  # Skip invalid cases instead of failing
+    raise_on_invalid=False  # Skip invalid cases instead of failing
 )
 
 @merit.iter_cases(valid_cases)

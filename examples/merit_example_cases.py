@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 import merit
-from merit import Case, valididate_cases_for_sut
+from merit import Case, validate_cases_for_sut
 
 
 # =============================== Define SUT ===============================
@@ -92,7 +92,7 @@ def merit_iter_cases_only_geography(case: Case[ExampleReferences]):
 
 
 # Fail early if any case has invalid input
-@merit.iter_cases(valididate_cases_for_sut(all_cases, simple_chatbot))
+@merit.iter_cases(validate_cases_for_sut(all_cases, simple_chatbot))
 def merit_iter_cases_with_validation(case: Case[ExampleReferences]):
     response = simple_chatbot(**case.sut_input_values)
 

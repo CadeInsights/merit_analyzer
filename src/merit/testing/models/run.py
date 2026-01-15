@@ -12,7 +12,7 @@ from importlib.metadata import version
 from typing import Any
 from uuid import UUID, uuid4
 
-from merit.metrics.base import MetricResult
+from merit.metrics_.base import MetricResult
 from merit.testing.models.result import TestExecution, TestStatus
 
 

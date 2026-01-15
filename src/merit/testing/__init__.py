@@ -1,7 +1,7 @@
 """Testing framework for AI agents."""
 
 from merit.resources import ResourceResolver, Scope, resource
-from merit.testing.case import Case, iter_cases, valididate_cases_for_sut
+from merit.testing.case import Case, iter_cases, validate_cases_for_sut
 from merit.testing.decorators import parametrize, repeat, tag
 from merit.testing.discovery import collect
 from merit.testing.environment import capture_environment
@@ -67,5 +67,5 @@ __all__ = [
     "resource",
     "run",
     "tag",
-    "valididate_cases_for_sut",
+    "validate_cases_for_sut",
 ]

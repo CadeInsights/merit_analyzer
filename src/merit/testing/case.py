@@ -40,13 +40,10 @@ class Case(BaseModel, Generic[RefsT]):
     sut_input_values: dict[str, Any] = Field(default_factory=dict)
 
 
-def valididate_cases_for_sut(
-    cases: Sequence[Case[RefsT]], sut: Callable[..., Any], raise_on_error: bool = True
+def validate_cases_for_sut(
+    cases: Sequence[Case[RefsT]], sut: Callable[..., Any], raise_on_invalid: bool = True
 ) -> Sequence[Case[RefsT]]:
-    """Validate that all cases match the signature of the System Under Test.
-
-    This function uses Pydantic to inspect the SUT's signature and ensures that
-    the `sut_input_values` in each case are compatible with what the SUT expects.
+    """Return only the cases that match the signature of the System Under Test.
 
     Parameters
     ----------
@@ -54,16 +51,13 @@ def valididate_cases_for_sut(
         A collection of test cases to validate.
     sut : Callable[..., Any], optional
         The System Under Test to validate against.
+    raise_on_invalid : bool, optional
+        Whether to raise an exception if any case is invalid. Defaults to True.
 
     Returns:
     -------
-    bool
-        True if all cases are valid for the given SUT.
-
-    Raises:
-    ------
-    ValidationError
-        If any case's input values do not match the SUT's signature.
+    Sequence[Case[RefsT]]
+        The cases that match the signature of the System Under Test.
     """
     valid_cases = []
     schema = TypeAdapter(sut).core_schema
@@ -76,7 +70,7 @@ def valididate_cases_for_sut(
                 validator.validate_python(input_values)
                 valid_cases.append(case)
             except Exception as e:
-                if raise_on_error:
+                if raise_on_invalid:
                     raise e
                 continue
     return valid_cases

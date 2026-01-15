@@ -457,16 +457,16 @@ def merit_from_dataset(case: Case, classifier):
 
 ---
 
-### valididate_cases_for_sut
+### validate_cases_for_sut
 
 Validate that test cases match the SUT's signature.
 
 **Signature:**
 ```python
-def valididate_cases_for_sut(
+def validate_cases_for_sut(
     cases: Sequence[Case[RefsT]],
     sut: Callable[..., Any],
-    raise_on_error: bool = True,
+    raise_on_invalid: bool = True,
 ) -> Sequence[Case[RefsT]]
 ```
 
@@ -476,15 +476,16 @@ def valididate_cases_for_sut(
 |------|------|---------|-------------|
 | `cases` | `Sequence[Case[RefsT]]` | - | Test cases to validate |
 | `sut` | `Callable[..., Any]` | - | System under test to validate against |
-| `raise_on_error` | `bool` | `True` | Whether to raise on validation errors |
+| `raise_on_invalid` | `bool` | `True` | Whether to raise if any case is invalid |
 
 **Returns:** `Sequence[Case[RefsT]]` - Valid cases (or all cases if validation passed)
 
-**Raises:** `ValidationError` if any case's inputs don't match SUT signature (when `raise_on_error=True`)
+**Raises:** The underlying validation exception if any case's inputs don't match the SUT signature (when `raise_on_invalid=True`)
 
 **Example:**
 ```python
-from merit import Case, valididate_cases_for_sut
+from merit import Case
+from merit.testing.case import validate_cases_for_sut
 
 def my_agent(prompt: str, temperature: float = 0.7) -> str:
     return llm.generate(prompt, temperature=temperature)
@@ -497,10 +498,10 @@ cases = [
 
 # Validate before running
 try:
-    valid_cases = valididate_cases_for_sut(cases, my_agent)
-except ValidationError as e:
+    valid_cases = validate_cases_for_sut(cases, my_agent)
+except Exception as e:
     print(f"Invalid case: {e}")
 
 # Or filter out invalid cases
-valid_cases = valididate_cases_for_sut(cases, my_agent, raise_on_error=False)
+valid_cases = validate_cases_for_sut(cases, my_agent, raise_on_invalid=False)
 ```

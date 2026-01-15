@@ -1,9 +1,9 @@
 """Merit - Testing framework for AI agents."""
 
 from .context import metrics
-from .metrics import Metric, metric
+from .metrics_ import Metric, metric
 from .predicates import Predicate, PredicateMetadata, PredicateResult, predicate
-from .testing import Case, iter_cases, parametrize, repeat, resource, tag, valididate_cases_for_sut
+from .testing import Case, iter_cases, parametrize, repeat, resource, tag, validate_cases_for_sut
 from .testing.sut import sut
 from .tracing import TraceContext, init_tracing, trace_step
 
@@ -12,7 +12,7 @@ __all__ = [
     # Core testing
     "Case",
     "iter_cases",
-    "valididate_cases_for_sut",
+    "validate_cases_for_sut",
     "parametrize",
     "repeat",
     "tag",

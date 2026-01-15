@@ -13,7 +13,7 @@ from merit.context import (
     resolver_context_scope,
     test_context_scope as context_scope,
 )
-from merit.metrics.base import Metric, MetricMetadata, MetricResult, metric
+from merit.metrics_.base import Metric, MetricMetadata, MetricResult, metric
 from merit.resources import ResourceResolver, Scope, clear_registry
 from merit.testing.discovery import TestItem
 

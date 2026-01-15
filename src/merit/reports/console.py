@@ -13,12 +13,12 @@ from merit.reports.base import Reporter
 
 
 if TYPE_CHECKING:
-    from merit.metrics.base import MetricResult
+    from merit.metrics_.base import MetricResult
     from merit.testing import MeritTestDefinition
     from merit.testing.models import TestResult
     from merit.testing.runner import MeritRun, TestExecution
 
-from merit.metrics.base import Scope
+from merit.resources import Scope
 
 
 class ConsoleReporter(Reporter):
