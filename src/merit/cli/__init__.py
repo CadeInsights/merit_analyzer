@@ -76,6 +76,12 @@ def _build_parser() -> argparse.ArgumentParser:
     test_parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase CLI output"
     )
+    test_parser.add_argument(
+        "-s",
+        "--show-output",
+        action="store_true",
+        help="Show stdout/stderr live (still captured)",
+    )
 
     return parser
 
@@ -168,6 +174,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         enable_tracing=args.trace,
         trace_output=args.trace_output,
         fail_fast=args.fail_fast,
+        capture_output=not args.show_output,
     )
     merit_run = await runner.run(items=items)
 

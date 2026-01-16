@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,7 +26,8 @@ class ConsoleReporter(Reporter):
     """Reporter that outputs test results to the console using Rich formatting."""
 
     def __init__(self, console: Console | None = None, verbosity: int = 0) -> None:
-        self.console = console or Console()
+        # Use sys.__stdout__ to bypass any stdout capture
+        self.console = console or Console(file=sys.__stdout__)
         self.verbosity = verbosity
 
     async def on_no_tests_found(self) -> None:

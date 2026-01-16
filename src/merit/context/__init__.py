@@ -20,6 +20,12 @@ from .context import (
     resolver_context_scope,
     test_context_scope,
 )
+from .output_capture import (
+    OutputBuffer,
+    SysOutputCapture,
+    get_current_capture,
+    sys_output_capture,
+)
 
 
 __all__ = [
@@ -31,9 +37,12 @@ __all__ = [
     "PREDICATE_RESULTS_COLLECTOR",
     "RESOLVER_CONTEXT",
     "TEST_CONTEXT",
+    "OutputBuffer",
     "ResolverContext",
+    "SysOutputCapture",
     "TestContext",
     "assertions_collector",
+    "get_current_capture",
     "get_merit_run",
     "get_test_context",
     "merit_run_scope",
@@ -42,5 +51,6 @@ __all__ = [
     "metrics",
     "predicate_results_collector",
     "resolver_context_scope",
+    "sys_output_capture",
     "test_context_scope",
 ]

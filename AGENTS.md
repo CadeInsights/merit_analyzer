@@ -3,6 +3,7 @@
 - Helpers are not acceptiable without user's permission.
 - Follow OOP and DRY.
 - Keep code short. Smaller is better.
+- No method-level imports. All imports should be at the top of the file.
 
 # Tools
 - use 'uv' instead of 'pip' for package management
