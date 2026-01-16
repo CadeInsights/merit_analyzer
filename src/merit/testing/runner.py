@@ -12,6 +12,7 @@ from merit.context import (
     merit_run_scope,
     metric_results_collector,
 )
+from merit.context.output_capture import sys_output_capture
 from merit.metrics_.base import MetricResult
 from merit.predicates import (
     close_predicate_api_client,
@@ -67,6 +68,7 @@ class Runner:
         timeout: float | None = None,
         enable_tracing: bool = False,
         trace_output: Path | str | None = None,
+        capture_output: bool = True,
     ) -> None:
         self.reporters: list[Reporter] = (
             reporters if reporters is not None else [ConsoleReporter(verbosity=verbosity)]
@@ -79,6 +81,7 @@ class Runner:
         self.concurrency = concurrency if concurrency > 0 else self.DEFAULT_MAX_CONCURRENCY
         self.enable_tracing = enable_tracing
         self.trace_output = Path(trace_output) if trace_output else Path("traces.jsonl")
+        self.capture_output = capture_output
 
         self._tracer = TestTracer(enabled=enable_tracing)
         self._result_builder = ResultBuilder()
@@ -144,7 +147,11 @@ class Runner:
         metric_results: list[MetricResult] = []
 
         start = time.perf_counter()
-        with merit_run_scope(merit_run), metric_results_collector(metric_results):
+        with (
+            sys_output_capture(swallow=self.capture_output),
+            merit_run_scope(merit_run),
+            metric_results_collector(metric_results),
+        ):
             if self.concurrency == 1:
                 await self._run_sequential(items, resolver, merit_run)
             else:

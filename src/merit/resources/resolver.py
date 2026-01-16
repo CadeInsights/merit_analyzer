@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, ParamSpec, TypeVar
 
 from merit.context import ResolverContext, resolver_context_scope
+from merit.context.output_capture import OutputBuffer, get_current_capture
 from merit.tracing import TraceContext, get_span_collector
 
 
@@ -295,7 +296,7 @@ class ResourceResolver:
 
 
 @resource(scope=Scope.CASE)
-def trace_context():
+def trace_context() -> Generator[TraceContext, None, None]:
     """Provide access to trace data for the current test."""
     collector = get_span_collector()
     if collector is None:
@@ -307,3 +308,23 @@ def trace_context():
 
 
 _builtin_registry["trace_context"] = _registry["trace_context"]
+
+
+@resource(scope=Scope.CASE)
+def captured_output() -> Generator[OutputBuffer, None, None]:
+    """Provide access to captured stdout/stderr for the current test.
+
+    Usage:
+        def merit_my_test(captured_output):
+            print("hello")
+            out, err = captured_output.readouterr()
+            assert out == "hello\\n"
+    """
+    capture = get_current_capture()
+    if capture is None:
+        raise RuntimeError("Output capture not enabled")
+    with capture.capture() as buf:
+        yield buf
+
+
+_builtin_registry["captured_output"] = _registry["captured_output"]
