@@ -3,7 +3,18 @@
 from .context import metrics
 from .metrics_ import Metric, metric
 from .predicates import Predicate, PredicateMetadata, PredicateResult, predicate
-from .testing import Case, iter_cases, parametrize, repeat, resource, tag, validate_cases_for_sut
+from .testing import (
+    Case,
+    fail,
+    iter_cases,
+    parametrize,
+    repeat,
+    resource,
+    skip,
+    tag,
+    validate_cases_for_sut,
+    xfail,
+)
 from .testing.sut import sut
 from .tracing import TraceContext, init_tracing, trace_step
 
@@ -17,6 +28,9 @@ __all__ = [
     "repeat",
     "tag",
     "resource",
+    "skip",
+    "fail",
+    "xfail",
     "sut",
     # Predicates
     "predicate",

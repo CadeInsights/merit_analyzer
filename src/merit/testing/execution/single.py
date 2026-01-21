@@ -21,6 +21,7 @@ from merit.testing.execution.interfaces import MeritTest
 from merit.testing.execution.result_builder import ResultBuilder
 from merit.testing.execution.tracer import TestTracer
 from merit.testing.models import MeritTestDefinition, TestResult, TestStatus
+from merit.testing.outcomes import FailTest, SkipTest, XFailTest
 
 
 logger = logging.getLogger(__name__)
@@ -58,11 +59,21 @@ class SingleMeritTest(MeritTest):
 
         with self.tracer.span(self.definition) as span:
             start = time.perf_counter()
+            imperative_outcome: TestStatus | None = None
 
             with test_context_scope(ctx), assertions_collector(assertion_results):
                 try:
                     kwargs = await self._resolve_params(forked_resolver)
                     await self._invoke(kwargs)
+                except SkipTest as e:
+                    imperative_outcome = TestStatus.SKIPPED
+                    error = Exception(e.reason) if e.reason else None
+                except FailTest as e:
+                    imperative_outcome = TestStatus.FAILED
+                    error = AssertionError(e.reason) if e.reason else AssertionError()
+                except XFailTest as e:
+                    imperative_outcome = TestStatus.XFAILED
+                    error = Exception(e.reason) if e.reason else None
                 except Exception as e:  # noqa: BLE001
                     error = e
                 finally:
@@ -76,9 +87,18 @@ class SingleMeritTest(MeritTest):
                             error = teardown_err
 
             duration_ms = (time.perf_counter() - start) * 1000
-            result = self.result_builder.build(
-                self.definition, duration_ms, assertion_results, error
-            )
+
+            if imperative_outcome is not None:
+                result = TestResult(
+                    status=imperative_outcome,
+                    duration_ms=duration_ms,
+                    error=error,
+                    assertion_results=assertion_results,
+                )
+            else:
+                result = self.result_builder.build(
+                    self.definition, duration_ms, assertion_results, error
+                )
             result.trace_id = self.tracer.get_trace_id(span)
             self.tracer.record(span, result)
             return result

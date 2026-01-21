@@ -28,6 +28,7 @@ from merit.testing.models import (
     TestResult,
     TestStatus,
 )
+from merit.testing.outcomes import FailTest, SkipTest, XFailTest, fail, skip, xfail
 from merit.testing.runner import Runner, run
 
 
@@ -37,6 +38,7 @@ TestItem = MeritTestDefinition
 __all__ = [
     "Case",
     "DefaultTestFactory",
+    "FailTest",
     "MeritRun",
     "MeritTest",
     "MeritTestDefinition",
@@ -53,19 +55,24 @@ __all__ = [
     "Runner",
     "Scope",
     "SingleMeritTest",
+    "SkipTest",
     "TestExecution",
     "TestFactory",
     "TestItem",  # alias
     "TestResult",
     "TestStatus",
     "TestTracer",
+    "XFailTest",
     "capture_environment",
     "collect",
+    "fail",
     "iter_cases",
     "parametrize",
     "repeat",
     "resource",
     "run",
+    "skip",
     "tag",
     "validate_cases_for_sut",
+    "xfail",
 ]
