@@ -84,14 +84,14 @@
   "navbar": {
     "links": [
       {
+        "label": "GitHub",
+        "href": "https://github.com/appMerit/merit"
+      },
+      {
         "label": "Support",
         "href": "mailto:support@appmerit.com"
       }
-    ],
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/appMerit/merit"
-    }
+    ]
   },
   "contextual": {
     "options": [
