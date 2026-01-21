@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+from uuid import UUID, uuid4
 
 from merit.assertions.base import AssertionResult
 
@@ -39,6 +40,7 @@ class TestResult:
     assertion_results: list[AssertionResult] = field(default_factory=list)
     sub_runs: list[TestResult] | None = None
     id_suffix: str | None = None
+    trace_id: str | None = None
 
 
 @dataclass
@@ -53,6 +55,7 @@ class TestExecution:
 
     context: Any  # TestContext - avoid circular import
     result: TestResult
+    execution_id: UUID = field(default_factory=uuid4)
 
     @property
     def item(self) -> Any:  # MeritTestDefinition

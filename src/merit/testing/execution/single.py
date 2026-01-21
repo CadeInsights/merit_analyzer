@@ -79,6 +79,7 @@ class SingleMeritTest(MeritTest):
             result = self.result_builder.build(
                 self.definition, duration_ms, assertion_results, error
             )
+            result.trace_id = self.tracer.get_trace_id(span)
             self.tracer.record(span, result)
             return result
 
