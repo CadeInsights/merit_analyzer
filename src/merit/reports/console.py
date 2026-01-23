@@ -16,8 +16,8 @@ from merit.reports.base import Reporter
 if TYPE_CHECKING:
     from merit.metrics_.base import MetricResult
     from merit.testing import MeritTestDefinition
-    from merit.testing.models import TestResult
-    from merit.testing.runner import MeritRun, TestExecution
+    from merit.testing.models.result import TestExecution
+    from merit.testing.models.run import MeritRun
 
 from merit.resources import Scope
 
@@ -46,9 +46,11 @@ class ConsoleReporter(Reporter):
             return
 
         # Handle tests with sub-results (repeat/parametrize)
-        if result.sub_runs:
-            passed_count = sum(1 for r in result.sub_runs if r.status == TestStatus.PASSED)
-            total_count = len(result.sub_runs)
+        if execution.sub_executions:
+            passed_count = sum(
+                1 for e in execution.sub_executions if e.result.status == TestStatus.PASSED
+            )
+            total_count = len(execution.sub_executions)
 
             if result.status == TestStatus.PASSED:
                 self.console.print(
@@ -61,7 +63,7 @@ class ConsoleReporter(Reporter):
                     f"[red]{passed_count}/{total_count} passed[/red]"
                 )
 
-            self._print_sub_runs(result.sub_runs, indent=4)
+            self._print_sub_executions(execution.sub_executions, indent=4)
             return
 
         if result.status == TestStatus.PASSED:
@@ -93,35 +95,35 @@ class ConsoleReporter(Reporter):
         elif result.status == TestStatus.XPASSED:
             self.console.print(f"  [magenta]![/magenta] {item.full_name} [dim]XPASS[/dim]")
 
-    def _print_sub_runs(self, sub_runs: list[TestResult], indent: int) -> None:
-        """Print sub-runs with their id_suffix, recursively handling nested sub-runs."""
+    def _print_sub_executions(self, sub_executions: list[TestExecution], indent: int) -> None:
+        """Print sub-executions with their id_suffix, recursively handling nested sub-executions."""
         from merit.testing.models import TestStatus
 
         prefix = " " * indent
-        for sub in sub_runs:
-            suffix = f"\\[{escape(sub.id_suffix)}]" if sub.id_suffix else ""
+        for sub in sub_executions:
+            suffix = f"\\[{escape(sub.definition.id_suffix)}]" if sub.definition.id_suffix else ""
 
-            if sub.status == TestStatus.PASSED:
+            if sub.result.status == TestStatus.PASSED:
                 self.console.print(
-                    f"{prefix}[green]✓[/green] {suffix} [dim]({sub.duration_ms:.1f}ms)[/dim]"
+                    f"{prefix}[green]✓[/green] {suffix} [dim]({sub.result.duration_ms:.1f}ms)[/dim]"
                 )
-            elif sub.status == TestStatus.FAILED:
+            elif sub.result.status == TestStatus.FAILED:
                 self.console.print(
-                    f"{prefix}[red]✗[/red] {suffix} [dim]({sub.duration_ms:.1f}ms)[/dim]"
+                    f"{prefix}[red]✗[/red] {suffix} [dim]({sub.result.duration_ms:.1f}ms)[/dim]"
                 )
-                if sub.error:
-                    self.console.print(f"{prefix}  [red]{escape(str(sub.error))}[/red]")
-            elif sub.status == TestStatus.ERROR:
+                if sub.result.error:
+                    self.console.print(f"{prefix}  [red]{escape(str(sub.result.error))}[/red]")
+            elif sub.result.status == TestStatus.ERROR:
                 self.console.print(
-                    f"{prefix}[yellow]![/yellow] {suffix} [dim]({sub.duration_ms:.1f}ms)[/dim]"
+                    f"{prefix}[yellow]![/yellow] {suffix} [dim]({sub.result.duration_ms:.1f}ms)[/dim]"
                 )
-                if sub.error:
+                if sub.result.error:
                     self.console.print(
-                        f"{prefix}  [yellow]{type(sub.error).__name__}: {escape(str(sub.error))}[/yellow]"
+                        f"{prefix}  [yellow]{type(sub.result.error).__name__}: {escape(str(sub.result.error))}[/yellow]"
                     )
 
-            if sub.sub_runs:
-                self._print_sub_runs(sub.sub_runs, indent + 2)
+            if sub.sub_executions:
+                self._print_sub_executions(sub.sub_executions, indent + 2)
 
     async def on_run_complete(self, merit_run: MeritRun) -> None:
         self.console.print()

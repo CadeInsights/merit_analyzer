@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-from merit.context import TestContext
 from merit.resources import clear_registry, resource
 from merit.testing.environment import _filter_env_vars, capture_environment
 from merit.testing.models import (
@@ -64,15 +63,15 @@ class TestRunResult:
         items = [make_item(lambda: None) for _ in range(3)]
         result.executions = [
             TestExecution(
-                context=TestContext(item=items[0]),
+                definition=items[0],
                 result=TestResult(status=TestStatus.PASSED, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[1]),
+                definition=items[1],
                 result=TestResult(status=TestStatus.PASSED, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[2]),
+                definition=items[2],
                 result=TestResult(status=TestStatus.FAILED, duration_ms=1),
             ),
         ]
@@ -85,27 +84,27 @@ class TestRunResult:
         items = [make_item(lambda: None) for _ in range(6)]
         result.executions = [
             TestExecution(
-                context=TestContext(item=items[0]),
+                definition=items[0],
                 result=TestResult(status=TestStatus.PASSED, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[1]),
+                definition=items[1],
                 result=TestResult(status=TestStatus.FAILED, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[2]),
+                definition=items[2],
                 result=TestResult(status=TestStatus.ERROR, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[3]),
+                definition=items[3],
                 result=TestResult(status=TestStatus.SKIPPED, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[4]),
+                definition=items[4],
                 result=TestResult(status=TestStatus.XFAILED, duration_ms=1),
             ),
             TestExecution(
-                context=TestContext(item=items[5]),
+                definition=items[5],
                 result=TestResult(status=TestStatus.XPASSED, duration_ms=1),
             ),
         ]

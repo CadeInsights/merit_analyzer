@@ -69,9 +69,9 @@ def test_runner_applies_parameter_values():
     finally:
         clear_registry()
 
-    # The result should have sub_runs for parametrize
-    assert run_result.result.executions[0].result.sub_runs is not None
-    assert len(run_result.result.executions[0].result.sub_runs) == 1
+    # The result should have sub_executions for parametrize
+    assert run_result.result.executions[0].sub_executions is not None
+    assert len(run_result.result.executions[0].sub_executions) == 1
     assert recorded["param_a"] == "from_param"
     assert recorded["resource_b"] == "from_resource"
     assert run_result.result.passed == 1
@@ -106,5 +106,5 @@ def test_runner_runs_all_parameter_sets():
 
     assert results == [1, 2, 3]
     assert run_result.result.passed == 1
-    assert run_result.result.executions[0].result.sub_runs is not None
-    assert len(run_result.result.executions[0].result.sub_runs) == 3
+    assert run_result.result.executions[0].sub_executions is not None
+    assert len(run_result.result.executions[0].sub_executions) == 3

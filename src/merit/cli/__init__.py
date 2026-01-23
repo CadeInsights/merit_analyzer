@@ -82,6 +82,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show stdout/stderr live (still captured)",
     )
+    test_parser.add_argument(
+        "--db-path",
+        type=str,
+        help="Path to the Merit SQLite database",
+    )
+    test_parser.add_argument(
+        "--no-db",
+        action="store_true",
+        help="Disable writing run data to SQLite",
+    )
 
     return parser
 
@@ -159,6 +169,10 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
     maxfail = _resolve_maxfail(args, config)
     verbosity = _resolve_verbosity(args, config)
     concurrency = _resolve_concurrency(args, config)
+    db_path = args.db_path or config.db_path
+    save_to_db = config.save_to_db
+    if args.no_db:
+        save_to_db = False
 
     items = _collect_items(paths)
     try:
@@ -175,6 +189,8 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         trace_output=args.trace_output,
         fail_fast=args.fail_fast,
         capture_output=not args.show_output,
+        save_to_db=save_to_db,
+        db_path=db_path,
     )
     merit_run = await runner.run(items=items)
 

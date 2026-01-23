@@ -62,9 +62,12 @@ def test_runner_handles_repeat_all_pass():
 
     assert run_result.result.passed == 1
     assert call_count == 5
-    assert run_result.result.executions[0].result.sub_runs is not None
-    assert len(run_result.result.executions[0].result.sub_runs) == 5
-    assert all(r.status.value == "passed" for r in run_result.result.executions[0].result.sub_runs)
+    assert run_result.result.executions[0].sub_executions is not None
+    assert len(run_result.result.executions[0].sub_executions) == 5
+    assert all(
+        sub.result.status.value == "passed"
+        for sub in run_result.result.executions[0].sub_executions
+    )
 
 
 def test_runner_handles_repeat_partial_pass():
@@ -93,10 +96,12 @@ def test_runner_handles_repeat_partial_pass():
 
     assert run_result.result.passed == 1
     assert call_count == 5
-    assert run_result.result.executions[0].result.sub_runs is not None
-    assert len(run_result.result.executions[0].result.sub_runs) == 5
+    assert run_result.result.executions[0].sub_executions is not None
+    assert len(run_result.result.executions[0].sub_executions) == 5
     passed = sum(
-        1 for r in run_result.result.executions[0].result.sub_runs if r.status.value == "passed"
+        1
+        for sub in run_result.result.executions[0].sub_executions
+        if sub.result.status.value == "passed"
     )
     assert passed == 3
 
@@ -127,9 +132,11 @@ def test_runner_handles_repeat_insufficient_passes():
 
     assert run_result.result.failed == 1
     assert call_count == 5
-    assert run_result.result.executions[0].result.sub_runs is not None
-    assert len(run_result.result.executions[0].result.sub_runs) == 5
+    assert run_result.result.executions[0].sub_executions is not None
+    assert len(run_result.result.executions[0].sub_executions) == 5
     passed = sum(
-        1 for r in run_result.result.executions[0].result.sub_runs if r.status.value == "passed"
+        1
+        for sub in run_result.result.executions[0].sub_executions
+        if sub.result.status.value == "passed"
     )
     assert passed == 2

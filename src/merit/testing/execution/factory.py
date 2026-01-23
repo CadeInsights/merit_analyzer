@@ -54,5 +54,5 @@ class DefaultTestFactory(TestFactory):
                     parameter_sets=mod.parameter_sets,
                     factory=self,
                 )
-            case [mod, *_]:
-                raise NotImplementedError(f"Unknown modifier: {type(mod).__name__}")
+            case _:
+                raise NotImplementedError(f"Unknown modifier(s): {definition.modifiers}")

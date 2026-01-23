@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import Any
+from uuid import uuid4
 
 from merit.resources import ResourceResolver
 from merit.testing.execution.interfaces import MeritTest, TestFactory
-from merit.testing.models import MeritTestDefinition, RepeatModifier, TestResult, TestStatus
+from merit.testing.models import (
+    MeritTestDefinition,
+    RepeatModifier,
+    TestExecution,
+    TestResult,
+    TestStatus,
+)
 
 
 @dataclass
@@ -27,9 +34,9 @@ class RepeatedMeritTest(MeritTest):
         ):
             raise ValueError("RepeatedMeritTest requires RepeatModifier as first modifier")
 
-    async def execute(self, resolver: ResourceResolver) -> TestResult:
+    async def execute(self, resolver: ResourceResolver) -> TestExecution:
         """Execute test count times and aggregate results."""
-        sub_runs: list[TestResult] = []
+        sub_executions: list[TestExecution] = []
 
         for i in range(self.count):
             suffix = f"repeat={i}"
@@ -39,12 +46,16 @@ class RepeatedMeritTest(MeritTest):
                 id_suffix=suffix,
             )
             child = self.factory.build(child_def, self.params)
-            result = await child.execute(resolver)
-            result.id_suffix = suffix
-            sub_runs.append(result)
+            child_execution = await child.execute(resolver)
+            sub_executions.append(child_execution)
 
-        passed = sum(1 for r in sub_runs if r.status == TestStatus.PASSED)
+        passed = sum(1 for e in sub_executions if e.result.status == TestStatus.PASSED)
         status = TestStatus.PASSED if passed >= self.min_passes else TestStatus.FAILED
-        duration = sum(r.duration_ms for r in sub_runs)
+        duration = sum(e.result.duration_ms for e in sub_executions)
 
-        return TestResult(status=status, duration_ms=duration, sub_runs=sub_runs)
+        return TestExecution(
+            definition=self.definition,
+            result=TestResult(status=status, duration_ms=duration),
+            execution_id=uuid4(),
+            sub_executions=sub_executions,
+        )

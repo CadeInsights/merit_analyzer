@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,8 @@ class MeritConfig:
     verbosity: int
     addopts: list[str]
     concurrency: int  # 1=sequential, 0=unlimited, max default=10
+    db_path: str | None
+    save_to_db: bool
 
 
 DEFAULT_CONFIG = MeritConfig(
@@ -31,6 +34,8 @@ DEFAULT_CONFIG = MeritConfig(
     verbosity=0,
     addopts=[],
     concurrency=1,
+    db_path=None,
+    save_to_db=True,
 )
 
 
@@ -46,6 +51,8 @@ def load_config(start_path: str | Path | None = None) -> MeritConfig:
         verbosity=DEFAULT_CONFIG.verbosity,
         addopts=list(DEFAULT_CONFIG.addopts),
         concurrency=DEFAULT_CONFIG.concurrency,
+        db_path=DEFAULT_CONFIG.db_path,
+        save_to_db=DEFAULT_CONFIG.save_to_db,
     )
 
     pyproject = _find_file(base, "pyproject.toml")
@@ -59,6 +66,14 @@ def load_config(start_path: str | Path | None = None) -> MeritConfig:
     if merit_toml:
         data = _load_toml(merit_toml)
         _apply_section(config, data)
+
+    env_db_path = os.getenv("MERIT_DB_PATH")
+    if env_db_path:
+        config.db_path = env_db_path
+
+    env_db_enabled = os.getenv("MERIT_DB_ENABLED")
+    if env_db_enabled is not None:
+        config.save_to_db = env_db_enabled.strip().lower() not in {"0", "false", "no", "off"}
 
     if not config.test_paths:
         config.test_paths = list(DEFAULT_CONFIG.test_paths)
@@ -97,6 +112,10 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         "verbosity": "verbosity",
         "addopts": "addopts",
         "concurrency": "concurrency",
+        "db-path": "db_path",
+        "db_path": "db_path",
+        "save-to-db": "save_to_db",
+        "save_to_db": "save_to_db",
     }
 
     for key, value in section.items():
@@ -118,6 +137,12 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         elif attr == "concurrency":
             if isinstance(value, int) and value >= 0:
                 config.concurrency = value
+        elif attr == "db_path":
+            if isinstance(value, str):
+                config.db_path = value
+        elif attr == "save_to_db":
+            if isinstance(value, bool):
+                config.save_to_db = value
 
 
 __all__ = ["DEFAULT_CONFIG", "MeritConfig", "load_config"]

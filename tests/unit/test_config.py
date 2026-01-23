@@ -23,6 +23,8 @@ test-paths = ["examples"]
 include-tags = ["smoke"]
 exclude-tags = ["slow"]
 keyword = "chatbot"
+db-path = ".merit/custom.db"
+save-to-db = false
 """.strip()
     )
 
@@ -35,6 +37,8 @@ keyword = "chatbot"
     assert config.maxfail == 1
     assert config.verbosity == 1
     assert config.addopts == ["-q"]
+    assert config.db_path == ".merit/custom.db"
+    assert config.save_to_db is False
 
 
 def test_load_config_defaults_when_missing(tmp_path: Path):
@@ -47,3 +51,5 @@ def test_load_config_defaults_when_missing(tmp_path: Path):
     assert config.maxfail is None
     assert config.verbosity == 0
     assert config.addopts == []
+    assert config.db_path is None
+    assert config.save_to_db is True

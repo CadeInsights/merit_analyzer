@@ -6,9 +6,9 @@ import asyncio
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from merit.context import (
-    TestContext,
     merit_run_scope,
     metric_results_collector,
 )
@@ -20,6 +20,7 @@ from merit.predicates import (
 )
 from merit.reports import ConsoleReporter, Reporter
 from merit.resources import ResourceResolver, Scope, get_registry
+from merit.storage import SQLiteStore
 from merit.testing.discovery import collect
 from merit.testing.environment import capture_environment
 from merit.testing.execution import DefaultTestFactory, ResultBuilder, TestTracer
@@ -69,6 +70,8 @@ class Runner:
         enable_tracing: bool = False,
         trace_output: Path | str | None = None,
         capture_output: bool = True,
+        save_to_db: bool = True,
+        db_path: Path | str | None = None,
     ) -> None:
         self.reporters: list[Reporter] = (
             reporters if reporters is not None else [ConsoleReporter(verbosity=verbosity)]
@@ -82,6 +85,8 @@ class Runner:
         self.enable_tracing = enable_tracing
         self.trace_output = Path(trace_output) if trace_output else Path("traces.jsonl")
         self.capture_output = capture_output
+        self.save_to_db = save_to_db
+        self.db_path = Path(db_path) if db_path else None
 
         self._tracer = TestTracer(enabled=enable_tracing)
         self._result_builder = ResultBuilder()
@@ -170,6 +175,16 @@ class Runner:
         if self.enable_tracing:
             await self._notify_tracing_enabled(self.trace_output)
 
+        if self.save_to_db:
+            try:
+                SQLiteStore(self.db_path).save_run(merit_run)
+            except Exception as e:
+                # Log warning but don't fail the run
+                # TODO: implement failover??
+                import warnings
+
+                warnings.warn(f"Failed to persist run to database: {e}", RuntimeWarning)
+
         return merit_run
 
     async def _run_sequential(
@@ -179,15 +194,12 @@ class Runner:
         failures = 0
         for item in items:
             test = self._factory.build(item)
-            result = await test.execute(resolver)
-
-            ctx = TestContext(item=item)
-            execution = TestExecution(context=ctx, result=result)
+            execution = await test.execute(resolver)
             await self._notify_test_complete(execution)
 
             merit_run.result.executions.append(execution)
 
-            if result.status.is_failure:
+            if execution.result.status.is_failure:
                 failures += 1
                 if self.maxfail and failures >= self.maxfail:
                     merit_run.result.stopped_early = True
@@ -211,33 +223,38 @@ class Runner:
                 if stop_flag:
                     return (idx, None)
 
-                result: TestResult
+                execution: TestExecution
                 t_start = time.perf_counter()
                 try:
                     test = self._factory.build(item)
                     if self.timeout:
-                        result = await asyncio.wait_for(
+                        execution = await asyncio.wait_for(
                             test.execute(resolver),
                             timeout=self.timeout,
                         )
                     else:
-                        result = await test.execute(resolver)
+                        execution = await test.execute(resolver)
                 except TimeoutError:
                     duration = (time.perf_counter() - t_start) * 1000
-                    result = TestResult(
-                        status=TestStatus.ERROR,
-                        duration_ms=duration,
-                        error=TimeoutError(f"Test timed out after {self.timeout}s"),
+                    execution = TestExecution(
+                        definition=item,
+                        result=TestResult(
+                            status=TestStatus.ERROR,
+                            duration_ms=duration,
+                            error=TimeoutError(f"Test timed out after {self.timeout}s"),
+                        ),
+                        execution_id=uuid4(),
                     )
                 except Exception as e:
                     duration = (time.perf_counter() - t_start) * 1000
-                    result = TestResult(status=TestStatus.ERROR, duration_ms=duration, error=e)
+                    execution = TestExecution(
+                        definition=item,
+                        result=TestResult(status=TestStatus.ERROR, duration_ms=duration, error=e),
+                        execution_id=uuid4(),
+                    )
                 await resolver.teardown_scope(Scope.CASE)
 
-                ctx = TestContext(item=item)
-                execution = TestExecution(context=ctx, result=result)
-
-                if result.status.is_failure:
+                if execution.result.status.is_failure:
                     async with lock:
                         failures += 1
                         if self.maxfail and failures >= self.maxfail:

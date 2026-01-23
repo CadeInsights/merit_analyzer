@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from merit.assertions.base import AssertionResult
 from merit.context import (
     TestContext,
     assertions_collector,
@@ -10,7 +11,7 @@ from merit.context import (
     metrics as metrics_scope_ctx,
     test_context_scope as context_scope_ctx,
 )
-from merit.metrics_.base import Metric
+from merit.metrics_.base import Metric, MetricResult
 from merit.resources import ResourceResolver, clear_registry
 from merit.testing.discovery import collect
 
@@ -36,12 +37,13 @@ def merit_sample():
 
     try:
         [item] = collect(mod_path)
+        assertion_results: list[AssertionResult] = []
         ctx = TestContext(item=item)
-        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+        with context_scope_ctx(ctx), assertions_collector(assertion_results):
             item.fn()
 
-        assert len(ctx.assertion_results) == 1
-        ar = ctx.assertion_results[0]
+        assert len(assertion_results) == 1
+        ar = assertion_results[0]
         assert ar.passed is True
         assert "equals(1, 1)" in ar.expression_repr
 
@@ -72,12 +74,13 @@ def merit_fail():
 
     try:
         [item] = collect(mod_path)
+        assertion_results: list[AssertionResult] = []
         ctx = TestContext(item=item)
-        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+        with context_scope_ctx(ctx), assertions_collector(assertion_results):
             item.fn()
 
-        assert len(ctx.assertion_results) == 1
-        ar = ctx.assertion_results[0]
+        assert len(assertion_results) == 1
+        ar = assertion_results[0]
         assert ar.passed is False
         assert ar.error_message == "nope"
         assert "equals(1, 2)" in ar.expression_repr
@@ -104,20 +107,21 @@ def merit_metric_capture_multi():
 
     try:
         [item] = collect(mod_path)
+        assertion_results: list[AssertionResult] = []
         ctx = TestContext(item=item)
         m = Metric(name="assert_outcomes")
         with (
             context_scope_ctx(ctx),
             metrics_scope_ctx([m]),
-            assertions_collector(ctx.assertion_results),
+            assertions_collector(assertion_results),
         ):
             item.fn()
 
         assert m.raw_values == [True, False]
         assert m.metadata.collected_from_merits == {"merit_metric_capture_multi"}
-        assert len(ctx.assertion_results) == 2
-        assert ctx.assertion_results[0].passed is True
-        assert ctx.assertion_results[1].passed is False
+        assert len(assertion_results) == 2
+        assert assertion_results[0].passed is True
+        assert assertion_results[1].passed is False
     finally:
         sys.modules.pop(mod_name, None)
 
@@ -146,7 +150,7 @@ def merit_dummy():
     try:
         [item] = collect(mod_path)
         resolver = ResourceResolver()
-        metric_results = []
+        metric_results: list[MetricResult] = []
         with metric_results_collector(metric_results):
             await resolver.resolve("my_metric")
             await resolver.teardown()

@@ -19,6 +19,7 @@ from collections.abc import AsyncGenerator, Callable, Generator
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ParamSpec
+from uuid import UUID
 
 from pydantic import validate_call
 
@@ -547,14 +548,21 @@ class MetricResult:
         Assertion results collected while the metric resource was running.
     value : CalculatedValue
         The last yielded value from the metric generator. NaN if no value was yielded.
+    execution_id : UUID, optional
+        The test execution that produced this metric result.
     """
 
     name: str
     metadata: MetricMetadata
     assertion_results: list[AssertionResult]
     value: CalculatedValue
+    execution_id: UUID | None = None
 
     def __post_init__(self) -> None:
+        if self.execution_id is None:
+            test_ctx = TEST_CONTEXT.get()
+            if test_ctx is not None:
+                self.execution_id = test_ctx.execution_id
         collector = METRIC_RESULTS_COLLECTOR.get()
         if collector is not None:
             collector.append(self)

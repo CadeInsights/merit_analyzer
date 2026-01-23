@@ -41,17 +41,18 @@ def clean_registry():
 
 
 def test_assertionresult_appends_to_test_context():
+    assertion_results: list[AssertionResult] = []
     ctx = Ctx(item=_make_item("merit_fn"))
 
-    with context_scope(ctx), assertions_collector(ctx.assertion_results):
+    with context_scope(ctx), assertions_collector(assertion_results):
         ar = AssertionResult(passed=True, expression_repr="x == y")
 
-    assert ctx.assertion_results == [ar]
+    assert assertion_results == [ar]
 
     # Outside the scope, assertion results should not be auto-attached.
     ar2 = AssertionResult(passed=True, expression_repr="a == b")
-    assert ctx.assertion_results == [ar]
-    assert ar2 not in ctx.assertion_results
+    assert assertion_results == [ar]
+    assert ar2 not in assertion_results
 
 
 def test_assertion_context_collects_predicate_results_and_metric_values():

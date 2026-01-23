@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ class TestContext:
     __test__ = False  # Prevent pytest from collecting this as a test class
 
     item: MeritTestDefinition
-    assertion_results: list[AssertionResult] = field(default_factory=list)
+    execution_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

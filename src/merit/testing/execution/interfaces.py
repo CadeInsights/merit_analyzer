@@ -7,14 +7,14 @@ from typing import Any
 
 from merit.resources.resolver import ResourceResolver
 from merit.testing.models.definition import MeritTestDefinition
-from merit.testing.models.result import TestResult
+from merit.testing.models.result import TestExecution
 
 
 class MeritTest(ABC):
     """Executable test - single, repeated, or parametrized."""
 
     @abstractmethod
-    async def execute(self, resolver: ResourceResolver) -> TestResult:
+    async def execute(self, resolver: ResourceResolver) -> TestExecution:
         """Execute the test and return result."""
 
 

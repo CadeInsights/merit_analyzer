@@ -6,6 +6,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from merit.assertions.base import AssertionResult
 from merit.context import (
@@ -20,7 +21,7 @@ from merit.resources.resolver import Scope
 from merit.testing.execution.interfaces import MeritTest
 from merit.testing.execution.result_builder import ResultBuilder
 from merit.testing.execution.tracer import TestTracer
-from merit.testing.models import MeritTestDefinition, TestResult, TestStatus
+from merit.testing.models import MeritTestDefinition, TestExecution, TestResult, TestStatus
 from merit.testing.outcomes import FailTest, SkipTest, XFailTest
 
 
@@ -41,19 +42,25 @@ class SingleMeritTest(MeritTest):
         if self.definition.modifiers:
             raise ValueError("SingleMeritTest should not have modifiers")
 
-    async def execute(self, resolver: ResourceResolver) -> TestResult:
+    async def execute(self, resolver: ResourceResolver) -> TestExecution:
         """Execute the test and return result."""
         if self.definition.skip_reason:
-            return TestResult(
-                status=TestStatus.SKIPPED,
-                duration_ms=0,
-                error=AssertionError(self.definition.skip_reason),
+            return TestExecution(
+                definition=self.definition,
+                result=TestResult(
+                    status=TestStatus.SKIPPED,
+                    duration_ms=0,
+                    error=Exception(self.definition.skip_reason),
+                ),
+                execution_id=uuid4(),
             )
+
+        exec_id = uuid4()
 
         # fork resolver for case isolation
         forked_resolver = resolver.fork_for_case()
 
-        ctx = TestContext(item=self.definition)
+        ctx = TestContext(item=self.definition, execution_id=exec_id)
         assertion_results: list[AssertionResult] = []
         error: Exception | None = None
 
@@ -99,9 +106,14 @@ class SingleMeritTest(MeritTest):
                 result = self.result_builder.build(
                     self.definition, duration_ms, assertion_results, error
                 )
-            result.trace_id = self.tracer.get_trace_id(span)
+            trace_id = self.tracer.get_trace_id(span)
             self.tracer.record(span, result)
-            return result
+            return TestExecution(
+                definition=self.definition,
+                result=result,
+                execution_id=exec_id,
+                trace_id=trace_id,
+            )
 
     async def _resolve_params(self, resolver: ResourceResolver) -> dict[str, Any]:
         """Resolve test parameters from resources."""

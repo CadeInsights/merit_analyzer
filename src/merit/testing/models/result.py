@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 from uuid import UUID, uuid4
 
 from merit.assertions.base import AssertionResult
+from merit.testing.models.definition import MeritTestDefinition
 
 
 class TestStatus(Enum):
@@ -38,9 +38,6 @@ class TestResult:
     duration_ms: float
     error: Exception | None = None
     assertion_results: list[AssertionResult] = field(default_factory=list)
-    sub_runs: list[TestResult] | None = None
-    id_suffix: str | None = None
-    trace_id: str | None = None
 
 
 @dataclass
@@ -53,14 +50,16 @@ class TestExecution:
 
     __test__ = False  # Prevent pytest from collecting this as a test class
 
-    context: Any  # TestContext - avoid circular import
+    definition: MeritTestDefinition
     result: TestResult
     execution_id: UUID = field(default_factory=uuid4)
+    trace_id: str | None = None
+    sub_executions: list[TestExecution] = field(default_factory=list)
 
     @property
-    def item(self) -> Any:  # MeritTestDefinition
+    def item(self) -> MeritTestDefinition:
         """The test item that was executed."""
-        return self.context.item
+        return self.definition
 
     @property
     def status(self) -> TestStatus:
