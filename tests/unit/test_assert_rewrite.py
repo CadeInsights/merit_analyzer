@@ -216,3 +216,37 @@ def merit_repr_cases():
         }
     finally:
         sys.modules.pop(mod_name, None)
+
+
+def test_assertion_repr_multiline_assert(tmp_path):
+    mod_name = f"merit_{uuid4().hex}"
+    mod_path = tmp_path / f"{mod_name}.py"
+    mod_path.write_text(
+        """
+def merit_multiline_assert():
+    def func(x):
+        return x + 1
+    x = 4
+    print("above")
+    assert func(
+        x
+    )
+    print("below")
+""".lstrip()
+    )
+
+    try:
+        [item] = collect(mod_path)
+        ctx = TestContext(item=item)
+        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+            item.fn()
+
+        assert len(ctx.assertion_results) == 1
+        [ar] = ctx.assertion_results
+
+        assert ar.expression_repr.expr == "assert func(\n        x\n    )"
+        assert ar.expression_repr.lines_above == '\n    x = 4\n    print("above")'
+        assert ar.expression_repr.lines_below == "\n        x\n    )"
+        assert ar.expression_repr.resolved_args == {"func(\n        x\n    )": "5"}
+    finally:
+        sys.modules.pop(mod_name, None)
