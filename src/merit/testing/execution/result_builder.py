@@ -65,6 +65,6 @@ class ResultBuilder:
     ) -> Exception | None:
         """Convert failed assertion to error if no error exists."""
         if error is None and failed_assertions:
-            msg = failed_assertions[0].error_message or failed_assertions[0].expression_repr
+            msg = failed_assertions[0].error_message or failed_assertions[0].expression_repr.expr
             return AssertionError(msg)
         return error

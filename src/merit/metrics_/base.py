@@ -25,7 +25,6 @@ from pydantic import validate_call
 
 from merit.context import (
     METRIC_RESULTS_COLLECTOR,
-    METRIC_VALUES_COLLECTOR,
     RESOLVER_CONTEXT,
     TEST_CONTEXT,
     assertions_collector,
@@ -39,6 +38,7 @@ if TYPE_CHECKING:
 
 P = ParamSpec("P")
 
+
 CalculatedValue = (
     int
     | float
@@ -50,27 +50,6 @@ CalculatedValue = (
     | tuple[float, float]
     | tuple[float, float, float]
 )
-
-
-@dataclass(slots=True, frozen=True)
-class MetricSnapshot:
-    """Snapshot of a metric value captured during assertion evaluation.
-
-    Used to record *what* metric property was accessed and the
-    *value* that was observed at that moment.
-
-    Attributes:
-    ----------
-    full_name : str
-        Fully qualified metric property name, typically of the form
-        ``"<metric_name>.<property>"`` (e.g., ``"latency_ms.p95"``).
-    value : CalculatedValue
-        The value observed for that property (e.g., a float for ``mean``,
-        a tuple for confidence intervals, or a tuple for ``raw_values``).
-    """
-
-    full_name: str
-    value: CalculatedValue
 
 
 @dataclass
@@ -183,24 +162,6 @@ class Metric:
     _values_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _cache: MetricState = field(default_factory=MetricState, repr=False)
 
-    def _push_value_to_context(self, prop_name: str, value: Any) -> None:
-        """Helper to record metric property access in assertion context."""
-        collector = METRIC_VALUES_COLLECTOR.get()
-        if collector is not None:
-            match value:
-                case list() as v:
-                    value = tuple(v)
-
-                case Counter() as v:
-                    value = tuple(sorted(v.items(), key=lambda kv: kv[0]))
-
-                case dict() as v:
-                    value = tuple(sorted(v.items(), key=lambda kv: kv[0]))
-
-            full_name = f"{self.name or 'unnamed_metric'}.{prop_name}"
-            mv = MetricSnapshot(full_name=full_name, value=value)
-            collector.append(mv)
-
     @validate_call
     def add_record(self, value: CalculatedValue) -> None:
         """Record one or more new data points.
@@ -252,7 +213,6 @@ class Metric:
     def raw_values(self) -> list[int | float | bool]:
         with self._values_lock:
             value = list(self._raw_values)
-            self._push_value_to_context("raw_values", value)
             return value
 
     @property
@@ -261,7 +221,6 @@ class Metric:
             if self._cache.len is None:
                 self._cache.len = len(self._raw_values)
             value = self._cache.len
-            self._push_value_to_context("len", value)
             return value
 
     @property
@@ -270,7 +229,6 @@ class Metric:
             if self._cache.sum is None:
                 self._cache.sum = math.fsum(self._float_values)
             value = self._cache.sum
-            self._push_value_to_context("sum", value)
             return value
 
     @property
@@ -286,7 +244,6 @@ class Metric:
                 else:
                     self._cache.min = min(self._float_values)
             value = self._cache.min
-            self._push_value_to_context("min", value)
             return value
 
     @property
@@ -303,7 +260,6 @@ class Metric:
                 else:
                     self._cache.max = max(self._float_values)
             value = self._cache.max
-            self._push_value_to_context("max", value)
             return value
 
     @property
@@ -319,7 +275,6 @@ class Metric:
                 else:
                     self._cache.median = statistics.median(self._float_values)
             value = self._cache.median
-            self._push_value_to_context("median", value)
             return value
 
     @property
@@ -335,7 +290,6 @@ class Metric:
                 else:
                     self._cache.mean = statistics.mean(self._float_values)
             value = self._cache.mean
-            self._push_value_to_context("mean", value)
             return value
 
     @property
@@ -351,7 +305,6 @@ class Metric:
                 else:
                     self._cache.variance = statistics.variance(self._float_values, xbar=self.mean)
             value = self._cache.variance
-            self._push_value_to_context("variance", value)
             return value
 
     @property
@@ -367,7 +320,6 @@ class Metric:
                 else:
                     self._cache.std = statistics.stdev(self._float_values, xbar=self.mean)
             value = self._cache.std
-            self._push_value_to_context("std", value)
             return value
 
     @property
@@ -383,7 +335,6 @@ class Metric:
                 else:
                     self._cache.pvariance = statistics.pvariance(self._float_values, mu=self.mean)
             value = self._cache.pvariance
-            self._push_value_to_context("pvariance", value)
             return value
 
     @property
@@ -399,7 +350,6 @@ class Metric:
                 else:
                     self._cache.pstd = statistics.pstdev(self._float_values, mu=self.mean)
             value = self._cache.pstd
-            self._push_value_to_context("pstd", value)
             return value
 
     @property
@@ -416,7 +366,6 @@ class Metric:
                     half = 1.645 * self.std / math.sqrt(self.len)
                     self._cache.ci_90 = (self.mean - half, self.mean + half)
             value = self._cache.ci_90
-            self._push_value_to_context("ci_90", value)
             return value
 
     @property
@@ -433,7 +382,6 @@ class Metric:
                     half = 1.96 * self.std / math.sqrt(self.len)
                     self._cache.ci_95 = (self.mean - half, self.mean + half)
             value = self._cache.ci_95
-            self._push_value_to_context("ci_95", value)
             return value
 
     @property
@@ -450,7 +398,6 @@ class Metric:
                     half = 2.576 * self.std / math.sqrt(self.len)
                     self._cache.ci_99 = (self.mean - half, self.mean + half)
             value = self._cache.ci_99
-            self._push_value_to_context("ci_99", value)
             return value
 
     @property
@@ -468,14 +415,12 @@ class Metric:
                         self._float_values, n=100, method="inclusive"
                     )
             value = self._cache.percentiles
-            self._push_value_to_context("percentiles", value)
             return value
 
     @property
     def p25(self) -> float:
         with self._values_lock:
             value = self.percentiles[24]
-            self._push_value_to_context("p25", value)
             return value
 
     @property
@@ -486,28 +431,24 @@ class Metric:
     def p75(self) -> float:
         with self._values_lock:
             value = self.percentiles[74]
-            self._push_value_to_context("p75", value)
             return value
 
     @property
     def p90(self) -> float:
         with self._values_lock:
             value = self.percentiles[89]
-            self._push_value_to_context("p90", value)
             return value
 
     @property
     def p95(self) -> float:
         with self._values_lock:
             value = self.percentiles[94]
-            self._push_value_to_context("p95", value)
             return value
 
     @property
     def p99(self) -> float:
         with self._values_lock:
             value = self.percentiles[98]
-            self._push_value_to_context("p99", value)
             return value
 
     @property
@@ -516,7 +457,6 @@ class Metric:
             if self._cache.counter is None:
                 self._cache.counter = Counter(self._raw_values)
             value = self._cache.counter
-            self._push_value_to_context("counter", value)
             return value
 
     @property
@@ -529,7 +469,6 @@ class Metric:
                     {k: v / total for k, v in counts.items()} if total > 0 else {}
                 )
             value = self._cache.distribution
-            self._push_value_to_context("distribution", value)
             return value
 
 

@@ -7,43 +7,57 @@ from merit.context import ASSERTION_RESULTS_COLLECTOR, METRIC_CONTEXT, TEST_CONT
 
 
 if TYPE_CHECKING:
-    from merit.metrics_.base import MetricSnapshot
     from merit.predicates.base import PredicateResult
 
 
 @dataclass
-class AssertionResult:
-    """Result of evaluating a single assertion.
+class AssertionRepr:
+    """Represents a human-readable representation of an assertion expression.
 
-    This dataclass stores the outcome of an assertion evaluation along with
-    optional rich debugging/analysis artifacts (predicate results and metric
-    values).
+    This class captures the assertion expression along with surrounding context
+    lines and resolved argument values for debugging and reporting purposes.
 
-    Parameters
+    Attributes
     ----------
-    expression_repr
-        Human-readable representation of the asserted expression (e.g.,
-        ``"x == y"``) for reporting/debugging.
-    error_message
-        Optional error/details string explaining a failure (or exception) for
-        reporting.
-    predicate_results
-        Optional list of PredicateResult objects collected during the assertion.
-    metric_values
-        Optional list of MetricSnapshot objects collected during the assertion.
-
-    Attributes:
-    ----------
-    passed
-        Boolean pass/fail state. Setting this property records the boolean value into
-        currently attached metrics.
+    expr : str
+        The assertion expression as a string.
+    lines_above : str
+        Source code lines appearing above the assertion expression.
+    lines_below : str
+        Source code lines appearing below the assertion expression.
+    resolved_args : dict[str, str]
+        A dictionary mapping argument names to their string representations,
+        showing the resolved values of variables used in the assertion.
     """
+    expr: str
+    lines_above: str
+    lines_below: str
+    resolved_args: dict[str, str]
 
-    expression_repr: str
+
+@dataclass
+class AssertionResult:
+    """Represents the result of an assertion evaluation in a merit test.
+
+    This class captures the outcome of an assertion, including whether it passed,
+    the original expression, any error messages, and results from predicate evaluations.
+
+    Attributes
+    ----------
+    expression_repr : AssertionRepr
+        A human-readable representation of the assertion expression, including
+        the expression string and resolved argument values.
+    passed : bool
+        Whether the assertion passed (True) or failed (False).
+    error_message : str or None, optional
+        An error message describing why the assertion failed, if applicable.
+    predicate_results : list[PredicateResult], optional
+        Results from any predicate evaluations that were part of this assertion.
+    """
+    expression_repr: AssertionRepr
     passed: bool
     error_message: str | None = None
     predicate_results: list[PredicateResult] = field(default_factory=list)
-    metric_values: set[MetricSnapshot] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         collector = ASSERTION_RESULTS_COLLECTOR.get()
@@ -58,5 +72,11 @@ class AssertionResult:
         test_ctx = TEST_CONTEXT.get()
         if test_ctx is not None:
             if test_ctx.item.fail_fast and not self.passed:
-                msg = self.error_message or f"Assertion failed: {self.expression_repr}"
+                msg = self.error_message or f"Assertion failed: {self.expression_repr.expr}"
                 raise AssertionError(msg)
+
+
+def capture_var(values: dict[str, str], name: str, value: object) -> object:
+    """Capture a variable's value and store it in a dictionary."""
+    values[name] = repr(value)
+    return value

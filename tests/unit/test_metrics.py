@@ -4,12 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from merit.assertions.base import AssertionResult
+from merit.assertions.base import AssertionRepr, AssertionResult
 from merit.context import (
     ResolverContext,
     TestContext as Ctx,
     metric_results_collector,
-    metric_values_collector,
     resolver_context_scope,
     test_context_scope as context_scope,
 )
@@ -145,36 +144,6 @@ def test_metric_percentiles_with_single_value_returns_nans():
     assert all(math.isnan(x) for x in percentiles)
 
 
-def test_metric_values_collector_records_property_access_with_normalized_values():
-    values = []
-    m = Metric("m")
-    m.add_record([1, 2, 2])
-
-    with metric_values_collector(values):
-        _ = m.raw_values
-        _ = m.counter
-        _ = m.distribution
-
-    by_name = {}
-    for mv in values:
-        by_name[mv.full_name] = mv.value
-
-    assert by_name["m.raw_values"] == (1, 2, 2)
-    assert by_name["m.counter"] == ((1, 1), (2, 2))
-    assert by_name["m.distribution"][0] == (1, pytest.approx(1 / 3))
-    assert by_name["m.distribution"][1] == (2, pytest.approx(2 / 3))
-
-
-def test_metric_values_collector_uses_default_name_when_metric_is_unnamed():
-    values = []
-    m = Metric()
-    with metric_values_collector(values):
-        assert m.len == 0
-
-    assert values[-1].full_name == "unnamed_metric.len"
-    assert values[-1].value == 0
-
-
 def test_metric_result_is_collected_when_collector_is_active():
     results = []
     with metric_results_collector(results):
@@ -263,9 +232,25 @@ async def test_metric_decorator_emits_metric_result_on_teardown_with_assertions_
 
     @metric(scope=Scope.CASE)
     def scored_metric():
-        AssertionResult(expression_repr="before", passed=True)
+        AssertionResult(
+            expression_repr=AssertionRepr(
+                expr="before",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+            passed=True,
+        )
         yield Metric("ignored")
-        AssertionResult(expression_repr="after", passed=False)
+        AssertionResult(
+            expression_repr=AssertionRepr(
+                expr="after",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+            passed=False,
+        )
         yield 123
         return 999  # ignored: metric final value comes from the second yield
 
@@ -280,7 +265,7 @@ async def test_metric_decorator_emits_metric_result_on_teardown_with_assertions_
     r = metric_results[0]
     assert r.name == "scored_metric"
     assert r.value == 123
-    assert [a.expression_repr for a in r.assertion_results] == ["before", "after"]
+    assert [a.expression_repr.expr for a in r.assertion_results] == ["before", "after"]
     assert r.metadata.scope == Scope.CASE
     assert r.metadata is not m.metadata
 

@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from merit.assertions.base import AssertionResult
-from merit.metrics_.base import MetricMetadata, MetricResult, MetricSnapshot
+from merit.assertions.base import AssertionRepr, AssertionResult
+from merit.metrics_.base import MetricMetadata, MetricResult
 from merit.predicates.base import PredicateMetadata, PredicateResult
 from merit.resources import Scope
 from merit.storage.sqlite import SQLiteStore
@@ -163,11 +163,15 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
         case_id=uuid4(),
     )
     assertion = AssertionResult(
-        expression_repr="x == y",
+        expression_repr=AssertionRepr(
+            expr="x == y",
+            lines_above="",
+            lines_below="",
+            resolved_args={},
+        ),
         passed=False,
         error_message="bad",
         predicate_results=[predicate_result],
-        metric_values={MetricSnapshot(full_name="metric.mean", value=1.5)},
     )
 
     definition = MeritTestDefinition(
@@ -189,7 +193,12 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
 
     metric_metadata = MetricMetadata(scope=Scope.SESSION)
     metric_assertion = AssertionResult(
-        expression_repr="metric > 0",
+        expression_repr=AssertionRepr(
+            expr="metric > 0",
+            lines_above="",
+            lines_below="",
+            resolved_args={},
+        ),
         passed=True,
     )
     metric_result = MetricResult(

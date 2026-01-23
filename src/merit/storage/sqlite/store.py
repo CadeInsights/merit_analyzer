@@ -48,8 +48,8 @@ METRIC_INSERT_SQL = """
 ASSERTION_INSERT_SQL = """
     INSERT INTO assertions (
         run_id, test_execution_id, metric_id, expression_repr, passed,
-        error_message, metric_values_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        error_message
+    ) VALUES (?, ?, ?, ?, ?, ?)
 """
 
 PREDICATE_INSERT_SQL = """
@@ -178,20 +178,15 @@ class SQLiteStore(Store):
         metric_id: int | None,
         assertion: AssertionResult,
     ) -> int:
-        metric_values = [
-            {"full_name": mv.full_name, "value": mv.value} for mv in assertion.metric_values
-        ]
-
         cursor = conn.execute(
             ASSERTION_INSERT_SQL,
             (
                 str(run_id),
                 str(execution_id) if execution_id else None,
                 metric_id,
-                assertion.expression_repr,
+                assertion.expression_repr.expr,
                 int(assertion.passed),
-                assertion.error_message,
-                json.dumps(metric_values) if metric_values else None,
+                assertion.error_message
             ),
         )
         return cast("int", cursor.lastrowid)

@@ -10,7 +10,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
-    from merit.metrics_.base import Metric, MetricResult, MetricSnapshot
+    from merit.metrics_.base import Metric, MetricResult
     from merit.predicates.base import PredicateResult
     from merit.testing.models import MeritRun, MeritTestDefinition
 
@@ -55,9 +55,7 @@ ASSERTION_RESULTS_COLLECTOR: ContextVar[list[AssertionResult] | None] = ContextV
 PREDICATE_RESULTS_COLLECTOR: ContextVar[list[PredicateResult] | None] = ContextVar(
     "predicate_results_collector", default=None
 )
-METRIC_VALUES_COLLECTOR: ContextVar[list[MetricSnapshot] | None] = ContextVar(
-    "metric_values_collector", default=None
-)
+
 METRIC_RESULTS_COLLECTOR: ContextVar[list[MetricResult] | None] = ContextVar(
     "metric_results_collector", default=None
 )
@@ -94,15 +92,6 @@ def predicate_results_collector(ctx: list[PredicateResult]) -> Iterator[None]:
         yield
     finally:
         PREDICATE_RESULTS_COLLECTOR.reset(token)
-
-
-@contextmanager
-def metric_values_collector(ctx: list[MetricSnapshot]) -> Iterator[None]:
-    token = METRIC_VALUES_COLLECTOR.set(ctx)
-    try:
-        yield
-    finally:
-        METRIC_VALUES_COLLECTOR.reset(token)
 
 
 @contextmanager

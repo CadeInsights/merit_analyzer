@@ -1,6 +1,6 @@
 """Metrics module for aggregating predicate results."""
 
-from .base import Metric, MetricSnapshot, metric
+from .base import Metric, metric
 
 
-__all__ = ["Metric", "MetricSnapshot", "metric"]
+__all__ = ["Metric", "metric"]

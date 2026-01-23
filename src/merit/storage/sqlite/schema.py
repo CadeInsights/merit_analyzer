@@ -74,8 +74,7 @@ CREATE TABLE IF NOT EXISTS assertions (
 
     expression_repr     TEXT NOT NULL,
     passed              INTEGER NOT NULL,
-    error_message       TEXT,
-    metric_values_json  TEXT
+    error_message       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS predicates (
