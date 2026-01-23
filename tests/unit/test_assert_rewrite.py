@@ -246,7 +246,7 @@ def merit_multiline_assert():
 
         assert ar.expression_repr.expr == "assert func(\n        x\n    )"
         assert ar.expression_repr.lines_above == '\n    x = 4\n    print("above")'
-        assert ar.expression_repr.lines_below == "\n        x\n    )"
+        assert ar.expression_repr.lines_below == '\n    print("below")'
         assert ar.expression_repr.resolved_args == {"func(\n        x\n    )": "5"}
     finally:
         sys.modules.pop(mod_name, None)

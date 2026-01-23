@@ -82,9 +82,10 @@ class AssertTransformer(ast.NodeTransformer):
         lines_below = ""
         if self.source is not None and node.lineno is not None:
             source_lines = self.source.splitlines()
-            line_index = max(0, node.lineno - 1)
-            above_lines = source_lines[max(0, line_index - 2) : line_index]
-            below_lines = source_lines[line_index + 1 : line_index + 3]
+            start_index = max(0, node.lineno - 1)
+            end_index = max(0, (node.end_lineno or node.lineno) - 1)
+            above_lines = source_lines[max(0, start_index - 2) : start_index]
+            below_lines = source_lines[end_index + 1 : end_index + 3]
             if above_lines:
                 lines_above = "\n" + "\n".join(above_lines)
             if below_lines:
