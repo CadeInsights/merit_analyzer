@@ -237,13 +237,13 @@ def merit_compare_cases():
 
     try:
         [item] = collect(mod_path)
-        ctx = TestContext(item=item)
-        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+        assertion_results: list[AssertionResult] = []
+        with assertions_collector(assertion_results):
             item.fn()
 
-        assert len(ctx.assertion_results) == 3
+        assert len(assertion_results) == 3
         results = {
-            ar.expression_repr.expr: ar.expression_repr for ar in ctx.assertion_results
+            ar.expression_repr.expr: ar.expression_repr for ar in assertion_results
         }
 
         assert results["assert t1 < t2"].resolved_args == {"t1": "5", "t2": "10"}
@@ -269,12 +269,12 @@ def merit_complex_compare_cases():
 
     try:
         [item] = collect(mod_path)
-        ctx = TestContext(item=item)
-        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+        assertion_results: list[AssertionResult] = []
+        with assertions_collector(assertion_results):
             item.fn()
 
-        assert len(ctx.assertion_results) == 1
-        [ar] = ctx.assertion_results
+        assert len(assertion_results) == 1
+        [ar] = assertion_results
         assert ar.expression_repr.expr == "assert a > 1 and a in b and sum(b) < c()"
         assert ar.expression_repr.resolved_args == {
             "a": "5",
@@ -305,12 +305,12 @@ def merit_multiline_assert():
 
     try:
         [item] = collect(mod_path)
-        ctx = TestContext(item=item)
-        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+        assertion_results: list[AssertionResult] = []
+        with assertions_collector(assertion_results):
             item.fn()
 
-        assert len(ctx.assertion_results) == 1
-        [ar] = ctx.assertion_results
+        assert len(assertion_results) == 1
+        [ar] = assertion_results
 
         assert ar.expression_repr.expr == "assert func(\n        x\n    )"
         assert ar.expression_repr.lines_above == '\n    x = 4\n    print("above")'

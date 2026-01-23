@@ -1,4 +1,4 @@
-from .base import AssertionResult
+from .base import AssertionResult, AssertionRepr
 
 
-__all__ = ["AssertionResult"]
+__all__ = ["AssertionResult", "AssertionRepr"]

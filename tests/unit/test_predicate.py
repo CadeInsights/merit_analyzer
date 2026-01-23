@@ -150,7 +150,7 @@ async def test_module_level_get_and_close_work(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("MERIT_API_KEY", "secret")
 
     # Reset to ensure clean state (previous tests may have initialized)
-    close_predicate_api_client()
+    await close_predicate_api_client()
 
     # Should raise error before initialization
     with pytest.raises(RuntimeError):
