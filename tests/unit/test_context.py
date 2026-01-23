@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from merit.assertions.base import AssertionResult
+from merit.assertions.base import AssertionRepr, AssertionResult
 from merit.context import (
     ResolverContext,
     TestContext as Ctx,
@@ -42,15 +42,30 @@ def clean_registry():
 
 def test_assertionresult_appends_to_test_context():
     assertion_results: list[AssertionResult] = []
-    ctx = Ctx(item=_make_item("merit_fn"))
 
-    with context_scope(ctx), assertions_collector(assertion_results):
-        ar = AssertionResult(passed=True, expression_repr="x == y")
+    with assertions_collector(assertion_results):
+        ar = AssertionResult(
+            passed=True,
+            expression_repr=AssertionRepr(
+                expr="x == y",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+        )
 
     assert assertion_results == [ar]
 
     # Outside the scope, assertion results should not be auto-attached.
-    ar2 = AssertionResult(passed=True, expression_repr="a == b")
+    ar2 = AssertionResult(
+        passed=True,
+        expression_repr=AssertionRepr(
+            expr="a == b",
+            lines_above="",
+            lines_below="",
+            resolved_args={},
+        ),
+    )
     assert assertion_results == [ar]
     assert ar2 not in assertion_results
 
@@ -85,15 +100,19 @@ def test_assertion_context_collects_predicate_results_and_metric_values():
     # Build AssertionResult with collected data
     ar = AssertionResult(
         passed=True,
-        expression_repr="check",
+        expression_repr=AssertionRepr(
+            expr="check",
+            lines_above="",
+            lines_below="",
+            resolved_args={},
+        ),
         predicate_results=predicate_results_list,
-        metric_values=set(metric_values_list),
     )
 
     assert len(ar.predicate_results) == 1
     assert ar.predicate_results[0] == pr
 
-    names = {mv.full_name for mv in ar.metric_values}
+    names = {mv.full_name for mv in metric_values_list}
     assert "m.len" in names
     assert "m.min" in names
 
@@ -106,8 +125,24 @@ def test_metrics_records_assertion_passed_and_reads_test_context_for_metadata():
 
     with context_scope(test_ctx), metrics([m1, m2]):
         # AssertionResult.__post_init__ calls metric.add_record(self.passed)
-        ar1 = AssertionResult(passed=True, expression_repr="first")
-        ar2 = AssertionResult(passed=False, expression_repr="second")
+        ar1 = AssertionResult(
+            passed=True,
+            expression_repr=AssertionRepr(
+                expr="first",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+        )
+        ar2 = AssertionResult(
+            passed=False,
+            expression_repr=AssertionRepr(
+                expr="second",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+        )
 
     assert m1.raw_values == [True, False]
     assert m2.raw_values == [True, False]

@@ -5,23 +5,26 @@ class InjectAssertionDependenciesTransformer(ast.NodeTransformer):
     """Inject assertion rewrite dependencies into a function body.
 
     We inject imports at the top of each transformed `merit_*` function so the
-    rewritten assert statements can reference `AssertionResult`,
-    `predicate_results_collector`, and `metric_values_collector` without
-    relying on the module loader to provide them.
+    rewritten assert statements can reference `AssertionResult`, `AssertionRepr`,
+    `capture_var`, and `predicate_results_collector` without relying on the
+    module loader to provide them.
     """
 
     def _inject_dependencies(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
         inject_stmts: list[ast.stmt] = [
             ast.ImportFrom(
                 module="merit.assertions.base",
-                names=[ast.alias(name="AssertionResult", asname=None)],
+                names=[
+                    ast.alias(name="AssertionRepr", asname=None),
+                    ast.alias(name="AssertionResult", asname=None),
+                    ast.alias(name="capture_var", asname=None),
+                ],
                 level=0,
             ),
             ast.ImportFrom(
                 module="merit.context",
                 names=[
                     ast.alias(name="predicate_results_collector", asname=None),
-                    ast.alias(name="metric_values_collector", asname=None),
                 ],
                 level=0,
             ),
@@ -48,9 +51,8 @@ class AssertTransformer(ast.NodeTransformer):
     This transformer replaces each :class:`ast.Assert` node with an equivalent
     sequence of statements that:
 
-    - Creates sink lists to collect predicate results and metric values.
-    - Evaluates the assertion expression under ``predicate_results_collector``
-      and ``metric_values_collector`` contexts to capture artifacts.
+    - Creates sink lists to collect predicate results.
+    - Evaluates the assertion expression under ``predicate_results_collector``.
     - Constructs an ``AssertionResult`` with all collected data after evaluation.
     - If an ``assert`` message is present and the assertion fails, the message
       is coerced to ``str`` and stored on ``ar.error_message``.
@@ -60,30 +62,77 @@ class AssertTransformer(ast.NodeTransformer):
     IS_PASSED_VAR_NAME = "__merit_passed"
     MSG_VAR_NAME = "__merit_msg"
     PREDICATE_RESULTS_VAR_NAME = "__merit_predicate_results"
-    METRIC_VALUES_VAR_NAME = "__merit_metric_values"
+    RESOLVED_ARGS_VAR_NAME = "__merit_resolved"
 
     def __init__(self, source: str | None = None) -> None:
         self.source = source
 
     def visit_Assert(self, node: ast.Assert):
-        # Get the source segment of the assertion expression
+        # Get the source segment of the assertion statement
         segment = None
         if self.source is not None:
-            segment = ast.get_source_segment(self.source, node.test)
-        expr_repr = segment if isinstance(segment, str) and segment else ast.unparse(node.test)
+            segment = ast.get_source_segment(self.source, node)
+        expr_repr = (
+            segment.strip()
+            if isinstance(segment, str) and segment
+            else f"assert {ast.unparse(node.test)}"
+        )
 
-        # Create empty lists for collecting predicate results and metric values
+        lines_above = ""
+        lines_below = ""
+        if self.source is not None and node.lineno is not None:
+            source_lines = self.source.splitlines()
+            line_index = max(0, node.lineno - 1)
+            above_lines = source_lines[max(0, line_index - 2) : line_index]
+            below_lines = source_lines[line_index + 1 : line_index + 3]
+            if above_lines:
+                lines_above = "\n" + "\n".join(above_lines)
+            if below_lines:
+                lines_below = "\n" + "\n".join(below_lines)
+
+        # Create empty lists for collecting predicate results
         predicate_results_assign = ast.Assign(
             targets=[ast.Name(id=self.PREDICATE_RESULTS_VAR_NAME, ctx=ast.Store())],
             value=ast.List(elts=[], ctx=ast.Load()),
         )
         ast.copy_location(predicate_results_assign, node)
 
-        metric_values_assign = ast.Assign(
-            targets=[ast.Name(id=self.METRIC_VALUES_VAR_NAME, ctx=ast.Store())],
-            value=ast.List(elts=[], ctx=ast.Load()),
+        resolved_args_assign = ast.Assign(
+            targets=[ast.Name(id=self.RESOLVED_ARGS_VAR_NAME, ctx=ast.Store())],
+            value=ast.Dict(keys=[], values=[]),
         )
-        ast.copy_location(metric_values_assign, node)
+        ast.copy_location(resolved_args_assign, node)
+
+        def expr_name(expr: ast.expr) -> str:
+            if self.source is not None:
+                segment = ast.get_source_segment(self.source, expr)
+                if isinstance(segment, str) and segment:
+                    return segment.strip()
+            return ast.unparse(expr)
+
+        def wrap(expr: ast.expr) -> ast.expr:
+            match expr:
+                case ast.Name(ctx=ast.Load()) | ast.Attribute(ctx=ast.Load()) | ast.Subscript(ctx=ast.Load()):
+                    label = expr_name(expr)
+                case ast.Call() | ast.ListComp() | ast.SetComp() | ast.GeneratorExp() | ast.DictComp():
+                    label = expr_name(expr)
+                case _:
+                    return expr
+
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="capture_var", ctx=ast.Load()),
+                    args=[
+                        ast.Name(id=self.RESOLVED_ARGS_VAR_NAME, ctx=ast.Load()),
+                        ast.Constant(value=label),
+                        expr,
+                    ],
+                    keywords=[],
+                ),
+                expr,
+            )
+
+        wrapped_test = wrap(node.test)
 
         # Evaluate the assertion under collector contexts
         eval_under_collectors = ast.With(
@@ -95,22 +144,13 @@ class AssertTransformer(ast.NodeTransformer):
                         keywords=[],
                     ),
                     optional_vars=None,
-                ),
-                ast.withitem(
-                    context_expr=ast.Call(
-                        func=ast.Name(id="metric_values_collector", ctx=ast.Load()),
-                        args=[ast.Name(id=self.METRIC_VALUES_VAR_NAME, ctx=ast.Load())],
-                        keywords=[],
-                    ),
-                    optional_vars=None,
-                ),
-            ],
+                )],
             body=[
                 ast.Assign(
                     targets=[ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Store())],
                     value=ast.Call(
                         func=ast.Name(id="bool", ctx=ast.Load()),
-                        args=[node.test],
+                        args=[wrapped_test],
                         keywords=[],
                     ),
                 )
@@ -119,7 +159,7 @@ class AssertTransformer(ast.NodeTransformer):
         ast.copy_location(eval_under_collectors, node)
 
         # Build statements list starting with list creation and evaluation
-        statements = [predicate_results_assign, metric_values_assign, eval_under_collectors]
+        statements = [predicate_results_assign, resolved_args_assign, eval_under_collectors]
 
         # Conditionally evaluate and store error message if assertion fails
         if node.msg is not None:
@@ -148,21 +188,26 @@ class AssertTransformer(ast.NodeTransformer):
             statements.append(msg_if)
 
         # Create the AssertionResult with all collected data (after with block, passing lists directly)
+        assertion_repr = ast.Call(
+            func=ast.Name(id="AssertionRepr", ctx=ast.Load()),
+            args=[],
+            keywords=[
+                ast.keyword(arg="expr", value=ast.Constant(value=expr_repr)),
+                ast.keyword(arg="lines_above", value=ast.Constant(value=lines_above)),
+                ast.keyword(arg="lines_below", value=ast.Constant(value=lines_below)),
+                ast.keyword(
+                    arg="resolved_args",
+                    value=ast.Name(id=self.RESOLVED_ARGS_VAR_NAME, ctx=ast.Load()),
+                ),
+            ],
+        )
         ar_keywords = [
-            ast.keyword(arg="expression_repr", value=ast.Constant(value=expr_repr)),
+            ast.keyword(arg="expression_repr", value=assertion_repr),
             ast.keyword(arg="passed", value=ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Load())),
             ast.keyword(
                 arg="predicate_results",
                 value=ast.Name(id=self.PREDICATE_RESULTS_VAR_NAME, ctx=ast.Load()),
-            ),
-            ast.keyword(
-                arg="metric_values",
-                value=ast.Call(
-                    func=ast.Name(id="set", ctx=ast.Load()),
-                    args=[ast.Name(id=self.METRIC_VALUES_VAR_NAME, ctx=ast.Load())],
-                    keywords=[],
-                ),
-            ),
+            )
         ]
 
         if node.msg is not None:
@@ -188,3 +233,4 @@ class AssertTransformer(ast.NodeTransformer):
             ast.fix_missing_locations(stmt)
 
         return statements
+

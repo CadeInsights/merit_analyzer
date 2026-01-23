@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from merit.assertions.base import AssertionResult
+from merit.assertions.base import AssertionRepr, AssertionResult
 from merit.context import (
     ResolverContext,
     TestContext as Ctx,
@@ -263,9 +263,25 @@ async def test_metric_decorator_emits_metric_result_on_teardown_with_assertions_
 
     @metric(scope=Scope.CASE)
     def scored_metric():
-        AssertionResult(expression_repr="before", passed=True)
+        AssertionResult(
+            expression_repr=AssertionRepr(
+                expr="before",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+            passed=True,
+        )
         yield Metric("ignored")
-        AssertionResult(expression_repr="after", passed=False)
+        AssertionResult(
+            expression_repr=AssertionRepr(
+                expr="after",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+            passed=False,
+        )
         yield 123
         return 999  # ignored: metric final value comes from the second yield
 
@@ -280,7 +296,7 @@ async def test_metric_decorator_emits_metric_result_on_teardown_with_assertions_
     r = metric_results[0]
     assert r.name == "scored_metric"
     assert r.value == 123
-    assert [a.expression_repr for a in r.assertion_results] == ["before", "after"]
+    assert [a.expression_repr.expr for a in r.assertion_results] == ["before", "after"]
     assert r.metadata.scope == Scope.CASE
     assert r.metadata is not m.metadata
 

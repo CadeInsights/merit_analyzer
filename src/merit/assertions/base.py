@@ -12,6 +12,23 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class AssertionRepr:
+    """Represents a human-readable representation of an assertion expression.
+
+    Attributes:
+    ----------
+    expr
+        The expression string.
+    resolved_args
+        A dictionary of resolved argument names and values.
+    """
+    expr: str
+    lines_above: str
+    lines_below: str
+    resolved_args: dict[str, str]
+
+
+@dataclass
 class AssertionResult:
     """Result of evaluating a single assertion.
 
@@ -29,8 +46,6 @@ class AssertionResult:
         reporting.
     predicate_results
         Optional list of PredicateResult objects collected during the assertion.
-    metric_values
-        Optional list of MetricSnapshot objects collected during the assertion.
 
     Attributes:
     ----------
@@ -39,11 +54,10 @@ class AssertionResult:
         currently attached metrics.
     """
 
-    expression_repr: str
+    expression_repr: AssertionRepr
     passed: bool
     error_message: str | None = None
     predicate_results: list[PredicateResult] = field(default_factory=list)
-    metric_values: set[MetricSnapshot] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         collector = ASSERTION_RESULTS_COLLECTOR.get()
@@ -58,5 +72,10 @@ class AssertionResult:
         test_ctx = TEST_CONTEXT.get()
         if test_ctx is not None:
             if test_ctx.item.fail_fast and not self.passed:
-                msg = self.error_message or f"Assertion failed: {self.expression_repr}"
+                msg = self.error_message or f"Assertion failed: {self.expression_repr.expr}"
                 raise AssertionError(msg)
+
+
+def capture_var(values: dict[str, str], name: str, value: object) -> object:
+    values[name] = repr(value)
+    return value
