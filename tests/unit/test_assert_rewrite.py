@@ -218,6 +218,74 @@ def merit_repr_cases():
         sys.modules.pop(mod_name, None)
 
 
+def test_assertion_repr_compare_cases(tmp_path):
+    mod_name = f"merit_{uuid4().hex}"
+    mod_path = tmp_path / f"{mod_name}.py"
+    mod_path.write_text(
+        """
+def merit_compare_cases():
+    t1 = 5
+    t2 = 10
+    assert t1 < t2
+    assert t1 + t2 > 0
+    a = 1
+    b = 2
+    c = 3
+    assert a < b < c
+""".lstrip()
+    )
+
+    try:
+        [item] = collect(mod_path)
+        ctx = TestContext(item=item)
+        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+            item.fn()
+
+        assert len(ctx.assertion_results) == 3
+        results = {
+            ar.expression_repr.expr: ar.expression_repr for ar in ctx.assertion_results
+        }
+
+        assert results["assert t1 < t2"].resolved_args == {"t1": "5", "t2": "10"}
+        assert results["assert t1 + t2 > 0"].resolved_args == {"t1": "5", "t2": "10"}
+        assert results["assert a < b < c"].resolved_args == {"a": "1", "b": "2", "c": "3"}
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
+def test_assertion_repr_complex_compare_and_boolop(tmp_path):
+    mod_name = f"merit_{uuid4().hex}"
+    mod_path = tmp_path / f"{mod_name}.py"
+    mod_path.write_text(
+        """
+def merit_complex_compare_cases():
+    a = 5
+    b = [5, 6, 7]
+    def c():
+        return 20
+    assert a > 1 and a in b and sum(b) < c()
+""".lstrip()
+    )
+
+    try:
+        [item] = collect(mod_path)
+        ctx = TestContext(item=item)
+        with context_scope_ctx(ctx), assertions_collector(ctx.assertion_results):
+            item.fn()
+
+        assert len(ctx.assertion_results) == 1
+        [ar] = ctx.assertion_results
+        assert ar.expression_repr.expr == "assert a > 1 and a in b and sum(b) < c()"
+        assert ar.expression_repr.resolved_args == {
+            "a": "5",
+            "b": "[5, 6, 7]",
+            "sum(b)": "18",
+            "c()": "20",
+        }
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
 def test_assertion_repr_multiline_assert(tmp_path):
     mod_name = f"merit_{uuid4().hex}"
     mod_path = tmp_path / f"{mod_name}.py"

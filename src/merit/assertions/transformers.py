@@ -117,6 +117,27 @@ class AssertTransformer(ast.NodeTransformer):
                     label = expr_name(expr)
                 case ast.Call() | ast.ListComp() | ast.SetComp() | ast.GeneratorExp() | ast.DictComp():
                     label = expr_name(expr)
+                case ast.Compare():
+                    expr.left = wrap(expr.left)
+                    expr.comparators = [wrap(comparator) for comparator in expr.comparators]
+                    return expr
+                case ast.BinOp():
+                    expr.left = wrap(expr.left)
+                    expr.right = wrap(expr.right)
+                    return expr
+                case ast.BoolOp():
+                    expr.values = [wrap(value) for value in expr.values]
+                    return expr
+                case ast.UnaryOp():
+                    expr.operand = wrap(expr.operand)
+                    return expr
+                case ast.Tuple() | ast.List() | ast.Set():
+                    expr.elts = [wrap(elt) for elt in expr.elts]
+                    return expr
+                case ast.Dict():
+                    expr.keys = [wrap(key) if key is not None else None for key in expr.keys]
+                    expr.values = [wrap(value) for value in expr.values]
+                    return expr
                 case _:
                     return expr
 
