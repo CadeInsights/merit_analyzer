@@ -199,9 +199,7 @@ def merit_repr_cases():
             item.fn()
 
         assert len(assertion_results) == 5
-        results = {
-            ar.expression_repr.expr: ar.expression_repr for ar in assertion_results
-        }
+        results = {ar.expression_repr.expr: ar.expression_repr for ar in assertion_results}
 
         t1_repr = results["assert t1"]
         assert t1_repr.lines_above == "\n    print(t1)\n    print(t2)"
@@ -242,9 +240,7 @@ def merit_compare_cases():
             item.fn()
 
         assert len(assertion_results) == 3
-        results = {
-            ar.expression_repr.expr: ar.expression_repr for ar in assertion_results
-        }
+        results = {ar.expression_repr.expr: ar.expression_repr for ar in assertion_results}
 
         assert results["assert t1 < t2"].resolved_args == {"t1": "5", "t2": "10"}
         assert results["assert t1 + t2 > 0"].resolved_args == {"t1": "5", "t2": "10"}

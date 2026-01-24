@@ -186,7 +186,7 @@ class SQLiteStore(Store):
                 metric_id,
                 assertion.expression_repr.expr,
                 int(assertion.passed),
-                assertion.error_message
+                assertion.error_message,
             ),
         )
         return cast("int", cursor.lastrowid)

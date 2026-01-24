@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from merit.config import load_config
 
 
@@ -53,3 +55,22 @@ def test_load_config_defaults_when_missing(tmp_path: Path):
     assert config.addopts == []
     assert config.db_path is None
     assert config.save_to_db is True
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ("test_paths", ["."]),
+        ("include_tags", []),
+        ("exclude_tags", []),
+        ("keyword", None),
+        ("maxfail", None),
+        ("verbosity", 0),
+        ("addopts", []),
+        ("db_path", None),
+        ("save_to_db", True),
+    ],
+)
+def test_config_default_values(tmp_path: Path, field: str, expected):
+    config = load_config(tmp_path)
+    assert getattr(config, field) == expected

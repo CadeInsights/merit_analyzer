@@ -146,7 +146,8 @@ class Runner:
             for item in items:
                 item.fail_fast = True
 
-        await self._notify_collection_complete(items)
+        with merit_run_scope(merit_run):
+            await self._notify_collection_complete(items)
 
         resolver = ResourceResolver(get_registry())
         metric_results: list[MetricResult] = []

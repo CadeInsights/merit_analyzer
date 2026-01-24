@@ -17,7 +17,7 @@ class AssertionRepr:
     This class captures the assertion expression along with surrounding context
     lines and resolved argument values for debugging and reporting purposes.
 
-    Attributes
+    Attributes:
     ----------
     expr : str
         The assertion expression as a string.
@@ -29,6 +29,7 @@ class AssertionRepr:
         A dictionary mapping argument names to their string representations,
         showing the resolved values of variables used in the assertion.
     """
+
     expr: str
     lines_above: str
     lines_below: str
@@ -42,7 +43,7 @@ class AssertionResult:
     This class captures the outcome of an assertion, including whether it passed,
     the original expression, any error messages, and results from predicate evaluations.
 
-    Attributes
+    Attributes:
     ----------
     expression_repr : AssertionRepr
         A human-readable representation of the assertion expression, including
@@ -54,6 +55,7 @@ class AssertionResult:
     predicate_results : list[PredicateResult], optional
         Results from any predicate evaluations that were part of this assertion.
     """
+
     expression_repr: AssertionRepr
     passed: bool
     error_message: str | None = None
