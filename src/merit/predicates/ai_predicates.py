@@ -1,4 +1,4 @@
-from merit.predicates.base import PredicateMetadata, PredicateResult
+from merit.predicates.base import PredicateResult
 from merit.predicates.client import PredicateAPIRequest, PredicateType, get_predicate_api_client
 
 
@@ -44,12 +44,10 @@ async def has_conflicting_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="has_conflicting_facts",
-            actual=actual,
-            reference=reference,
-            strict=strict,
-        ),
+        actual=actual,
+        reference=reference,
+        name="has_conflicting_facts",
+        strict=strict,
         value=not resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -97,12 +95,10 @@ async def has_unsupported_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="has_unsupported_facts",
-            actual=actual,
-            reference=reference,
-            strict=strict,
-        ),
+        actual=actual,
+        reference=reference,
+        name="has_unsupported_facts",
+        strict=strict,
         value=not resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -150,9 +146,10 @@ async def has_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="has_facts", actual=actual, reference=reference, strict=strict
-        ),
+        actual=actual,
+        reference=reference,
+        name="has_facts",
+        strict=strict,
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -200,9 +197,10 @@ async def matches_facts(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="matches_facts", actual=actual, reference=reference, strict=strict
-        ),
+        actual=actual,
+        reference=reference,
+        name="matches_facts",
+        strict=strict,
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -250,9 +248,10 @@ async def has_topics(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="has_topics", actual=actual, reference=reference, strict=strict
-        ),
+        actual=actual,
+        reference=reference,
+        name="has_topics",
+        strict=strict,
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -300,9 +299,10 @@ async def follows_policy(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="follows_policy", actual=actual, reference=reference, strict=strict
-        ),
+        actual=actual,
+        reference=reference,
+        name="follows_policy",
+        strict=strict,
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -351,12 +351,10 @@ async def matches_writing_layout(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="matches_writing_layout",
-            actual=actual,
-            reference=reference,
-            strict=strict,
-        ),
+        actual=actual,
+        reference=reference,
+        name="matches_writing_layout",
+        strict=strict,
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,
@@ -404,12 +402,10 @@ async def matches_writing_style(
         )
     )
     return PredicateResult(
-        predicate_metadata=PredicateMetadata(
-            predicate_name="matches_writing_style",
-            actual=actual,
-            reference=reference,
-            strict=strict,
-        ),
+        actual=actual,
+        reference=reference,
+        name="matches_writing_style",
+        strict=strict,
         value=resp.passed,
         confidence=resp.confidence,
         message=resp.reasoning,

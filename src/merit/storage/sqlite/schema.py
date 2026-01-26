@@ -78,18 +78,16 @@ CREATE TABLE IF NOT EXISTS assertions (
 );
 
 CREATE TABLE IF NOT EXISTS predicates (
-    predicate_id        TEXT PRIMARY KEY,
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id              TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
     assertion_id        INTEGER REFERENCES assertions(id) ON DELETE CASCADE,
 
-    case_id             TEXT,
     predicate_name      TEXT,
-    merit_name          TEXT,
     actual              TEXT,
     reference           TEXT,
     strict              INTEGER,
     confidence          REAL,
-    value               INTEGER NOT NULL,
+    value               INTEGER,
     message             TEXT
 );
 
@@ -98,4 +96,5 @@ CREATE INDEX IF NOT EXISTS idx_assertions_execution ON assertions(test_execution
 CREATE INDEX IF NOT EXISTS idx_assertions_metric ON assertions(metric_id);
 CREATE INDEX IF NOT EXISTS idx_predicates_assertion ON predicates(assertion_id);
 CREATE INDEX IF NOT EXISTS idx_predicates_run ON predicates(run_id);
+CREATE INDEX IF NOT EXISTS idx_predicates_name ON predicates(predicate_name);
 """

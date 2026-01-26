@@ -51,16 +51,9 @@ def test_predicate_result_and_metadata_auto_filled():
         assert result
         assert result.value is True
         assert result.confidence == 1.0
-
-        predicate_metadata = result.predicate_metadata
-
-        # Predicate metadata
-        assert predicate_metadata.actual == "test"
-        assert predicate_metadata.reference == "test"
-
-        # Auto-filled identifiers
-        assert predicate_metadata.predicate_name == "simple_predicate"
-        assert predicate_metadata.merit_name == "merit_with_simple_predicate"
+        assert result.actual == "test"
+        assert result.reference == "test"
+        assert result.name == "simple_predicate"
 
     with context_scope(MeritTestContext(item=_make_item("merit_with_simple_predicate"))):
         merit_with_simple_predicate()
@@ -179,9 +172,21 @@ def test_predicate_decorator_supports_optional_kwargs():
     result = equals("test", "test")
 
     assert isinstance(result, PredicateResult)
-    assert result.predicate_metadata.predicate_name == "equals"
-    assert result.predicate_metadata.actual == "test"
-    assert result.predicate_metadata.reference == "test"
+    assert result.name == "equals"
+    assert result.actual == "test"
+    assert result.reference == "test"
+
+
+def test_predicate_decorator_rejects_unparsable_signature():
+    def define_bad_predicate():
+        @predicate
+        def bad(*, x: int) -> bool:
+            return True
+
+        return bad
+
+    with pytest.raises(TypeError, match=r"accept 'actual' and 'reference'|actual.*reference"):
+        define_bad_predicate()
 
 
 @pytest.mark.asyncio

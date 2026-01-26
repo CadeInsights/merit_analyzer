@@ -1,18 +1,15 @@
 """Base predicate classes and result types."""
 
-import inspect
-import logging
 from collections.abc import Awaitable, Callable
 from functools import wraps
+from inspect import Parameter, signature
+from asyncio import iscoroutinefunction
 from typing import Any, Protocol, cast, overload
-from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SerializationInfo, field_serializer
+from pydantic import BaseModel, Field
 
-from merit.context import PREDICATE_RESULTS_COLLECTOR, TEST_CONTEXT
+from merit.context import PREDICATE_RESULTS_COLLECTOR
 
-
-logger = logging.getLogger(__name__)
 
 # Protocols for predicate callables
 
@@ -39,11 +36,12 @@ class SyncPredicate(Protocol):
         The check outcome and metadata.
     """
 
+    @staticmethod
     def __call__(
-        self,
         actual: Any,
         reference: Any,
-        strict: bool = False,
+        *args: tuple[Any, ...],
+        **kwargs: dict[str, Any],
     ) -> "PredicateResult": ...
 
 
@@ -68,64 +66,19 @@ class AsyncPredicate(Protocol):
     PredicateResult
         The check outcome and metadata.
     """
-
+    @staticmethod
     async def __call__(
-        self,
         actual: Any,
         reference: Any,
-        strict: bool = False,
+        *args: tuple[Any, ...],
+        **kwargs: dict[str, Any],
     ) -> "PredicateResult": ...
 
 
 Predicate = AsyncPredicate | SyncPredicate
 
 
-# Models for metadata and result
-
-
-class PredicateMetadata(BaseModel):
-    """Metadata describing how a predicate was executed.
-
-    This model is attached to :class:`~merit.predicates.base.PredicateResult` and is
-    intended to make results self-describing and debuggable.
-
-    Notes:
-    -----
-    - If ``predicate_name`` / ``merit_name`` are not provided, they may be
-      auto-filled in :meth:`model_post_init` by inspecting the call stack.
-
-    Attributes:
-    ----------
-    actual
-        String representation of the observed value.
-    reference
-        String representation of the expected/ground-truth value.
-    strict
-        Strictness flag forwarded to the predicate implementation.
-    predicate_name
-        Name of the predicate callable (usually the function name).
-        Read-only.
-    merit_name
-        Name of the enclosing "merit" function, if available (e.g. ``merit_*``).
-        Read-only.
-    """
-
-    # Inputs
-    actual: str
-    reference: str
-    strict: bool = True
-
-    # Auto-filled Identifiers
-    predicate_name: str | None = None
-    merit_name: str | None = None
-
-    @field_serializer("actual", "reference")
-    def _truncate(self, v: str, info: SerializationInfo) -> str:
-        ctx = info.context or {}
-        if ctx.get("truncate"):
-            max_len = 50
-            return v if len(v) <= max_len else v[:max_len] + "..."
-        return v
+# Data model for predicate results
 
 
 class PredicateResult(BaseModel):
@@ -155,136 +108,136 @@ class PredicateResult(BaseModel):
     """
 
     # Metadata
-    id: UUID = Field(default_factory=uuid4)
-    case_id: UUID | None = None
-    predicate_metadata: PredicateMetadata
-    confidence: float = 1.0
+    actual: str
+    reference: str
+    name: str
+    strict: bool = True
+    confidence: float = Field(ge=0.0, le=1.0, default=1.0)
 
     # Result
     value: bool
     message: str | None = None
 
     def __repr__(self) -> str:
-        return self.model_dump_json(
-            indent=2,
-            exclude_none=True,
-            context={"truncate": True},
-        )
+        return self.model_dump_json(indent=2)
 
     def __bool__(self) -> bool:
+        # keep in post_init or move to __bool__?
         return self.value
 
     def model_post_init(self, __context: Any) -> None:
-        """Auto-fill the predicate_name and merit_name fields if not provided."""
-        test_ctx = TEST_CONTEXT.get()
-        if test_ctx is not None:
-            suffix = test_ctx.item.id_suffix
-            if suffix:
-                try:
-                    self.case_id = UUID(suffix)
-                except ValueError:
-                    pass  # suffix is not a valid UUID, leave case_id as None
-            if test_ctx.item.name:
-                self.predicate_metadata.merit_name = test_ctx.item.name
-
+        """Append to the predicate results collector."""
         collector = PREDICATE_RESULTS_COLLECTOR.get()
         if collector is not None:
             collector.append(self)
 
 
-def _filter_supported_kwargs(fn: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Return only kwargs that `fn` can accept."""
-    sig = inspect.signature(fn)
-    params = sig.parameters
-    accepts_varkw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
-    if accepts_varkw:
-        return kwargs
-
-    return {k: v for k, v in kwargs.items() if k in params}
+# Decorator for predicate functions
 
 
 @overload
-def predicate(func: Callable[[Any, Any], Awaitable[bool]]) -> AsyncPredicate: ...
+def predicate(func: Callable[..., Awaitable[bool]]) -> AsyncPredicate: ...
 
 
 @overload
-def predicate(func: Callable[[Any, Any], bool]) -> SyncPredicate: ...
+def predicate(func: Callable[..., bool]) -> SyncPredicate: ...
 
 
 def predicate(
-    func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]],
-) -> Predicate:
-    """Decorator to convert a simple comparison function into a full Predicate.
+    func: Callable[..., bool] | Callable[..., Awaitable[bool]]) -> Predicate:
+    """Decorate a predicate function so it returns a :class:`PredicateResult`.
 
-    Wraps a function that takes (actual, reference) -> bool and converts it
-    to follow the Predicate protocol, which includes the optional ``strict``
-    flag and returns a PredicateResult.
+    In Merit, all PredicateResults evaluated inside ``assert`` statements
+    are collected into :class:`~merit.assertions.base.AssertionResult`.
+    That helps with error analysis, reporting and aggregation.
 
-    Args:
-        func: A function that takes (actual, reference) and returns bool.
-              Can be sync or async.
+    The decorated function must return a boolean value, and take at least
+    two arguments:
+    - first positional argument (or ``actual`` keyword argument) will be parsed
+    as the actual value to compare against the reference value.
+    - second positional argument (or ``reference`` keyword argument) will be parsed
+    as the reference value to compare against the actual value.
 
-    Returns:
-        A predicate callable following the Predicate protocol (SyncPredicate or AsyncPredicate).
+    Optional keyword arguments:
+    - ``strict``: whether to enforce strict comparison semantics (predicate-specific).
+    - ``confidence``: confidence score in ``[0, 1]`` (predicate-specific semantics).
+    - ``message``: optional human-readable details about the outcome (e.g. mismatch explanation).
 
-    Example:
-        >>> @predicate
-        >>> def equals(actual, reference):
-        >>>     return actual == reference
-        >>>
-        >>> result = equals(5, 5)
-        >>> assert result.value is True
+    Examples:
+    --------
+    >>> @predicate
+    ... def is_even(actual: int, reference: int) -> bool:
+    ...     return actual % 2 == 0
+    ...
+    >>> assert is_even(1, 2)
+    ...
+    >>> @predicate
+    ... def within_tolerance(
+    ...     actual: float,
+    ...     reference: float,
+    ...     *,
+    ...     tolerance: float = 0.1,
+    ...     strict: bool = True,
+    ...     confidence: float = 1.0,
+    ... ) -> bool:
+    ...     delta = abs(actual - reference)
+    ...     if strict:
+    ...         return delta <= tolerance
+    ...     return delta <= 2 * tolerance
+    ...
+    >>> assert within_tolerance(10.05, 10.0, tolerance=0.01, strict=False, confidence=0.65)
     """
-    if inspect.iscoroutinefunction(func):
+    # import time signature check
+    sig = signature(func)
+    params = sig.parameters
+    kinds = [p.kind for p in params.values()]
+    positional_slots = sum(
+        k in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD) for k in kinds
+    )
+    accepts_actual_reference = (
+        (Parameter.VAR_KEYWORD in kinds)
+        or (
+            "actual" in params
+            and params["actual"].kind is not Parameter.POSITIONAL_ONLY
+            and "reference" in params
+            and params["reference"].kind is not Parameter.POSITIONAL_ONLY
+        )
+    )
+    if not (Parameter.VAR_POSITIONAL in kinds or positional_slots >= 2 or accepts_actual_reference):
+        msg = f"""@predicate function '{func.__name__}' must accept 'actual' and 'reference'
+            as the first two positional args, or as keywords ('actual=', 'reference=').
+            Got signature: {sig}"""
+        raise TypeError(msg)
 
+    if iscoroutinefunction(func):
         @wraps(func)
-        async def async_wrapper(
-            actual: Any,
-            reference: Any,
-            strict: bool = False,
-        ) -> PredicateResult:
-            extra = _filter_supported_kwargs(
-                func,
-                {
-                    "strict": strict,
-                },
-            )
-            result = await cast("Any", func)(actual, reference, **extra)
-            predicate_result = PredicateResult(
-                predicate_metadata=PredicateMetadata(
-                    actual=str(actual),
-                    reference=str(reference),
-                    strict=strict,
-                ),
+        async def async_wrapper(*args, **kwargs) -> PredicateResult:
+            binded_args = signature(AsyncPredicate.__call__).bind(*args, **kwargs).arguments
+            result = await func(*args, **kwargs)
+            return PredicateResult(
                 value=bool(result),
+                message=binded_args.get("kwargs", {}).get("message", None),
+                actual=str(binded_args["actual"]),
+                reference=str(binded_args["reference"]),
+                name=func.__name__,
+                strict=binded_args.get("kwargs", {}).get("strict", True),
+                confidence=binded_args.get("kwargs", {}).get("confidence", 1.0),
             )
-            predicate_result.predicate_metadata.predicate_name = func.__name__
-            return predicate_result
-
-        return cast("AsyncPredicate", async_wrapper)
+        return cast(AsyncPredicate, async_wrapper)
 
     @wraps(func)
-    def sync_wrapper(
-        actual: Any,
-        reference: Any,
-        strict: bool = False,
-    ) -> PredicateResult:
-        extra = _filter_supported_kwargs(
-            func,
-            {
-                "strict": strict,
-            },
-        )
-        result = cast("Any", func)(actual, reference, **extra)
-        predicate_result = PredicateResult(
-            predicate_metadata=PredicateMetadata(
-                actual=str(actual),
-                reference=str(reference),
-                strict=strict,
-            ),
+    def sync_wrapper(*args, **kwargs) -> PredicateResult:
+        binded_args = signature(SyncPredicate.__call__).bind(*args, **kwargs).arguments
+        result = func(*args, **kwargs)
+        return PredicateResult(
             value=bool(result),
+            message=binded_args.get("kwargs", {}).get("message", None),
+            actual=str(binded_args["actual"]),
+            reference=str(binded_args["reference"]),
+            name=func.__name__,
+            strict=binded_args.get("kwargs", {}).get("strict", True),
+            confidence=binded_args.get("kwargs", {}).get("confidence", 1.0),
         )
-        predicate_result.predicate_metadata.predicate_name = func.__name__
-        return predicate_result
 
-    return cast("SyncPredicate", sync_wrapper)
+    return cast(SyncPredicate, sync_wrapper)
+

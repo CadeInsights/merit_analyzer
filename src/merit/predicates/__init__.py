@@ -10,7 +10,7 @@ from .ai_predicates import (
     matches_writing_layout,
     matches_writing_style,
 )
-from .base import Predicate, PredicateMetadata, PredicateResult, predicate
+from .base import Predicate, PredicateResult, predicate
 from .client import (
     close_predicate_api_client,
     create_predicate_api_client,
@@ -22,7 +22,6 @@ __all__ = [
     # Predicate abstractions
     "Predicate",
     "PredicateResult",
-    "PredicateMetadata",
     "predicate",
     # Client for remote checks
     "create_predicate_api_client",
