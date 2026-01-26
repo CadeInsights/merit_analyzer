@@ -15,7 +15,7 @@ class FailTest(BaseException):
     """Explicitly fail the current test."""
 
     def __init__(self, reason: str = "") -> None:
-        self.reason = reason
+        self.reason = f"Explicit FAILED: {reason}"
         super().__init__(reason)
 
 

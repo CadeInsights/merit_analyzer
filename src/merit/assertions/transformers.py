@@ -113,9 +113,19 @@ class AssertTransformer(ast.NodeTransformer):
 
         def wrap(expr: ast.expr) -> ast.expr:
             match expr:
-                case ast.Name(ctx=ast.Load()) | ast.Attribute(ctx=ast.Load()) | ast.Subscript(ctx=ast.Load()):
+                case (
+                    ast.Name(ctx=ast.Load())
+                    | ast.Attribute(ctx=ast.Load())
+                    | ast.Subscript(ctx=ast.Load())
+                ):
                     label = expr_name(expr)
-                case ast.Call() | ast.ListComp() | ast.SetComp() | ast.GeneratorExp() | ast.DictComp():
+                case (
+                    ast.Call()
+                    | ast.ListComp()
+                    | ast.SetComp()
+                    | ast.GeneratorExp()
+                    | ast.DictComp()
+                ):
                     label = expr_name(expr)
                 case ast.Compare():
                     expr.left = wrap(expr.left)
@@ -166,7 +176,8 @@ class AssertTransformer(ast.NodeTransformer):
                         keywords=[],
                     ),
                     optional_vars=None,
-                )],
+                )
+            ],
             body=[
                 ast.Assign(
                     targets=[ast.Name(id=self.IS_PASSED_VAR_NAME, ctx=ast.Store())],
@@ -229,7 +240,7 @@ class AssertTransformer(ast.NodeTransformer):
             ast.keyword(
                 arg="predicate_results",
                 value=ast.Name(id=self.PREDICATE_RESULTS_VAR_NAME, ctx=ast.Load()),
-            )
+            ),
         ]
 
         if node.msg is not None:
@@ -255,4 +266,3 @@ class AssertTransformer(ast.NodeTransformer):
             ast.fix_missing_locations(stmt)
 
         return statements
-

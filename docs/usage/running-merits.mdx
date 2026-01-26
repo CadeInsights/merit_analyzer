@@ -182,22 +182,27 @@ concurrency = 4
 
 ## Understanding Test Output
 
-Merit reports test status as tests complete:
+Merit reports test status as tests complete with a compact line per file by default:
 
 ```
+===== MERIT RUN STARTS =====
+platform macOS-14.6.1-arm64-arm-64bit -- python 3.12.2 -- merit 0.9.1
+rootdir: /Users/you/workspace/project
+run_id: 3f5f5e9a-1c2d-4b5f-9c2b-7f6d8a9b0c1d
+git: main (abc12345) dirty
+
 Collected 12 tests
 
-  ✓ merit_chatbot_greeting (45.2ms)
-  ✓ merit_chatbot_context (123.8ms)
-  ✗ merit_agent_tool_call (234.1ms)
-    AssertionError: Expected tool_name == 'get_weather', got 'search'
-  ! merit_database_query (12.3ms)
-    ValueError: Connection refused
-  - merit_upcoming_feature skipped (Feature not implemented)
-  x merit_known_bug xfailed (Bug #123)
+tests/unit/test_chatbot.py ✓✓✗
+tests/unit/test_db.py !-
+tests/unit/test_known_issues.py x
 
-6 passed, 1 failed, 1 errors, 1 skipped, 1 xfailed in 892ms
+===== SUMMARY =====
+run_id: 3f5f5e9a-1c2d-4b5f-9c2b-7f6d8a9b0c1d | 6 passed, 1 failed, 1 errors, 1 skipped, 1 xfailed in 892ms
+==================
 ```
+
+Use `-v` to show per-test lines with durations and detailed sub-results.
 
 **Status symbols**:
 - `✓` (green): PASSED - Test succeeded
@@ -214,7 +219,7 @@ Collected 12 tests
 
 ### Repeated Tests
 
-For tests with `@merit.repeat()`, output shows aggregated results:
+For tests with `@merit.repeat()`, verbose output shows aggregated results:
 
 ```
   ✓ merit_llm_consistency (1234.5ms) 10/10 passed (≥10 required)

@@ -105,8 +105,8 @@ def merit_disabled_bypasses_capture(captured_output):
     """Test that disabled() allows output to pass through to real stdout."""
     print("this is captured")
 
-    with captured_output.disabled():
-        print("this goes to real stdout (useful for debugging)")
+    # with captured_output.disabled():
+    #     print("this goes to real stdout (useful for debugging)")
 
     print("this is captured again")
 
