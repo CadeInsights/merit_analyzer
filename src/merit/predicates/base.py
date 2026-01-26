@@ -89,10 +89,14 @@ class PredicateResult(BaseModel):
 
     Attributes:
     ----------
-    id
-        Unique identifier for this result instance.
-    predicate
-        Metadata describing inputs and configuration used for the check.
+    actual
+        Observed value produced by the system under test.
+    reference
+        Predefined value to compare against.
+    name
+        Name of the predicate function.
+    strict
+        Whether to enforce strict comparison semantics (predicate-specific).
     confidence
         Confidence score in ``[0, 1]`` (predicate-specific semantics).
     value
@@ -103,8 +107,7 @@ class PredicateResult(BaseModel):
     Notes:
     -----
     - ``bool(result)`` is equivalent to ``result.value``.
-    - ``repr(result)`` returns JSON with ``None`` fields excluded and
-      truncation enabled for long ``actual`` / ``reference`` strings.
+    - ``repr(result)`` returns JSON.
     """
 
     # Metadata
@@ -122,14 +125,11 @@ class PredicateResult(BaseModel):
         return self.model_dump_json(indent=2)
 
     def __bool__(self) -> bool:
-        # keep in post_init or move to __bool__?
-        return self.value
-
-    def model_post_init(self, __context: Any) -> None:
-        """Append to the predicate results collector."""
         collector = PREDICATE_RESULTS_COLLECTOR.get()
         if collector is not None:
-            collector.append(self)
+            collector.append(self)     
+
+        return self.value
 
 
 # Decorator for predicate functions

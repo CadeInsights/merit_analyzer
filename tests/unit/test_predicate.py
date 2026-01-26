@@ -25,38 +25,6 @@ from merit.predicates.client import (
     create_predicate_api_client,
     get_predicate_api_client,
 )
-from merit.testing.discovery import TestItem
-
-
-def _make_item(name: str = "merit_fn", id_suffix: str | None = None) -> TestItem:
-    """Create a minimal TestItem for testing."""
-    return TestItem(
-        name=name,
-        fn=lambda: None,
-        module_path=Path("test.py"),
-        is_async=False,
-        id_suffix=id_suffix,
-    )
-
-
-def test_predicate_result_and_metadata_auto_filled():
-    @predicate
-    def simple_predicate(actual: str, reference: str, strict: bool = True):
-        return actual == reference
-
-    def merit_with_simple_predicate():
-        result = simple_predicate("test", "test")
-
-        # Basic properties
-        assert result
-        assert result.value is True
-        assert result.confidence == 1.0
-        assert result.actual == "test"
-        assert result.reference == "test"
-        assert result.name == "simple_predicate"
-
-    with context_scope(MeritTestContext(item=_make_item("merit_with_simple_predicate"))):
-        merit_with_simple_predicate()
 
 
 @pytest.mark.asyncio

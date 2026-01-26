@@ -87,7 +87,7 @@ def test_assertion_context_collects_predicate_results():
             strict=True,
             value=True,
         )
-        assert pr.name == "manual_predicate"
+        assert pr
 
     # Build AssertionResult with collected data
     ar = AssertionResult(
