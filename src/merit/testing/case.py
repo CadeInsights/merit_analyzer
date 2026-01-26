@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Generic
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic.experimental.arguments_schema import generate_arguments_schema
 from pydantic_core import SchemaValidator, ArgsKwargs, ValidationError
 from typing_extensions import TypeVar
@@ -31,11 +31,13 @@ class Case(BaseModel, Generic[RefsT]):
         Set of tags for filtering or categorization of the test case.
     metadata : dict[str, str | int | float | bool | None]
         Arbitrary key-value pairs for additional context or reporting.
-    references : RefsT, optional
+    references : RefsT,
         Reference data used for validation or comparison during testing.
     sut_input_values : dict[str, Any]
         Input arguments to be passed to the System Under Test (SUT).
     """
+    model_config = ConfigDict(validate_default=True)
+
     id: UUID = Field(default_factory=uuid4)
     tags: set[str] = Field(default_factory=set)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)

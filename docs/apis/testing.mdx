@@ -342,7 +342,7 @@ Container for test case inputs and reference data.
 | `id` | `UUID` | Unique identifier (auto-generated) |
 | `tags` | `set[str]` | Tags for filtering or categorization |
 | `metadata` | `dict[str, str \| int \| float \| bool \| None]` | Arbitrary key-value pairs |
-| `references` | `RefsT \| None` | Reference data for validation (typed or dict) |
+| `references` | `RefsT` | Reference data for validation (typed or dict), defaults to `{}` |
 | `sut_input_values` | `dict[str, Any]` | Input arguments to pass to the SUT |
 
 **Example:**
@@ -422,18 +422,18 @@ def temp_dir():
 
 ### iter_cases
 
-Decorator to run a merit function for each case in a sequence.
+Decorator to run a merit function for each case.
 
 **Signature:**
 ```python
-def iter_cases(cases: Sequence[Case[RefsT]]) -> Callable
+def iter_cases(*cases: Case[RefsT]) -> Callable[[Callable[..., Any]], Callable[..., Any]]
 ```
 
 **Parameters:**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `cases` | `Sequence[Case[RefsT]]` | Sequence of test cases to iterate over |
+| `*cases` | `Case[RefsT]` | One or more test cases to iterate over |
 
 **Returns:** Decorator that applies parametrization using the cases
 
@@ -446,7 +446,7 @@ import json
 with open("test_cases.json") as f:
     cases = [Case(**item) for item in json.load(f)]
 
-@iter_cases(cases)
+@iter_cases(*cases)
 def merit_from_dataset(case: Case, classifier):
     result = classifier(**case.sut_input_values)
     
@@ -497,10 +497,7 @@ cases = [
 ]
 
 # Validate before running
-try:
-    valid_cases = validate_cases_for_sut(cases, my_agent)
-except Exception as e:
-    print(f"Invalid case: {e}")
+validate_cases_for_sut(cases, my_agent)  # Raises ValidationError by default
 
 # Or filter out invalid cases
 valid_cases = validate_cases_for_sut(cases, my_agent, raise_on_invalid=False)

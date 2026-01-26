@@ -137,7 +137,7 @@ def merit_model_response(model: str, temp: float, chatbot):
 
 See [Merit > Parametrization](/concepts/merit#parametrization) for details.
 
-**`@merit.iter_cases(cases)`** - Iterate over `Case` objects from external sources
+**`@merit.iter_cases(*cases)`** - Iterate over `Case` objects from external sources
 
 ```python
 import json
@@ -145,7 +145,7 @@ from merit import Case
 
 cases = [Case(**item) for item in json.load(open("cases.json"))]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 def merit_from_dataset(case: Case, classifier):
     result = classifier(**case.sut_input_values)
     if case.references:

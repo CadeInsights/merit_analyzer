@@ -461,7 +461,7 @@ def hallucination_rate():
     # Fail if more than 5% of responses contain hallucinations
     assert metric.distribution[False] >= 0.95
 
-@merit.iter_cases(qa_cases)
+@merit.iter_cases(*qa_cases)
 async def merit_support_bot_accuracy(case: Case, support_bot, hallucination_rate: Metric):
     context = case.references["context"]
     question = case.sut_input_values["question"]

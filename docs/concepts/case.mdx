@@ -33,7 +33,7 @@ case2 = Case(
 )
 
 # Run the same merit for each case
-@merit.iter_cases([case1, case2])
+@merit.iter_cases(case1, case2)
 def merit_agent_casual_tasks(case: Case, agent, trace_context):
     result = agent(**case.sut_input_values)
 
@@ -84,7 +84,7 @@ valid_cases = validate_cases_for_sut(
     raise_on_invalid=False  # Skip invalid cases instead of failing
 )
 
-@merit.iter_cases(valid_cases)
+@merit.iter_cases(*valid_cases)
 def merit_agent_with_validated_cases(case: Case[AgentReference], my_agent):
     result = my_agent(**case.sut_input_values)
     
@@ -144,7 +144,7 @@ precise_cases = [c for c in all_cases if c.references and c.references.tolerance
 # Combine filters
 fast_smoke = [c for c in all_cases if "smoke" in c.tags and "fast" in c.tags]
 
-@merit.iter_cases(smoke_cases)
+@merit.iter_cases(*smoke_cases)
 def merit_smoke_test(case: Case[CalculationReference], calculator):
     result = calculator(**case.sut_input_values)
     
@@ -166,7 +166,7 @@ from merit import Case, iter_cases
 # Hardcoding simple data in Case objects is unnecessary
 cases = [Case(sut_input_values={"x": 1}), Case(sut_input_values={"x": 2})]
 
-@merit.iter_cases(cases)
+@iter_cases(*cases)
 def merit_simple(case, add_one):
     result = add_one(**case.sut_input_values)
     assert result
@@ -190,7 +190,7 @@ class MathReference(BaseModel):
 
 cases: list[Case[MathReference]] = [Case(**item) for item in json.load(open("cases.json"))]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 def merit_from_file(case: Case[MathReference], add_one):
     result = add_one(**case.sut_input_values)
     
@@ -246,7 +246,7 @@ else:
     # Full suite locally
     test_cases = cases
 
-@merit.iter_cases(test_cases)
+@merit.iter_cases(*test_cases)
 def merit_text_processor(case: Case[ProcessorReference], processor):
     result = processor(**case.sut_input_values)
     
