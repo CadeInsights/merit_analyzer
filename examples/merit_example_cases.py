@@ -70,33 +70,30 @@ all_cases = [
 
 
 # Get output for each case input and assert against references
-@merit.iter_cases(all_cases)
+@merit.iter_cases(*all_cases)
 def merit_iter_cases_basic_usage(case: Case[ExampleReferences]):
     response = simple_chatbot(**case.sut_input_values)
 
-    if case.references:
-        assert case.references.expected in response
-        assert len(response) <= case.references.max_len
-        assert len(response) >= case.references.min_len
+    assert case.references.expected in response
+    assert len(response) <= case.references.max_len
+    assert len(response) >= case.references.min_len
 
 
 # Filter cases in code
-@merit.iter_cases([c for c in all_cases if "geography" in c.tags])
+@merit.iter_cases(*[c for c in all_cases if "geography" in c.tags])
 def merit_iter_cases_only_geography(case: Case[ExampleReferences]):
     response = simple_chatbot(**case.sut_input_values)
 
-    if case.references:
-        assert case.references.expected in response
-        assert len(response) <= case.references.max_len
-        assert len(response) >= case.references.min_len
+    assert case.references.expected in response
+    assert len(response) <= case.references.max_len
+    assert len(response) >= case.references.min_len
 
 
 # Fail early if any case has invalid input
-@merit.iter_cases(validate_cases_for_sut(all_cases, simple_chatbot))
+@merit.iter_cases(*validate_cases_for_sut(all_cases, simple_chatbot))
 def merit_iter_cases_with_validation(case: Case[ExampleReferences]):
     response = simple_chatbot(**case.sut_input_values)
 
-    if case.references:
-        assert case.references.expected in response
-        assert len(response) <= case.references.max_len
-        assert len(response) >= case.references.min_len
+    assert case.references.expected in response
+    assert len(response) <= case.references.max_len
+    assert len(response) >= case.references.min_len

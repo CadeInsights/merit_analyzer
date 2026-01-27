@@ -107,7 +107,7 @@ def hallucination_rate():
     yield metric
     assert metric.distribution[False] >= 0.95  # 95% must pass
 
-@merit.iter_cases(qa_dataset)
+@merit.iter_cases(*qa_dataset)
 async def merit_rag_accuracy(case: Case, rag_system, hallucination_rate: Metric):
     response = rag_system.query(**case.sut_input_values)
     
@@ -133,7 +133,7 @@ cases: list[Case[TranslationReference]] = [
     Case(**item) for item in json.load(open("test_cases.json"))
 ]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 async def merit_translation(case: Case[TranslationReference], translator):
     result = translator.translate(**case.sut_input_values)
     assert case.references.expected_translation in result.lower()
@@ -261,7 +261,7 @@ cases = [
 ]
 
 # Single merit function with semantic assertions
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 async def merit_factual_accuracy(
     case: Case, 
     support_bot, 

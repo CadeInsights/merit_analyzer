@@ -47,7 +47,7 @@ cases = [
     Case(sut_input_values={"prompt": "Shipping cost?"}, references={"context": "Free shipping over $50."}),
 ]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot):
     response = store_chatbot(**case.sut_input_values)
     
@@ -80,7 +80,7 @@ cases = [
     Case(sut_input_values={"prompt": "Shipping cost?"}, references={"context": "Free shipping over $50."}),
 ]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric):
     response = store_chatbot(**case.sut_input_values)
     
@@ -114,7 +114,7 @@ cases = [
     Case(sut_input_values={"prompt": "How much for the Nike Air Max?"}, references={"context": "Nike Air Max: $129.99", "expected_tool": "offer_product"}),
 ]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric, trace_context):
     response = store_chatbot(**case.sut_input_values)
     

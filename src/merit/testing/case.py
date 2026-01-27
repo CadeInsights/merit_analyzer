@@ -6,14 +6,18 @@ from collections.abc import Callable, Sequence
 from typing import Any, Generic
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, TypeAdapter
-from pydantic_core import SchemaValidator
+from pydantic import BaseModel, Field, ConfigDict
+from pydantic.experimental.arguments_schema import generate_arguments_schema
+from pydantic_core import SchemaValidator, ArgsKwargs, ValidationError
 from typing_extensions import TypeVar
 
 from merit.testing.decorators import parametrize
 
 
 RefsT = TypeVar("RefsT", default=dict[str, Any])
+
+
+# Data model for case values
 
 
 class Case(BaseModel, Generic[RefsT]):
@@ -27,21 +31,27 @@ class Case(BaseModel, Generic[RefsT]):
         Set of tags for filtering or categorization of the test case.
     metadata : dict[str, str | int | float | bool | None]
         Arbitrary key-value pairs for additional context or reporting.
-    references : RefsT, optional
+    references : RefsT,
         Reference data used for validation or comparison during testing.
     sut_input_values : dict[str, Any]
         Input arguments to be passed to the System Under Test (SUT).
     """
+    model_config = ConfigDict(validate_default=True)
 
     id: UUID = Field(default_factory=uuid4)
     tags: set[str] = Field(default_factory=set)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
-    references: RefsT | None = None
+    references: RefsT = Field(default_factory=dict)  # type: ignore[assignment]
     sut_input_values: dict[str, Any] = Field(default_factory=dict)
 
 
+# Validation engine
+
+
 def validate_cases_for_sut(
-    cases: Sequence[Case[RefsT]], sut: Callable[..., Any], raise_on_invalid: bool = True
+    cases: Sequence[Case[RefsT]], 
+    sut: Callable[..., Any], 
+    raise_on_invalid: bool = True,
 ) -> Sequence[Case[RefsT]]:
     """Return only the cases that match the signature of the System Under Test.
 
@@ -60,23 +70,31 @@ def validate_cases_for_sut(
         The cases that match the signature of the System Under Test.
     """
     valid_cases = []
-    schema = TypeAdapter(sut).core_schema
-    arg_schema = schema.get("arguments_schema", None)
-    if arg_schema:
-        validator = SchemaValidator(arg_schema)  # type: ignore[arg-type]
-        for case in cases:
-            input_values = case.sut_input_values or {}
-            try:
-                validator.validate_python(input_values)
-                valid_cases.append(case)
-            except Exception as e:
-                if raise_on_invalid:
-                    raise e
-                continue
+    schema = generate_arguments_schema(
+        sut,
+        parameters_callback=(
+            lambda index, name, annotation: 
+            "skip" if name in {"self", "cls"} else None)
+    )
+    validator = SchemaValidator(schema)
+    for case in cases:
+        input_values = case.sut_input_values or {}
+        try:
+            parsed_args = ArgsKwargs(args=(), kwargs=input_values)
+            validator.validate_python(parsed_args)
+            # append if valid
+            valid_cases.append(case)
+        except ValidationError as e:
+            if raise_on_invalid:
+                raise e
+            continue
     return valid_cases
 
 
-def iter_cases(cases: Sequence[Case[RefsT]]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+# Iteration decorator for Merit definitions
+
+
+def iter_cases(*cases: Case[RefsT]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to run a test function for each case in the provided sequence.
 
     Parameters
@@ -89,5 +107,11 @@ def iter_cases(cases: Sequence[Case[RefsT]]) -> Callable[[Callable[..., Any]], C
     Callable
         A decorator that applies parametrization to the target function.
     """
-    ids = [str(c.id) for c in cases]
-    return parametrize("case", cases, ids=ids)
+    cases_list = list(cases)
+
+    # backwards compatibility with old API
+    if len(cases_list) == 1 and isinstance(cases_list[0], (list, tuple)):
+        cases_list = list(cases_list[0])
+        
+    ids = [str(c.id) for c in cases_list]
+    return parametrize("case", cases_list, ids=ids)

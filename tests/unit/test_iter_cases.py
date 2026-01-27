@@ -62,7 +62,7 @@ def test_iter_cases_decorator():
     """Test iter_cases decorator attaches cases correctly."""
     cases = [Case(sut_input_values={"x": 1}), Case(sut_input_values={"x": 2})]
 
-    @iter_cases(cases)
+    @iter_cases(*cases)
     def my_test(case):
         pass
 

@@ -184,7 +184,7 @@ import json
 with open("merit_cases.json") as f:
     cases = [Case(**item) for item in json.load(f)]
 
-@merit.iter_cases(cases)
+@merit.iter_cases(*cases)
 def merit_from_dataset(case: Case, classifier):
     result = classifier(**case.sut_input_values)
     
