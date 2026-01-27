@@ -107,5 +107,11 @@ def iter_cases(*cases: Case[RefsT]) -> Callable[[Callable[..., Any]], Callable[.
     Callable
         A decorator that applies parametrization to the target function.
     """
-    ids = [str(c.id) for c in cases]
-    return parametrize("case", cases, ids=ids)
+    cases_list = list(cases)
+
+    # backwards compatibility with old API
+    if len(cases_list) == 1 and isinstance(cases_list[0], (list, tuple)):
+        cases_list = list(cases_list[0])
+        
+    ids = [str(c.id) for c in cases_list]
+    return parametrize("case", cases_list, ids=ids)
