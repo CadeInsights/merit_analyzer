@@ -161,7 +161,7 @@ def test_metric_result_is_collected_when_collector_is_active():
 def test_metrics_context_accepts_legacy_list_argument():
     m = Metric("acc")
 
-    with metrics([m]):
+    with metrics([m]): # type: ignore
         AssertionResult(
             expression_repr=AssertionRepr(
                 expr="x",
