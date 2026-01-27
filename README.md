@@ -76,7 +76,7 @@ async def merit_chatbot_no_hallucinations(
     response = store_chatbot(**case.sut_input_values)
     
     # Verify the answer don't have any unsupported facts
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert not await has_unsupported_facts(response, case.references.kb)
     
     # Verify tool was called when expected

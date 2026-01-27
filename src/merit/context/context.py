@@ -136,15 +136,21 @@ def resolver_context_scope(ctx: ResolverContext) -> Iterator[None]:
 
 
 @contextmanager
-def metrics(ctx: list[Metric]) -> Iterator[None]:
+def metrics(*metrics: Metric) -> Iterator[None]:
     """Attach metrics to the current execution scope via `METRIC_CONTEXT`.
 
     Parameters
     ----------
-    ctx : list[Metric]
+    metrics : Metric
         Metrics to expose to the current execution scope.
     """
-    token = METRIC_CONTEXT.set(ctx)
+    metrics_list = list(metrics)
+    
+    # backwards compatibility with old API
+    if len(metrics_list) == 1 and isinstance(metrics_list[0], (list, tuple)):
+        metrics_list = list(metrics_list[0])
+
+    token = METRIC_CONTEXT.set(metrics_list)
     try:
         yield
     finally:

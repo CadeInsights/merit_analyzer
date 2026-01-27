@@ -136,7 +136,7 @@ def merit_chatbot_accuracy(chatbot, accuracy: Metric):
     
     for question, expected in test_cases:
         answer = chatbot.ask(question)
-        with metrics([accuracy]):
+        with metrics(accuracy):
             assert expected.lower() in answer.lower()
 ```
 
@@ -653,7 +653,7 @@ async def merit_support_responses(
     hallucination_check = await has_unsupported_facts(response, context)
     
     # Contribute to aggregate metric
-    with metrics([hallucination_rate]):
+    with metrics(hallucination_rate):
         assert not hallucination_check
 ```
 

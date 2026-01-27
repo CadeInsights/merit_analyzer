@@ -84,7 +84,7 @@ cases = [
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric):
     response = store_chatbot(**case.sut_input_values)
     
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert not await has_unsupported_facts(response, case.references["context"])
         assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
 ```
@@ -118,7 +118,7 @@ cases = [
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric, trace_context):
     response = store_chatbot(**case.sut_input_values)
     
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert not await has_unsupported_facts(response, case.references["context"])
     
     # Verify tool was called when expected

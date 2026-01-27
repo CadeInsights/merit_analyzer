@@ -473,7 +473,7 @@ async def merit_support_bot_accuracy(case: Case, support_bot, hallucination_rate
     hallucination_check = await has_unsupported_facts(answer, context)
     
     # Track pass/fail across all cases
-    with metrics([hallucination_rate]):
+    with metrics(hallucination_rate):
         assert not hallucination_check  # False = no hallucinations = pass
 ```
 

@@ -111,7 +111,7 @@ def hallucination_rate():
 async def merit_rag_accuracy(case: Case, rag_system, hallucination_rate: Metric):
     response = rag_system.query(**case.sut_input_values)
     
-    with metrics([hallucination_rate]):
+    with metrics(hallucination_rate):
         assert not await has_unsupported_facts(response, case.references["context"])
 ```
 
@@ -273,11 +273,11 @@ async def merit_factual_accuracy(
     
     # Semantic assertion: no hallucinations
     hallucinated = await has_unsupported_facts(response, context)
-    with metrics([hallucination_rate]):
+    with metrics(hallucination_rate):
         assert not hallucinated
     
     # Semantic assertion: contains required facts
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert await has_facts(response, case.references["required_facts"])
 
 # Policy compliance with repeated runs

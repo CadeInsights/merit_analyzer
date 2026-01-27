@@ -109,7 +109,7 @@ def test_metrics_records_assertion_passed_and_reads_test_context_for_metadata():
     m1 = Metric(name="m1")
     m2 = Metric(name="m2")
 
-    with context_scope(test_ctx), metrics([m1, m2]):
+    with context_scope(test_ctx), metrics(m1, m2):
         # AssertionResult.__post_init__ calls metric.add_record(self.passed)
         ar1 = AssertionResult(
             passed=True,

@@ -110,7 +110,7 @@ def merit_metric_capture_multi():
         m = Metric(name="assert_outcomes")
         with (
             context_scope_ctx(ctx),
-            metrics_scope_ctx([m]),
+            metrics_scope_ctx(m),
             assertions_collector(assertion_results),
         ):
             item.fn()

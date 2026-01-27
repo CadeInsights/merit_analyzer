@@ -62,7 +62,7 @@ def latency_ms():
 def merit_test(accuracy: Metric, latency_ms: Metric):
     result = model.predict("input")
     
-    with metrics([accuracy, latency_ms]):
+    with metrics(accuracy, latency_ms):
         assert result == "expected"
 ```
 
@@ -145,7 +145,7 @@ def merit_quality_check(input, expected, response_quality: Metric):
     is_correct = result == expected
     
     # Record to metric
-    with metrics([response_quality]):
+    with metrics(response_quality):
         assert is_correct
 ```
 
@@ -230,14 +230,14 @@ Attach metrics to assertions for automatic data collection.
 **Signature:**
 ```python
 @contextmanager
-def metrics(ctx: list[Metric]) -> Iterator[None]
+def metrics(*metrics: Metric) -> Iterator[None]
 ```
 
 **Parameters:**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `ctx` | `list[Metric]` | Metrics to record assertion outcomes into |
+| `metrics` | `Metric` | Metrics to record assertion outcomes into |
 
 **Returns:** Context manager that captures assertion results
 
@@ -273,7 +273,7 @@ async def merit_bot_quality(question, context, bot, accuracy: Metric, hallucinat
     answer = bot.ask(question, context=context)
     
     # Multiple metrics in one context
-    with metrics([accuracy, hallucination_rate]):
+    with metrics(accuracy, hallucination_rate):
         # Each assertion records True/False to all metrics
         assert len(answer) > 0
         assert not await has_unsupported_facts(answer, context)
@@ -326,7 +326,7 @@ def merit_classifier(input, expected, classifier, accuracy: Metric):
     result = classifier(input)
     
     # Automatic recording based on assertion outcome
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert result == expected  # Records True/False
 ```
 
@@ -353,12 +353,12 @@ def merit_evaluation(model, precision: Metric, recall: Metric):
     for pred, actual in zip(predictions, ground_truth):
         # Track precision
         if pred == "positive":
-            with metrics([precision]):
+            with metrics(precision):
                 assert pred == actual
         
         # Track recall  
         if actual == "positive":
-            with metrics([recall]):
+            with metrics(recall):
                 assert pred == actual
 ```
 
@@ -445,6 +445,6 @@ def success_rate():
 def merit_reliability(llm, success_rate: Metric):
     response = llm.generate("Hello")
     
-    with metrics([success_rate]):
+    with metrics(success_rate):
         assert "hello" in response.lower()
 ```

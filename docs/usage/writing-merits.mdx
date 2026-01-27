@@ -93,7 +93,7 @@ def merit_classifier(input, expected, classifier, accuracy: Metric):
     result = classifier(input)
     
     # Assertions inside metrics() are recorded as 1 (pass) or 0 (fail)
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert result == expected
 ```
 
@@ -252,7 +252,7 @@ def merit_classifier(input, expected, classifier, accuracy: Metric):
     result = classifier(input)
     
     # Assertions inside metrics() are recorded as True/False
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert result == expected
 ```
 

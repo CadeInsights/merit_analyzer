@@ -63,7 +63,7 @@ def merit_expected_true(band: str, false_negatives: Metric):
     If AI returns False: register it as a false negative.
     """
     is_good = band_quality_classifier(band)
-    with metrics([false_negatives]):
+    with metrics(false_negatives):
         assert is_good
 
 
@@ -73,7 +73,7 @@ def merit_expected_false(band: str, false_positives: Metric):
     If AI returns True: register it as a false positive.
     """
     is_good = band_quality_classifier(band)
-    with metrics([false_positives]):
+    with metrics(false_positives):
         assert not is_good
 
 
@@ -145,26 +145,6 @@ def merit_hallucinations_test(
     If AI returns a different state or country: register it as a hallucination for the case.
     """
     result = geography_bot(city)
-    with metrics([case_hallucinations_count]):
-        assert expected_state in result
-        assert expected_country in result
-
-
-@merit.parametrize(
-    "city,expected_state,expected_country",
-    [
-        ("Denver", "Colorado", "USA"),
-        ("Phoenix", "Arizona", "USA"),
-        ("Austin", "Texas", "USA"),
-    ],
-)
-def merit_hallucinations_test_correct_responses(
-    city: str, expected_state: str, expected_country: str, case_hallucinations_count: Metric
-):
-    """Test geography bot with cities that return correct responses.
-    These cases should have zero hallucinations.
-    """
-    result = geography_bot(city)
-    with metrics([case_hallucinations_count]):
+    with metrics(case_hallucinations_count):
         assert expected_state in result
         assert expected_country in result

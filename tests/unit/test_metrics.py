@@ -9,6 +9,7 @@ from merit.context import (
     ResolverContext,
     TestContext as Ctx,
     metric_results_collector,
+    metrics,
     resolver_context_scope,
     test_context_scope as context_scope,
 )
@@ -155,6 +156,23 @@ def test_metric_result_is_collected_when_collector_is_active():
         )
     assert len(results) == 1
     assert results[0].name == "x"
+
+
+def test_metrics_context_accepts_legacy_list_argument():
+    m = Metric("acc")
+
+    with metrics([m]): # type: ignore
+        AssertionResult(
+            expression_repr=AssertionRepr(
+                expr="x",
+                lines_above="",
+                lines_below="",
+                resolved_args={},
+            ),
+            passed=True,
+        )
+
+    assert m.raw_values == [True]
 
 
 @pytest.mark.asyncio

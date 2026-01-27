@@ -32,13 +32,13 @@ def merit_classifier_accuracy(my_classifier, input, expected, accuracy: Metric):
     result = my_classifier(input)
     
     # Assertions inside metrics() are recorded as True/False
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert result == expected
 ```
 
 ## Recording assertions with selected metrics
 
-When you use `with metrics([metric1, metric2]):`, any assertions inside that block are automatically recorded:
+When you use `with metrics(metric1, metric2):`, any assertions inside that block are automatically recorded:
 - Passing assertions record `True`
 - Failing assertions record `False`
 - recorded bool values available inside metric1.raw_values and metric2.raw_values
@@ -126,7 +126,7 @@ def merit_geography_bot(
     result = geography_bot(city)
     
     # Each case tracks its own hallucinations
-    with metrics([case_hallucinations_count]):
+    with metrics(case_hallucinations_count):
         assert expected_state in result
 ```
 
@@ -179,13 +179,13 @@ def false_negatives(accuracy: Metric):
 @merit.parametrize("input", ["good1", "good2", "good3"])
 def merit_positive_cases(input: str, false_negatives: Metric):
     result = classifier(input)
-    with metrics([false_negatives]):
+    with metrics(false_negatives):
         assert result == True
 
 @merit.parametrize("input", ["bad1", "bad2", "bad3"])
 def merit_negative_cases(input: str, false_positives: Metric):
     result = classifier(input)
-    with metrics([false_positives]):
+    with metrics(false_positives):
         assert result == False
 ```
 
@@ -229,7 +229,7 @@ def merit_test(accuracy: Metric):
     result = classifier("input")
     
     # Automatic tracking is cleaner and safer
-    with metrics([accuracy]):
+    with metrics(accuracy):
         assert result == "expected"
 ```
 
