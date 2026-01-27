@@ -15,7 +15,7 @@ from merit.context import (
     test_context_scope as context_scope,
 )
 from merit.metrics_.base import Metric, metric
-from merit.predicates.base import PredicateMetadata, PredicateResult
+from merit.predicates.base import PredicateResult
 from merit.resources import ResourceResolver, Scope, clear_registry
 from merit.testing.discovery import TestItem
 
@@ -81,11 +81,13 @@ def test_assertion_context_collects_predicate_results():
     ):
         # PredicateResult should attach itself to the collector
         pr = PredicateResult(
-            predicate_metadata=PredicateMetadata(actual="a", reference="b", strict=True),
+            actual="a",
+            reference="b",
+            name="manual_predicate",
+            strict=True,
             value=True,
         )
-
-        assert pr.predicate_metadata.merit_name == "merit_name"
+        assert pr
 
     # Build AssertionResult with collected data
     ar = AssertionResult(

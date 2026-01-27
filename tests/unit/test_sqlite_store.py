@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from merit.assertions.base import AssertionRepr, AssertionResult
 from merit.metrics_.base import MetricMetadata, MetricResult
-from merit.predicates.base import PredicateMetadata, PredicateResult
+from merit.predicates.base import PredicateResult
 from merit.resources import Scope
 from merit.storage.sqlite import SQLiteStore
 from merit.testing.models.definition import MeritTestDefinition
@@ -148,19 +148,14 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
     store = SQLiteStore(db_path)
 
     execution_id = uuid4()
-    predicate_meta = PredicateMetadata(
+    predicate_result = PredicateResult(
         actual="actual",
         reference="reference",
+        name="equals",
         strict=True,
-        predicate_name="equals",
-        merit_name="merit_test",
-    )
-    predicate_result = PredicateResult(
-        predicate_metadata=predicate_meta,
         value=False,
         confidence=0.3,
         message="nope",
-        case_id=uuid4(),
     )
     assertion = AssertionResult(
         expression_repr=AssertionRepr(
@@ -229,7 +224,6 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
     predicates = store.get_predicates_for_assertion(assertions[0]["id"])
     assert len(predicates) == 1
     assert predicates[0]["predicate_name"] == "equals"
-    assert predicates[0]["merit_name"] == "merit_test"
 
     run_assertions = store.get_assertions_for_run(run.run_id)
     assert any(row["metric_id"] is not None for row in run_assertions)

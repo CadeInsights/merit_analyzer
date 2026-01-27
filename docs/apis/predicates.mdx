@@ -10,16 +10,16 @@ Convert a comparison function into a full predicate with automatic result wrappi
 
 **Signature:**
 ```python
-@predicate(func: Callable[[Any, Any], bool] | Callable[[Any, Any], Awaitable[bool]])
+@predicate(func: Callable[..., bool] | Callable[..., Awaitable[bool]])
 ```
 
 **Parameters:**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `func` | `Callable` | Function that takes `(actual, reference)` and returns `bool` |
+| `func` | `Callable` | Function that returns `bool` and accepts `actual` and `reference` (as the first two positional args, or as `actual=`, `reference=` keywords) |
 
-**Returns:** `Predicate` - Function that returns `PredicateResult` with optional `strict` parameter
+**Returns:** `Predicate` - A wrapped callable that returns `PredicateResult`
 
 **Example:**
 ```python
@@ -55,9 +55,10 @@ Result of a predicate evaluation with metadata and confidence.
 
 | Name | Type | Description |
 |------|------|-------------|
-| `id` | `UUID` | Unique identifier for this result |
-| `case_id` | `UUID \| None` | ID of the test case this result belongs to |
-| `predicate_metadata` | `PredicateMetadata` | Metadata about the evaluation |
+| `actual` | `str` | String representation of observed value |
+| `reference` | `str` | String representation of expected value |
+| `name` | `str` | Name of the predicate function |
+| `strict` | `bool` | Strictness flag used in evaluation |
 | `confidence` | `float` | Confidence score in `[0, 1]` |
 | `value` | `bool` | Boolean outcome of the check |
 | `message` | `str \| None` | Optional explanation or reasoning |
@@ -66,8 +67,8 @@ Result of a predicate evaluation with metadata and confidence.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `__bool__()` | `bool` | Returns `value` (allows `if result:` checks) |
-| `__repr__()` | `str` | JSON representation with truncated fields |
+| `__bool__()` | `bool` | Appends the result to the current collector (if any), then returns `value` |
+| `__repr__()` | `str` | JSON representation (Pydantic `model_dump_json`) |
 
 **Example:**
 ```python
@@ -87,37 +88,10 @@ async def merit_test():
     if result:
         print("Check passed!")
     
-    # Access metadata
-    print(result.predicate_metadata.predicate_name)  # "has_facts"
-```
-
----
-
-### PredicateMetadata
-
-Metadata describing how a predicate was executed.
-
-**Attributes:**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `actual` | `str` | String representation of observed value |
-| `reference` | `str` | String representation of expected value |
-| `strict` | `bool` | Strictness flag used in evaluation |
-| `predicate_name` | `str \| None` | Name of the predicate function (auto-filled) |
-| `merit_name` | `str \| None` | Name of the enclosing merit function (auto-filled) |
-
-**Example:**
-```python
-async def merit_example():
-    result = await has_facts("Text", "Reference")
-    
-    meta = result.predicate_metadata
-    print(meta.predicate_name)  # "has_facts"
-    print(meta.merit_name)      # "merit_example"
-    print(meta.actual)          # "Text"
-    print(meta.reference)       # "Reference"
-    print(meta.strict)          # False
+    # Access stored inputs / config
+    print(result.name)       # "has_facts"
+    print(result.actual)     # "Paris is the capital of France"
+    print(result.reference)  # "capital of France"
 ```
 
 ---
@@ -492,7 +466,7 @@ async def merit_detailed_analysis(bot):
     if not result.value:
         print(f"Check failed with confidence {result.confidence}")
         print(f"Reason: {result.message}")
-        print(f"Predicate: {result.predicate_metadata.predicate_name}")
+        print(f"Predicate: {result.name}")
     
     # Results automatically collected for reporting
     # No manual registration needed

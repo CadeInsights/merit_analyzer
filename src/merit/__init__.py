@@ -2,7 +2,7 @@
 
 from .context import metrics
 from .metrics_ import Metric, metric
-from .predicates import Predicate, PredicateMetadata, PredicateResult, predicate
+from .predicates import Predicate, PredicateResult, predicate
 from .testing import (
     Case,
     fail,
@@ -35,7 +35,6 @@ __all__ = [
     # Predicates
     "predicate",
     "PredicateResult",
-    "PredicateMetadata",
     "Predicate",
     # Metrics
     "Metric",

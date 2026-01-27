@@ -54,9 +54,9 @@ ASSERTION_INSERT_SQL = """
 
 PREDICATE_INSERT_SQL = """
     INSERT INTO predicates (
-        predicate_id, run_id, assertion_id, case_id, predicate_name,
-        merit_name, actual, reference, strict, confidence, value, message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        run_id, assertion_id, predicate_name, actual, reference,
+        strict, confidence, value, message
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -198,20 +198,16 @@ class SQLiteStore(Store):
         assertion_id: int,
         predicate: PredicateResult,
     ) -> None:
-        meta = predicate.predicate_metadata
         conn.execute(
             PREDICATE_INSERT_SQL,
             (
-                str(predicate.id),
                 str(run_id),
                 assertion_id,
-                str(predicate.case_id) if predicate.case_id else None,
-                meta.predicate_name,
-                meta.merit_name,
-                meta.actual,
-                meta.reference,
-                int(meta.strict) if meta.strict is not None else None,
-                predicate.confidence if predicate.confidence is not None else None,
+                predicate.name,
+                predicate.actual,
+                predicate.reference,
+                int(predicate.strict),
+                predicate.confidence,
                 int(predicate.value),
                 predicate.message,
             ),

@@ -48,7 +48,7 @@ def merit_sample():
         assert "equals(1, 1)" in ar.expression_repr.expr
 
         assert len(ar.predicate_results) == 1
-        assert ar.predicate_results[0].predicate_metadata.predicate_name == "equals"
+        assert ar.predicate_results[0].name == "equals"
 
     finally:
         sys.modules.pop(mod_name, None)
