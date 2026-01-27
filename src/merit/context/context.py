@@ -144,7 +144,13 @@ def metrics(*metrics: Metric) -> Iterator[None]:
     metrics : Metric
         Metrics to expose to the current execution scope.
     """
-    token = METRIC_CONTEXT.set(list(metrics))
+    metrics_list = list(metrics)
+    
+    # backwards compatibility with old API
+    if len(metrics_list) == 1 and isinstance(metrics_list[0], (list, tuple)):
+        metrics_list = list(metrics_list[0])
+
+    token = METRIC_CONTEXT.set(metrics_list)
     try:
         yield
     finally:
