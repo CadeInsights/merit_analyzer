@@ -1,6 +1,7 @@
 """SQLite storage backend for Merit test runs."""
 
 import json
+import linecache
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,8 @@ from merit.testing.models.run import MeritRun, RunEnvironment, RunResult
 DEFAULT_DB_NAME = ".merit/merit.db"
 SCHEMA_VERSION = 1
 
+MAX_REPR_LENGTH = 2000  # Max length for repr of local variables
+
 RUN_INSERT_SQL = """
     INSERT INTO runs (
         run_id, start_time, end_time, total_duration_ms,
@@ -33,8 +36,8 @@ EXECUTION_INSERT_SQL = """
     INSERT INTO test_executions (
         execution_id, run_id, parent_id, test_name, file_path, class_name,
         case_id, id_suffix, trace_id, tags_json, skip_reason, xfail_reason,
-        status, duration_ms, error_message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status, duration_ms, error_message, error_traceback
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 METRIC_INSERT_SQL = """
@@ -95,6 +98,53 @@ class SQLiteStore(Store):
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
+    def _format_traceback(self, error: BaseException) -> str | None:
+        if error.__traceback__ is None:
+            return None
+
+        # Serialize traceback frames (including locals) so runs can be replayed later.
+        frames = []
+        tb = error.__traceback__
+
+        while tb is not None:
+            frame = tb.tb_frame
+            code = frame.f_code
+
+            # Store a compact repr for locals to keep the payload small.
+            frame_locals = {
+                k: self._safe_repr(v) for k, v in frame.f_locals.items() if not k.startswith("__")
+            }
+
+            frames.append(
+                {
+                    "filename": code.co_filename,
+                    "lineno": tb.tb_lineno,
+                    "name": code.co_name,
+                    # Cache source line at capture time in case files change later.
+                    "line": linecache.getline(code.co_filename, tb.tb_lineno).strip(),
+                    "locals": frame_locals,
+                }
+            )
+
+            tb = tb.tb_next
+
+        # JSON format mirrors rich.traceback so we can reconstruct a display later.
+        # But should be usable even outside of Rich.
+        return json.dumps(
+            {
+                "exc_type": type(error).__name__,
+                "exc_value": str(error),
+                "frames": frames,
+            }
+        )
+
+    def _safe_repr(self, value: object) -> str:
+        try:
+            r = repr(value)
+            return r[:MAX_REPR_LENGTH] + "..." if len(r) > MAX_REPR_LENGTH else r
+        except Exception as e:
+            return f"<{type(value).__name__} (repr error: {e})>"
+
     def save_run(self, run: MeritRun) -> None:
         """Save a complete test run."""
         with self._connect() as conn:
@@ -125,7 +175,9 @@ class SQLiteStore(Store):
             while stack:
                 execution, parent_id = stack.pop()
                 defn = execution.definition
-                error_msg = str(execution.result.error) if execution.result.error else None
+                error = execution.result.error
+                error_msg = str(error) if error else None
+                error_tb = self._format_traceback(error) if error else None
                 test_name = getattr(defn, "name", str(defn))
                 module_path = getattr(defn, "module_path", None)
                 file_path = str(module_path) if module_path else None
@@ -154,11 +206,11 @@ class SQLiteStore(Store):
                         execution.status.value,
                         execution.duration_ms,
                         error_msg,
+                        error_tb,
                     )
                 )
 
-                for sub in execution.sub_executions:
-                    stack.append((sub, execution_id))
+                stack.extend((sub, execution_id) for sub in execution.sub_executions)
 
             if execution_rows:
                 conn.executemany(EXECUTION_INSERT_SQL, execution_rows)

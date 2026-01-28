@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS test_executions (
 
     status              TEXT NOT NULL,
     duration_ms         REAL NOT NULL,
-    error_message       TEXT
+    error_message       TEXT,
+    error_traceback     TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tests_run ON test_executions(run_id);

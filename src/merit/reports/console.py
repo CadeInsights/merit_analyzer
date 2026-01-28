@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import linecache
 import math
 import sys
 from pathlib import Path
@@ -10,7 +12,8 @@ from typing import TYPE_CHECKING
 from rich.console import Console, Group
 from rich.markup import escape
 from rich.panel import Panel
-from rich.traceback import Traceback
+from rich.pretty import Node
+from rich.traceback import Frame, Stack, Trace, Traceback
 
 from merit.context import get_runner
 from merit.reports.base import Reporter
@@ -436,3 +439,39 @@ class ConsoleReporter(Reporter):
             self.console.print(
                 f"[dim]Tracing written to {output_path} ({output_path.stat().st_size} bytes)[/dim]"
             )
+
+    @staticmethod
+    def rich_traceback_from_json(data: str, *, show_locals: bool = False) -> Traceback:
+        """Reconstruct a Rich Traceback from stored JSON data.
+
+        Rich's Traceback normally requires live exception objects. This function
+        rebuilds a displayable Traceback from our stored JSON format by manually
+        constructing the internal Trace -> Stack -> Frame hierarchy.
+        """
+        parsed = json.loads(data)
+        frames = []
+        for f in parsed["frames"]:
+            # Convert stored repr strings to Rich Node objects for display
+            locals_nodes: dict[str, Node] | None = None
+            if show_locals and f.get("locals"):
+                locals_nodes = {k: Node(value_repr=v) for k, v in f["locals"].items()}
+
+            # Use stored line, fall back to linecache if source file still exists
+            frames.append(
+                Frame(
+                    filename=f["filename"],
+                    lineno=f["lineno"],
+                    name=f["name"],
+                    line=f.get("line") or linecache.getline(f["filename"], f["lineno"]).strip(),
+                    locals=locals_nodes,
+                )
+            )
+
+        # Build Rich's internal structure: Trace contains Stacks, Stack contains Frames
+        stack = Stack(
+            exc_type=parsed["exc_type"],
+            exc_value=parsed["exc_value"],
+            frames=frames,
+        )
+
+        return Traceback(Trace(stacks=[stack]), show_locals=show_locals)
