@@ -62,6 +62,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of concurrent tests (default: 1, 0 for unlimited up to 10)",
     )
     test_parser.add_argument(
+        "--timeout",
+        type=float,
+        help="Global test run timeout in seconds",
+    )
+    test_parser.add_argument(
         "--trace",
         action="store_true",
         help="Enable OpenTelemetry tracing of tests and SUT calls",
@@ -132,6 +137,12 @@ def _resolve_concurrency(args: argparse.Namespace, config: MeritConfig) -> int:
     return config.concurrency
 
 
+def _resolve_timeout(args: argparse.Namespace, config: MeritConfig) -> float | None:
+    if args.timeout is not None:
+        return args.timeout if args.timeout > 0 else None
+    return config.timeout
+
+
 def _collect_items(paths: Sequence[str]) -> list[TestItem]:
     items: list[TestItem] = []
     for path in paths:
@@ -169,6 +180,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
     maxfail = _resolve_maxfail(args, config)
     verbosity = _resolve_verbosity(args, config)
     concurrency = _resolve_concurrency(args, config)
+    timeout = _resolve_timeout(args, config)
     db_path = args.db_path or config.db_path
     save_to_db = config.save_to_db
     if args.no_db:
@@ -185,6 +197,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         maxfail=maxfail,
         verbosity=verbosity,
         concurrency=concurrency,
+        timeout=timeout,
         enable_tracing=args.trace,
         trace_output=args.trace_output,
         fail_fast=args.fail_fast,

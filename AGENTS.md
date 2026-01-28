@@ -1,6 +1,5 @@
 # Code Patterns
 - Don't do defensive programming. Try-catch are acceptible only after having approval from the user.
-- Helpers are not acceptiable without user's permission.
 - Follow OOP and DRY.
 - Keep code short. Smaller is better.
 - No method-level imports. All imports should be at the top of the file.

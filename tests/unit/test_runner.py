@@ -395,19 +395,27 @@ class TestConcurrency:
 
 
 class TestTimeout:
-    """Tests for per-test timeout."""
+    """Tests for run-level timeout."""
 
     @pytest.mark.asyncio
-    async def test_timeout_triggers_error(self):
+    async def test_timeout_stops_new_starts(self):
         async def slow_test():
-            await asyncio.sleep(10)
+            await asyncio.sleep(0.1)
 
-        item = make_item(slow_test, is_async=True)
-        runner = Runner(reporters=[], concurrency=2, timeout=0.1)
-        result = await runner.run(items=[item])
+        async def quick_test():
+            await asyncio.sleep(0.01)
 
-        assert result.result.errors == 1
-        assert "timed out" in str(result.result.executions[0].result.error).lower()
+        items = [
+            make_item(quick_test, name="quick", is_async=True),
+            make_item(slow_test, name="slow", is_async=True),
+        ]
+        runner = Runner(reporters=[], concurrency=1, timeout=0.05)
+        result = await runner.run(items=items)
+
+        assert result.result.stopped_early
+        assert result.result.passed == 1
+        assert result.result.skipped == 0
+        assert result.result.total == 1
 
     @pytest.mark.asyncio
     async def test_no_timeout_by_default(self):

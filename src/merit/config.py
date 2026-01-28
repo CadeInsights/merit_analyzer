@@ -21,6 +21,7 @@ class MeritConfig:
     verbosity: int
     addopts: list[str]
     concurrency: int  # 1=sequential, 0=unlimited, max default=10
+    timeout: float | None
     db_path: str | None
     save_to_db: bool
 
@@ -34,6 +35,7 @@ DEFAULT_CONFIG = MeritConfig(
     verbosity=0,
     addopts=[],
     concurrency=1,
+    timeout=None,
     db_path=None,
     save_to_db=True,
 )
@@ -51,6 +53,7 @@ def load_config(start_path: str | Path | None = None) -> MeritConfig:
         verbosity=DEFAULT_CONFIG.verbosity,
         addopts=list(DEFAULT_CONFIG.addopts),
         concurrency=DEFAULT_CONFIG.concurrency,
+        timeout=DEFAULT_CONFIG.timeout,
         db_path=DEFAULT_CONFIG.db_path,
         save_to_db=DEFAULT_CONFIG.save_to_db,
     )
@@ -112,6 +115,7 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         "verbosity": "verbosity",
         "addopts": "addopts",
         "concurrency": "concurrency",
+        "timeout": "timeout",
         "db-path": "db_path",
         "db_path": "db_path",
         "save-to-db": "save_to_db",
@@ -137,6 +141,9 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         elif attr == "concurrency":
             if isinstance(value, int) and value >= 0:
                 config.concurrency = value
+        elif attr == "timeout":
+            if isinstance(value, (int, float)) and value > 0:
+                config.timeout = float(value)
         elif attr == "db_path":
             if isinstance(value, str):
                 config.db_path = value

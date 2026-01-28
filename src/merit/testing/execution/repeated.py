@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
@@ -36,8 +37,7 @@ class RepeatedMeritTest(MeritTest):
 
     async def execute(self, resolver: ResourceResolver) -> TestExecution:
         """Execute test count times and aggregate results."""
-        sub_executions: list[TestExecution] = []
-
+        tasks: list[asyncio.Task[TestExecution]] = []
         for i in range(self.count):
             suffix = f"repeat={i}"
             child_def = replace(
@@ -46,8 +46,9 @@ class RepeatedMeritTest(MeritTest):
                 id_suffix=suffix,
             )
             child = self.factory.build(child_def, self.params)
-            child_execution = await child.execute(resolver)
-            sub_executions.append(child_execution)
+            tasks.append(asyncio.create_task(child.execute(resolver)))
+
+        sub_executions = await asyncio.gather(*tasks)
 
         passed = sum(1 for e in sub_executions if e.result.status == TestStatus.PASSED)
         status = TestStatus.PASSED if passed >= self.min_passes else TestStatus.FAILED

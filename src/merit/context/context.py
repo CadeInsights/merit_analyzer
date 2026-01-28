@@ -12,7 +12,8 @@ if TYPE_CHECKING:
     from merit.assertions.base import AssertionResult
     from merit.metrics_.base import Metric, MetricResult
     from merit.predicates.base import PredicateResult
-    from merit.testing.models import MeritRun, MeritTestDefinition
+    from merit.testing.models import MeritTestDefinition
+    from merit.testing.runner import Runner
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +64,7 @@ METRIC_RESULTS_COLLECTOR: ContextVar[list[MetricResult] | None] = ContextVar(
 TEST_CONTEXT: ContextVar[TestContext | None] = ContextVar("test_context", default=None)
 RESOLVER_CONTEXT: ContextVar[ResolverContext | None] = ContextVar("resolver_context", default=None)
 METRIC_CONTEXT: ContextVar[list[Metric] | None] = ContextVar("metric_context", default=None)
-MERIT_RUN_CONTEXT: ContextVar[MeritRun | None] = ContextVar("merit_run_context", default=None)
+RUNNER_CONTEXT: ContextVar[Runner | None] = ContextVar("runner_context", default=None)
 
 
 def get_test_context() -> TestContext | None:
@@ -71,9 +72,9 @@ def get_test_context() -> TestContext | None:
     return TEST_CONTEXT.get()
 
 
-def get_merit_run() -> MeritRun | None:
-    """Get the current merit run, or None if not in a run."""
-    return MERIT_RUN_CONTEXT.get()
+def get_runner() -> Runner | None:
+    """Get the current runner, or None if not in a run."""
+    return RUNNER_CONTEXT.get()
 
 
 @contextmanager
@@ -145,7 +146,7 @@ def metrics(*metrics: Metric) -> Iterator[None]:
         Metrics to expose to the current execution scope.
     """
     metrics_list = list(metrics)
-    
+
     # backwards compatibility with old API
     if len(metrics_list) == 1 and isinstance(metrics_list[0], (list, tuple)):
         metrics_list = list(metrics_list[0])
@@ -158,16 +159,10 @@ def metrics(*metrics: Metric) -> Iterator[None]:
 
 
 @contextmanager
-def merit_run_scope(run: MeritRun) -> Iterator[None]:
-    """Temporarily set `MERIT_RUN_CONTEXT` for the duration of the ``with`` block.
-
-    Parameters
-    ----------
-    run : MeritRun
-        The merit run to bind as the current run context.
-    """
-    token = MERIT_RUN_CONTEXT.set(run)
+def runner_scope(runner: Runner) -> Iterator[None]:
+    """Temporarily set `RUNNER_CONTEXT` for the duration of the ``with`` block."""
+    token = RUNNER_CONTEXT.set(runner)
     try:
         yield
     finally:
-        MERIT_RUN_CONTEXT.reset(token)
+        RUNNER_CONTEXT.reset(token)

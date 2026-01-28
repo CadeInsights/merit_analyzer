@@ -1,10 +1,8 @@
 import json
-from pathlib import Path
 
 import httpx
 import pytest
 
-from merit.context import TestContext as MeritTestContext, test_context_scope as context_scope
 from merit.predicates.ai_predicates import (
     follows_policy,
     has_conflicting_facts,

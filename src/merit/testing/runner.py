@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import time
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
 from merit.context import (
-    merit_run_scope,
     metric_results_collector,
+    runner_scope,
 )
 from merit.context.output_capture import sys_output_capture
 from merit.metrics_.base import MetricResult
@@ -19,7 +20,7 @@ from merit.predicates import (
     create_predicate_api_client,
 )
 from merit.reports import ConsoleReporter, Reporter
-from merit.resources import ResourceResolver, Scope, get_registry
+from merit.resources import ResourceResolver, get_registry
 from merit.storage import SQLiteStore
 from merit.testing.discovery import collect
 from merit.testing.environment import capture_environment
@@ -95,6 +96,12 @@ class Runner:
             result_builder=self._result_builder,
         )
 
+        # Used in single.py test execution through run_context
+        self.semaphore: asyncio.Semaphore | None = None
+        self.stop_flag: bool = False
+
+        self.merit_run: MeritRun | None = None
+
     async def _notify_no_tests_found(self) -> None:
         await asyncio.gather(*[r.on_no_tests_found() for r in self.reporters])
 
@@ -126,7 +133,7 @@ class Runner:
             MeritRun with environment, results, and test executions.
         """
         environment = capture_environment()
-        merit_run = MeritRun(environment=environment)
+        self.merit_run = MeritRun(environment=environment)
 
         create_predicate_api_client()
 
@@ -139,63 +146,109 @@ class Runner:
 
         if not items:
             await self._notify_no_tests_found()
-            merit_run.end_time = datetime.now(UTC)
-            return merit_run
+            self.merit_run.end_time = datetime.now(UTC)
+            return self.merit_run
 
         if self.fail_fast:
             for item in items:
                 item.fail_fast = True
 
-        with merit_run_scope(merit_run):
-            await self._notify_collection_complete(items)
-
-        resolver = ResourceResolver(get_registry())
         metric_results: list[MetricResult] = []
-
         start = time.perf_counter()
+
         with (
+            runner_scope(self),
             sys_output_capture(swallow=self.capture_output),
-            merit_run_scope(merit_run),
             metric_results_collector(metric_results),
         ):
-            if self.concurrency == 1:
-                await self._run_sequential(items, resolver, merit_run)
-            else:
-                await self._run_concurrent(items, resolver, merit_run)
+            await self._notify_collection_complete(items)
 
-            await resolver.teardown()
+            resolver = ResourceResolver(get_registry())
+
+            self.semaphore = asyncio.Semaphore(self.concurrency)
+            self.stop_flag = False
+
+            execution = self._execute_run(
+                items=items,
+                resolver=resolver,
+                merit_run=self.merit_run,
+            )
+
+            run_task = asyncio.create_task(execution)
+
+            try:
+                if self.timeout:
+                    await asyncio.wait_for(run_task, timeout=self.timeout)
+                else:
+                    await run_task
+            except TimeoutError:
+                self.merit_run.result.stopped_early = True
+                self.stop_flag = True
 
         await close_predicate_api_client()
 
-        merit_run.result.total_duration_ms = (time.perf_counter() - start) * 1000
-        merit_run.result.metric_results = metric_results.copy()
-        merit_run.end_time = datetime.now(UTC)
+        self.merit_run.result.total_duration_ms = (time.perf_counter() - start) * 1000
+        self.merit_run.result.metric_results = metric_results.copy()
+        self.merit_run.end_time = datetime.now(UTC)
 
-        await self._notify_run_complete(merit_run)
+        await self._notify_run_complete(self.merit_run)
 
         if self.enable_tracing:
             await self._notify_tracing_enabled(self.trace_output)
 
         if self.save_to_db:
             try:
-                SQLiteStore(self.db_path).save_run(merit_run)
+                SQLiteStore(self.db_path).save_run(self.merit_run)
             except Exception as e:
-                # Log warning but don't fail the run
-                # TODO: implement failover??
-                import warnings
-
                 warnings.warn(f"Failed to persist run to database: {e}", RuntimeWarning)
 
-        return merit_run
+        return self.merit_run
+
+    async def _execute_run(
+        self,
+        *,
+        items: list[MeritTestDefinition],
+        resolver: ResourceResolver,
+        merit_run: MeritRun,
+    ) -> None:
+        """Execute the test run with the given items and resolver."""
+        try:
+            if self.concurrency == 1:
+                await self._run_sequential(items, resolver, merit_run)
+            else:
+                await self._run_concurrent(items, resolver, merit_run)
+        finally:
+            await resolver.teardown()
+
+    async def _execute_item(
+        self, item: MeritTestDefinition, resolver: ResourceResolver
+    ) -> TestExecution:
+        """Execute a single test with error handling."""
+        test = self._factory.build(item)
+        t_start = time.perf_counter()
+
+        try:
+            execution = await test.execute(resolver)
+        except Exception as e:
+            duration = (time.perf_counter() - t_start) * 1000
+            return TestExecution(
+                definition=item,
+                result=TestResult(status=TestStatus.ERROR, duration_ms=duration, error=e),
+                execution_id=uuid4(),
+            )
+
+        return execution
 
     async def _run_sequential(
         self, items: list[MeritTestDefinition], resolver: ResourceResolver, merit_run: MeritRun
     ) -> None:
         """Run tests sequentially."""
         failures = 0
+
         for item in items:
-            test = self._factory.build(item)
-            execution = await test.execute(resolver)
+            if self.stop_flag:
+                break
+            execution = await self._execute_item(item, resolver)
             await self._notify_test_complete(execution)
 
             merit_run.result.executions.append(execution)
@@ -204,75 +257,40 @@ class Runner:
                 failures += 1
                 if self.maxfail and failures >= self.maxfail:
                     merit_run.result.stopped_early = True
+                    self.stop_flag = True
                     await self._notify_run_stopped_early(self.maxfail)
                     break
 
     async def _run_concurrent(
         self, items: list[MeritTestDefinition], resolver: ResourceResolver, merit_run: MeritRun
     ) -> None:
-        """Run tests concurrently with semaphore control."""
-        semaphore = asyncio.Semaphore(self.concurrency)
+        """Run tests concurrently."""
         lock = asyncio.Lock()
         failures = 0
-        stop_flag = False
+        results: list[TestExecution | None] = [None] * len(items)
 
-        async def run_one(idx: int, item: MeritTestDefinition) -> tuple[int, TestExecution | None]:
-            nonlocal failures, stop_flag
-            if stop_flag:
-                return (idx, None)
-            async with semaphore:
-                if stop_flag:
-                    return (idx, None)
+        async def run_one(idx: int, item: MeritTestDefinition) -> None:
+            nonlocal failures
 
-                execution: TestExecution
-                t_start = time.perf_counter()
-                try:
-                    test = self._factory.build(item)
-                    if self.timeout:
-                        execution = await asyncio.wait_for(
-                            test.execute(resolver),
-                            timeout=self.timeout,
-                        )
-                    else:
-                        execution = await test.execute(resolver)
-                except TimeoutError:
-                    duration = (time.perf_counter() - t_start) * 1000
-                    execution = TestExecution(
-                        definition=item,
-                        result=TestResult(
-                            status=TestStatus.ERROR,
-                            duration_ms=duration,
-                            error=TimeoutError(f"Test timed out after {self.timeout}s"),
-                        ),
-                        execution_id=uuid4(),
-                    )
-                except Exception as e:
-                    duration = (time.perf_counter() - t_start) * 1000
-                    execution = TestExecution(
-                        definition=item,
-                        result=TestResult(status=TestStatus.ERROR, duration_ms=duration, error=e),
-                        execution_id=uuid4(),
-                    )
-                await resolver.teardown_scope(Scope.CASE)
+            if self.stop_flag:
+                return
 
-                if execution.result.status.is_failure:
-                    async with lock:
-                        failures += 1
-                        if self.maxfail and failures >= self.maxfail:
-                            stop_flag = True
-                            merit_run.result.stopped_early = True
-                return (idx, execution)
+            execution = await self._execute_item(item, resolver)
 
-        indexed_results = await asyncio.gather(
+            if execution.result.status.is_failure:
+                async with lock:
+                    failures += 1
+                    if self.maxfail and failures >= self.maxfail:
+                        self.stop_flag = True
+                        merit_run.result.stopped_early = True
+
+            results[idx] = execution
+
+        await asyncio.gather(
             *[run_one(i, item) for i, item in enumerate(items)], return_exceptions=True
         )
 
-        sorted_results = sorted(
-            (r for r in indexed_results if isinstance(r, tuple) and r[1] is not None),
-            key=lambda x: x[0],
-        )
-
-        for _, execution in sorted_results:
+        for execution in results:
             if execution is not None:
                 merit_run.result.executions.append(execution)
                 await self._notify_test_complete(execution)
