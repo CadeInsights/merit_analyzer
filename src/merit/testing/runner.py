@@ -199,11 +199,11 @@ class Runner:
         if self.save_to_db:
             try:
                 store = SQLiteStore(self.db_path)
-                store.save_run(merit_run)
+                store.save_run(self.merit_run)
                 if self.enable_tracing:
                     collector = get_span_collector()
                     if collector:
-                        store.save_trace_spans(merit_run, collector)
+                        store.save_trace_spans(self.merit_run, collector)
             except Exception as e:
                 warnings.warn(f"Failed to persist run to database: {e}", RuntimeWarning)
 
