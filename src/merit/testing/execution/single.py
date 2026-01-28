@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from merit.context import (
     ResolverContext,
     TestContext,
     assertions_collector,
+    get_runner,
     resolver_context_scope,
     test_context_scope,
 )
@@ -44,6 +46,19 @@ class SingleMeritTest(MeritTest):
 
     async def execute(self, resolver: ResourceResolver) -> TestExecution:
         """Execute the test and return result."""
+        runner = get_runner()
+
+        if runner is not None and runner.stop_flag:
+            return TestExecution(
+                definition=self.definition,
+                result=TestResult(
+                    status=TestStatus.SKIPPED,
+                    duration_ms=0,
+                    error=Exception("Run stopped early"),
+                ),
+                execution_id=uuid4(),
+            )
+
         if self.definition.skip_reason:
             return TestExecution(
                 definition=self.definition,
@@ -70,17 +85,30 @@ class SingleMeritTest(MeritTest):
 
             with test_context_scope(ctx), assertions_collector(assertion_results):
                 try:
-                    kwargs = await self._resolve_params(forked_resolver)
-                    await self._invoke(kwargs)
+                    semaphore = (
+                        runner.semaphore
+                        if runner and runner.semaphore
+                        else contextlib.nullcontext()
+                    )
+
+                    async with semaphore:
+                        kwargs = await self._resolve_params(forked_resolver)
+
+                        if runner and runner.stop_flag:
+                            imperative_outcome = TestStatus.SKIPPED
+                            error = Exception("Run stopped early")
+                        else:
+                            await self._invoke(kwargs)
+
                 except SkipTest as e:
                     imperative_outcome = TestStatus.SKIPPED
-                    error = Exception(e.reason) if e.reason else None
+                    error = e
                 except FailTest as e:
                     imperative_outcome = TestStatus.FAILED
-                    error = AssertionError(e.reason) if e.reason else AssertionError()
+                    error = e
                 except XFailTest as e:
                     imperative_outcome = TestStatus.XFAILED
-                    error = Exception(e.reason) if e.reason else None
+                    error = e
                 except Exception as e:  # noqa: BLE001
                     error = e
                 finally:
@@ -106,8 +134,10 @@ class SingleMeritTest(MeritTest):
                 result = self.result_builder.build(
                     self.definition, duration_ms, assertion_results, error
                 )
+
             trace_id = self.tracer.get_trace_id(span)
             self.tracer.record(span, result)
+
             return TestExecution(
                 definition=self.definition,
                 result=result,

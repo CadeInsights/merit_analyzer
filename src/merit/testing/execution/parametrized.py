@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
@@ -36,8 +37,7 @@ class ParametrizedMeritTest(MeritTest):
 
     async def execute(self, resolver: ResourceResolver) -> TestExecution:
         """Execute test for each parameter set and aggregate results."""
-        sub_executions: list[TestExecution] = []
-
+        tasks: list[asyncio.Task[TestExecution]] = []
         for ps in self.parameter_sets:
             child_def = replace(
                 self.definition,
@@ -46,8 +46,9 @@ class ParametrizedMeritTest(MeritTest):
             )
             child_params = {**self.params, **ps.values}
             child = self.factory.build(child_def, child_params)
-            child_execution = await child.execute(resolver)
-            sub_executions.append(child_execution)
+            tasks.append(asyncio.create_task(child.execute(resolver)))
+
+        sub_executions = await asyncio.gather(*tasks)
 
         has_failure = any(e.result.status.is_failure for e in sub_executions)
         status = TestStatus.FAILED if has_failure else TestStatus.PASSED

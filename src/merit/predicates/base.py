@@ -1,9 +1,9 @@
 """Base predicate classes and result types."""
 
+from asyncio import iscoroutinefunction
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from inspect import Parameter, signature
-from asyncio import iscoroutinefunction
 from typing import Any, Protocol, cast, overload
 
 from pydantic import BaseModel, Field
@@ -66,6 +66,7 @@ class AsyncPredicate(Protocol):
     PredicateResult
         The check outcome and metadata.
     """
+
     @staticmethod
     async def __call__(
         actual: Any,
@@ -127,7 +128,7 @@ class PredicateResult(BaseModel):
     def __bool__(self) -> bool:
         collector = PREDICATE_RESULTS_COLLECTOR.get()
         if collector is not None:
-            collector.append(self)     
+            collector.append(self)
 
         return self.value
 
@@ -143,8 +144,7 @@ def predicate(func: Callable[..., Awaitable[bool]]) -> AsyncPredicate: ...
 def predicate(func: Callable[..., bool]) -> SyncPredicate: ...
 
 
-def predicate(
-    func: Callable[..., bool] | Callable[..., Awaitable[bool]]) -> Predicate:
+def predicate(func: Callable[..., bool] | Callable[..., Awaitable[bool]]) -> Predicate:
     """Decorate a predicate function so it returns a :class:`PredicateResult`.
 
     In Merit, all PredicateResults evaluated inside ``assert`` statements
@@ -168,9 +168,7 @@ def predicate(
     >>> @predicate
     ... def is_even(actual: int, reference: int) -> bool:
     ...     return actual % 2 == 0
-    ...
     >>> assert is_even(1, 2)
-    ...
     >>> @predicate
     ... def within_tolerance(
     ...     actual: float,
@@ -184,7 +182,6 @@ def predicate(
     ...     if strict:
     ...         return delta <= tolerance
     ...     return delta <= 2 * tolerance
-    ...
     >>> assert within_tolerance(10.05, 10.0, tolerance=0.01, strict=False, confidence=0.65)
     """
     # import time signature check
@@ -194,14 +191,11 @@ def predicate(
     positional_slots = sum(
         k in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD) for k in kinds
     )
-    accepts_actual_reference = (
-        (Parameter.VAR_KEYWORD in kinds)
-        or (
-            "actual" in params
-            and params["actual"].kind is not Parameter.POSITIONAL_ONLY
-            and "reference" in params
-            and params["reference"].kind is not Parameter.POSITIONAL_ONLY
-        )
+    accepts_actual_reference = (Parameter.VAR_KEYWORD in kinds) or (
+        "actual" in params
+        and params["actual"].kind is not Parameter.POSITIONAL_ONLY
+        and "reference" in params
+        and params["reference"].kind is not Parameter.POSITIONAL_ONLY
     )
     if not (Parameter.VAR_POSITIONAL in kinds or positional_slots >= 2 or accepts_actual_reference):
         msg = f"""@predicate function '{func.__name__}' must accept 'actual' and 'reference'
@@ -210,6 +204,7 @@ def predicate(
         raise TypeError(msg)
 
     if iscoroutinefunction(func):
+
         @wraps(func)
         async def async_wrapper(*args, **kwargs) -> PredicateResult:
             binded_args = signature(AsyncPredicate.__call__).bind(*args, **kwargs).arguments
@@ -223,7 +218,8 @@ def predicate(
                 strict=binded_args.get("kwargs", {}).get("strict", True),
                 confidence=binded_args.get("kwargs", {}).get("confidence", 1.0),
             )
-        return cast(AsyncPredicate, async_wrapper)
+
+        return cast("AsyncPredicate", async_wrapper)
 
     @wraps(func)
     def sync_wrapper(*args, **kwargs) -> PredicateResult:
@@ -239,5 +235,4 @@ def predicate(
             confidence=binded_args.get("kwargs", {}).get("confidence", 1.0),
         )
 
-    return cast(SyncPredicate, sync_wrapper)
-
+    return cast("SyncPredicate", sync_wrapper)

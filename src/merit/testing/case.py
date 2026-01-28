@@ -6,9 +6,9 @@ from collections.abc import Callable, Sequence
 from typing import Any, Generic
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.experimental.arguments_schema import generate_arguments_schema
-from pydantic_core import SchemaValidator, ArgsKwargs, ValidationError
+from pydantic_core import ArgsKwargs, SchemaValidator, ValidationError
 from typing_extensions import TypeVar
 
 from merit.testing.decorators import parametrize
@@ -36,6 +36,7 @@ class Case(BaseModel, Generic[RefsT]):
     sut_input_values : dict[str, Any]
         Input arguments to be passed to the System Under Test (SUT).
     """
+
     model_config = ConfigDict(validate_default=True)
 
     id: UUID = Field(default_factory=uuid4)
@@ -49,8 +50,8 @@ class Case(BaseModel, Generic[RefsT]):
 
 
 def validate_cases_for_sut(
-    cases: Sequence[Case[RefsT]], 
-    sut: Callable[..., Any], 
+    cases: Sequence[Case[RefsT]],
+    sut: Callable[..., Any],
     raise_on_invalid: bool = True,
 ) -> Sequence[Case[RefsT]]:
     """Return only the cases that match the signature of the System Under Test.
@@ -73,8 +74,8 @@ def validate_cases_for_sut(
     schema = generate_arguments_schema(
         sut,
         parameters_callback=(
-            lambda index, name, annotation: 
-            "skip" if name in {"self", "cls"} else None)
+            lambda index, name, annotation: "skip" if name in {"self", "cls"} else None
+        ),
     )
     validator = SchemaValidator(schema)
     for case in cases:
@@ -112,6 +113,6 @@ def iter_cases(*cases: Case[RefsT]) -> Callable[[Callable[..., Any]], Callable[.
     # backwards compatibility with old API
     if len(cases_list) == 1 and isinstance(cases_list[0], (list, tuple)):
         cases_list = list(cases_list[0])
-        
+
     ids = [str(c.id) for c in cases_list]
     return parametrize("case", cases_list, ids=ids)
