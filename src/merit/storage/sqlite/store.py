@@ -286,7 +286,7 @@ class SQLiteStore(Store):
                 str(run_id),
                 str(execution_id) if execution_id else None,
                 metric_id,
-                assertion.expression_repr.expr,
+                assertion.pretty,
                 int(assertion.passed),
                 assertion.error_message,
             ),

@@ -75,7 +75,7 @@ class AssertTransformer(ast.NodeTransformer):
         expr_repr = (
             segment.strip()
             if isinstance(segment, str) and segment
-            else f"assert {ast.unparse(node.test)}"
+            else ast.unparse(node.test)
         )
 
         lines_above = ""
@@ -87,9 +87,9 @@ class AssertTransformer(ast.NodeTransformer):
             above_lines = source_lines[max(0, start_index - 2) : start_index]
             below_lines = source_lines[end_index + 1 : end_index + 3]
             if above_lines:
-                lines_above = "\n" + "\n".join(above_lines)
+                lines_above = "\n".join(above_lines)
             if below_lines:
-                lines_below = "\n" + "\n".join(below_lines)
+                lines_below = "\n".join(below_lines)
 
         # Create empty lists for collecting predicate results
         predicate_results_assign = ast.Assign(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import textwrap
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -60,6 +62,35 @@ class AssertionResult:
     passed: bool
     error_message: str | None = None
     predicate_results: list[PredicateResult] = field(default_factory=list)
+
+    @property
+    def pretty(self) -> str:
+        exp = self.expression_repr
+        parts = ["Assertion Passed!" if self.passed else "Assertion Failed!"]
+        if self.error_message:
+            parts.append(f"Error message: {self.error_message}")
+        
+        above = textwrap.dedent(exp.lines_above).splitlines() if exp.lines_above else []
+        expr = exp.expr.splitlines() if exp.expr else []
+        below = textwrap.dedent(exp.lines_below).splitlines() if exp.lines_below else []
+        
+        parts.extend(f"│  {line}" for line in above)
+        if expr:
+            parts.append(f">  {expr[0]}")
+            parts.extend(f">  {line}" for line in expr[1:])
+        parts.extend(f"│  {line}" for line in below)
+        
+        if exp.resolved_args:
+            parts.append("╰─ where:")
+            for name, value in exp.resolved_args.items():
+                name_oneline = " ".join(name.split())
+                name_oneline = re.sub(r"\s+([)\]}.,])", r"\1", name_oneline)
+                name_oneline = re.sub(r"([(\[{])\s+", r"\1", name_oneline)
+                name_oneline = re.sub(r"\s*\.\s*", ".", name_oneline)
+                value_oneline = " ".join(value.split())
+                parts.append(f"     {name_oneline} = {value_oneline}")
+        
+        return "\n".join(parts)
 
     def __post_init__(self) -> None:
         collector = ASSERTION_RESULTS_COLLECTOR.get()

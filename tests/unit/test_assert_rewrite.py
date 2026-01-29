@@ -202,8 +202,8 @@ def merit_repr_cases():
         results = {ar.expression_repr.expr: ar.expression_repr for ar in assertion_results}
 
         t1_repr = results["assert t1"]
-        assert t1_repr.lines_above == "\n    print(t1)\n    print(t2)"
-        assert t1_repr.lines_below == '\n    print("hello")\n    print("world")'
+        assert t1_repr.lines_above == "    print(t1)\n    print(t2)"
+        assert t1_repr.lines_below == '    print("hello")\n    print("world")'
         assert t1_repr.resolved_args == {"t1": "5"}
 
         assert results["assert obj.attr"].resolved_args == {"obj.attr": "7"}
@@ -278,6 +278,7 @@ def merit_complex_compare_cases():
             "sum(b)": "18",
             "c()": "20",
         }
+        print(ar.pretty)
     finally:
         sys.modules.pop(mod_name, None)
 
@@ -309,8 +310,11 @@ def merit_multiline_assert():
         [ar] = assertion_results
 
         assert ar.expression_repr.expr == "assert func(\n        x\n    )"
-        assert ar.expression_repr.lines_above == '\n    x = 4\n    print("above")'
-        assert ar.expression_repr.lines_below == '\n    print("below")'
+        assert ar.expression_repr.lines_above == '    x = 4\n    print("above")'
+        assert ar.expression_repr.lines_below == '    print("below")'
         assert ar.expression_repr.resolved_args == {"func(\n        x\n    )": "5"}
+        # Check that the pretty print doesn't have awkward spaces
+        assert "func(x) = 5" in ar.pretty
+        print(ar.pretty)
     finally:
         sys.modules.pop(mod_name, None)
