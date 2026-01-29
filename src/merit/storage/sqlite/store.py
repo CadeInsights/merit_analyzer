@@ -3,12 +3,13 @@
 import json
 import linecache
 import sqlite3
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import cast
 from uuid import UUID
 
-from merit.assertions.base import AssertionResult
+from merit.assertions.base import AssertionRepr, AssertionResult
 from merit.metrics_.base import CalculatedValue, MetricMetadata, MetricResult
 from merit.predicates.base import PredicateResult
 from merit.resources import Scope
@@ -286,7 +287,7 @@ class SQLiteStore(Store):
                 str(run_id),
                 str(execution_id) if execution_id else None,
                 metric_id,
-                assertion.expression_repr.expr,
+                json.dumps(asdict(assertion.expression_repr)),
                 int(assertion.passed),
                 assertion.error_message,
             ),

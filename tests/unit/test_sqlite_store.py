@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -219,7 +220,8 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
 
     assertions = store.get_assertions_for_execution(execution_id)
     assert len(assertions) == 1
-    assert assertions[0]["expression_repr"] == "x == y"
+    assertion_repr = json.loads(assertions[0]["expression_repr"])
+    assert assertion_repr["expr"] == "x == y"
 
     predicates = store.get_predicates_for_assertion(assertions[0]["id"])
     assert len(predicates) == 1
@@ -228,4 +230,6 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
     run_assertions = store.get_assertions_for_run(run.run_id)
     assert any(row["metric_id"] is not None for row in run_assertions)
     assert any(row["test_execution_id"] == str(execution_id) for row in run_assertions)
-    assert any(row["expression_repr"] == "metric > 0" for row in run_assertions)
+    assert any(
+        json.loads(row["expression_repr"])["expr"] == "metric > 0" for row in run_assertions
+    )
