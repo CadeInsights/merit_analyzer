@@ -24,15 +24,4 @@ jobs:
         run: uv sync --group dev
 
       - name: Run tests
-        run: uv run pytest --cov=merit --cov-report=xml --cov-report=term-missing tests/unit
-
-  # Single check that passes only if all matrix jobs pass
-  test-success:
-    if: always()
-    needs: [test]
-    runs-on: ubuntu-latest
-    steps:
-      - name: All tests passed
-        uses: re-actors/alls-green@release/v1
-        with:
-          jobs: ${{ toJSON(needs) }}
+        run: uv run pytest tests/unit --cov=merit --cov-report=xml
