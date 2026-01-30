@@ -101,6 +101,7 @@ class Runner:
         self.stop_flag: bool = False
 
         self.merit_run: MeritRun | None = None
+        self._store: SQLiteStore | None = None
 
     async def _notify_no_tests_found(self) -> None:
         await asyncio.gather(*[r.on_no_tests_found() for r in self.reporters])
@@ -120,6 +121,10 @@ class Runner:
     async def _notify_tracing_enabled(self, output_path: Path) -> None:
         await asyncio.gather(*[r.on_tracing_enabled(output_path) for r in self.reporters])
 
+    def _ensure_db_ready(self) -> None:
+        """Initialize DB and run migrations. Raises MigrationError if not possible."""
+        self._store = SQLiteStore(self.db_path)
+
     async def run(
         self, items: list[MeritTestDefinition] | None = None, path: str | None = None
     ) -> MeritRun:
@@ -132,6 +137,9 @@ class Runner:
         Returns:
             MeritRun with environment, results, and test executions.
         """
+        if self.save_to_db:
+            self._ensure_db_ready()
+
         environment = capture_environment()
         self.merit_run = MeritRun(environment=environment)
 
@@ -196,16 +204,15 @@ class Runner:
         if self.enable_tracing:
             await self._notify_tracing_enabled(self.trace_output)
 
-        if self.save_to_db:
+        if self.save_to_db and self._store:
             try:
-                store = SQLiteStore(self.db_path)
-                store.save_run(self.merit_run)
+                self._store.save_run(self.merit_run)
                 if self.enable_tracing:
                     collector = get_span_collector()
                     if collector:
-                        store.save_trace_spans(self.merit_run, collector)
+                        self._store.save_trace_spans(self.merit_run, collector)
             except Exception as e:
-                warnings.warn(f"Failed to persist run to database: {e}", RuntimeWarning)
+                warnings.warn(f"Failed to persist run to database: {e}", stacklevel=2)
 
         return self.merit_run
 

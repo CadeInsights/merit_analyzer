@@ -5,12 +5,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import shlex
+import sqlite3
 import sys
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
 
 from rich.console import Console
 
 from merit.config import MeritConfig, load_config
+from merit.storage.sqlite.migrations import MigrationRunner
+from merit.storage.sqlite.store import DEFAULT_DB_NAME, MAX_STORED_RUNS, find_project_root
 from merit.testing import MeritTestDefinition, collect
 from merit.testing.runner import Runner
 
@@ -26,12 +31,16 @@ def main() -> None:
     argv = [*config.addopts, *sys.argv[1:]] if config.addopts else sys.argv[1:]
     args = parser.parse_args(argv)
 
-    if args.command != "test":
-        parser.print_help()
-        raise SystemExit(0)
+    if args.command == "test":
+        exit_code = asyncio.run(_run_tests(args, config))
+        raise SystemExit(exit_code)
 
-    exit_code = asyncio.run(_run_tests(args, config))
-    raise SystemExit(exit_code)
+    if args.command == "db":
+        exit_code = _run_db_command(args, config)
+        raise SystemExit(exit_code)
+
+    parser.print_help()
+    raise SystemExit(0)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -98,7 +107,155 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable writing run data to SQLite",
     )
 
+    db_parser = subparsers.add_parser("db", help="Database management commands")
+    db_subparsers = db_parser.add_subparsers(dest="db_command")
+
+    db_subparsers.add_parser("status", help="Show database schema version status")
+
+    migrate_parser = db_subparsers.add_parser("migrate", help="Run pending migrations")
+    migrate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what migrations would run without applying them",
+    )
+    db_subparsers.add_parser("backup", help="Create a backup of the database")
+
+    reset_parser = db_subparsers.add_parser("reset", help="Delete and recreate the database")
+    reset_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm destructive reset without prompting",
+    )
+
+    for p in [db_parser, *db_subparsers.choices.values()]:
+        p.add_argument("--db-path", type=str, help="Path to the Merit SQLite database")
+
     return parser
+
+
+def _get_db_path(args: argparse.Namespace, config: MeritConfig) -> Path:
+    """Resolve database path from args or config."""
+    if args.db_path:
+        return Path(args.db_path)
+    if config.db_path:
+        return Path(config.db_path)
+    return find_project_root() / DEFAULT_DB_NAME
+
+
+def _run_db_command(args: argparse.Namespace, config: MeritConfig) -> int:
+    """Handle db subcommands."""
+    console = Console()
+    db_path = _get_db_path(args, config)
+
+    if args.db_command == "status":
+        return _db_status(console, db_path)
+    if args.db_command == "migrate":
+        return _db_migrate(console, db_path, dry_run=args.dry_run)
+    if args.db_command == "backup":
+        return _db_backup(console, db_path)
+    if args.db_command == "reset":
+        return _db_reset(console, db_path, confirmed=args.yes)
+
+    console.print("Usage: merit db <status|migrate|backup|reset>")
+    return 1
+
+
+def _db_status(console: Console, db_path: Path) -> int:
+    """Show database schema version status."""
+    runner = MigrationRunner(db_path)
+    current = runner.get_current_version()
+    target = runner.get_target_version()
+    pending = len(runner.get_pending_migrations())
+
+    console.print(f"Database: {db_path}")
+    console.print(f"Current version: {current}")
+    console.print(f"Target version: {target}")
+    console.print(f"Max stored runs: {MAX_STORED_RUNS}")
+
+    if current == target:
+        console.print("[green]Status: Up to date[/green]")
+    elif current > target:
+        console.print("[red]Status: Database ahead of code (downgrade not supported)[/red]")
+    else:
+        console.print(f"[yellow]Status: Migration required ({pending} pending)[/yellow]")
+
+    return 0
+
+
+def _db_migrate(console: Console, db_path: Path, *, dry_run: bool = False) -> int:
+    """Run pending migrations."""
+    runner = MigrationRunner(db_path)
+
+    if not runner.needs_migration():
+        console.print("[green]Database is up to date.[/green]")
+        return 0
+
+    if not runner.can_migrate():
+        console.print("[red]Migration not possible.[/red]")
+        console.print("Run 'merit db backup' then 'merit db reset --yes'")
+        return 1
+
+    pending = runner.get_pending_migrations()
+
+    if dry_run:
+        console.print(f"[yellow]Dry run: {len(pending)} migration(s) would be applied:[/yellow]")
+        for migration in pending:
+            console.print(f"  - v{migration.version:03d}: {migration.name}")
+        return 0
+
+    console.print(f"Applying {len(pending)} migration(s)...")
+    runner.migrate()
+    console.print(f"[green]Migrated to version {runner.get_target_version()}[/green]")
+    return 0
+
+
+def _db_backup(console: Console, db_path: Path) -> int:
+    """Create a backup of the database using SQLite's backup API for WAL safety."""
+    if not db_path.exists():
+        console.print(f"[red]Database not found: {db_path}[/red]")
+        return 1
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    backup_path = db_path.with_suffix(f".db.backup.{timestamp}")
+
+    with sqlite3.connect(db_path) as source, sqlite3.connect(backup_path) as dest:
+        source.backup(dest)
+
+    console.print(f"Backed up database to: {backup_path}")
+    return 0
+
+
+def _db_reset(console: Console, db_path: Path, *, confirmed: bool) -> int:
+    """Delete and recreate the database."""
+    if not confirmed:
+        console.print("[bold red]WARNING: This will DELETE all test run history.[/bold red]")
+        console.print()
+        console.print(f"Database: {db_path}")
+        if db_path.exists():
+            size_mb = db_path.stat().st_size / (1024 * 1024)
+            console.print(f"Size: {size_mb:.1f} MB")
+        console.print()
+        console.print("To proceed, run:")
+        console.print("    merit db reset --yes")
+        console.print()
+        console.print("Consider backing up first:")
+        console.print("    merit db backup")
+        return 1
+
+    if db_path.exists():
+        db_path.unlink()
+        # Clean up WAL mode auxiliary files if present
+        for suffix in ("-wal", "-shm"):
+            wal_file = db_path.with_name(db_path.name + suffix)
+            if wal_file.exists():
+                wal_file.unlink()
+
+    runner = MigrationRunner(db_path)
+    runner.migrate()
+
+    console.print(f"[green]Database reset complete: {db_path}[/green]")
+    console.print(f"Schema version: {runner.get_target_version()}")
+    return 0
 
 
 def _resolve_paths(args: argparse.Namespace, config: MeritConfig) -> list[str]:
