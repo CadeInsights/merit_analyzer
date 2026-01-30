@@ -41,11 +41,11 @@ def accuracy():
     """Track accuracy across all test cases."""
     metric = Metric()
     yield metric  # This gets injected into merits
-    
+
     # After all merits run, compute final value
     final_accuracy = metric.mean
     yield final_accuracy  # Captured in MetricResult
-    
+
     # Assert on aggregate quality
     assert metric.mean > 0.8, f"Accuracy too low: {metric.mean}"
 
@@ -54,14 +54,14 @@ def latency_ms():
     """Track latency within a suite."""
     metric = Metric()
     yield metric
-    
+
     # Check 95th percentile
     assert metric.p95 < 500, f"P95 latency too high: {metric.p95}ms"
 
 # Use in merit functions
 def merit_test(accuracy: Metric, latency_ms: Metric):
     result = model.predict("input")
-    
+
     with metrics(accuracy, latency_ms):
         assert result == "expected"
 ```
@@ -125,17 +125,17 @@ from merit import Metric, metric, metrics
 def response_quality():
     metric = Metric()
     yield metric
-    
+
     # Access statistical properties
     print(f"Mean quality: {metric.mean}")
     print(f"Std deviation: {metric.std}")
     print(f"95th percentile: {metric.p95}")
     print(f"95% CI: {metric.ci_95}")
-    
+
     # Distribution analysis
     print(f"Pass rate: {metric.distribution.get(True, 0)}")
     print(f"Fail count: {metric.counter[False]}")
-    
+
     # Quality gate
     assert metric.mean > 0.8
 
@@ -143,7 +143,7 @@ def response_quality():
 def merit_quality_check(input, expected, response_quality: Metric):
     result = model.predict(input)
     is_correct = result == expected
-    
+
     # Record to metric
     with metrics(response_quality):
         assert is_correct
@@ -172,7 +172,7 @@ Metadata tracking metric lifecycle and contributors.
 def my_metric():
     metric = Metric()
     yield metric
-    
+
     # Inspect metadata
     meta = metric.metadata
     print(f"Scope: {meta.scope}")
@@ -205,10 +205,10 @@ Result captured when a metric resource completes.
 def accuracy():
     metric = Metric()
     yield metric
-    
+
     final_accuracy = metric.mean
     yield final_accuracy  # Becomes MetricResult.value
-    
+
     assert metric.mean > 0.8  # Captured in assertion_results
 
 # MetricResult is created automatically after metric completes
@@ -255,15 +255,15 @@ from merit import Metric, metric, metrics
 def accuracy():
     metric = Metric()
     yield metric
-    
+
     # After all tests: mean should be > 80%
     assert metric.mean > 0.8
 
-@metric  
+@metric
 def hallucination_rate():
     metric = Metric()
     yield metric
-    
+
     # After all tests: less than 5% should be False
     false_rate = metric.counter[False] / metric.len if metric.len > 0 else 0
     assert false_rate < 0.05
@@ -271,7 +271,7 @@ def hallucination_rate():
 @merit.parametrize("question,context", test_cases)
 async def merit_bot_quality(question, context, bot, accuracy: Metric, hallucination_rate: Metric):
     answer = bot.ask(question, context=context)
-    
+
     # Multiple metrics in one context
     with metrics(accuracy, hallucination_rate):
         # Each assertion records True/False to all metrics
@@ -292,21 +292,21 @@ from merit import Metric, metric, metrics
 def latency_ms():
     metric = Metric()
     yield metric
-    
+
     # Quality gates
     assert metric.p95 < 500
     assert metric.mean < 200
 
 def merit_performance(api_client, latency_ms: Metric):
     import time
-    
+
     start = time.time()
     result = api_client.call()
     duration_ms = (time.time() - start) * 1000
-    
+
     # Manual recording
     latency_ms.add_record(duration_ms)
-    
+
     assert result.ok
 ```
 
@@ -324,7 +324,7 @@ def accuracy():
 @merit.parametrize("input,expected", test_cases)
 def merit_classifier(input, expected, classifier, accuracy: Metric):
     result = classifier(input)
-    
+
     # Automatic recording based on assertion outcome
     with metrics(accuracy):
         assert result == expected  # Records True/False
@@ -349,14 +349,14 @@ def recall():
 
 def merit_evaluation(model, precision: Metric, recall: Metric):
     predictions = model.predict(test_data)
-    
+
     for pred, actual in zip(predictions, ground_truth):
         # Track precision
         if pred == "positive":
             with metrics(precision):
                 assert pred == actual
-        
-        # Track recall  
+
+        # Track recall
         if actual == "positive":
             with metrics(recall):
                 assert pred == actual
@@ -371,15 +371,15 @@ from merit import Metric, metric, metrics
 def sentiment_distribution():
     metric = Metric()
     yield metric
-    
+
     # Analyze distribution
     total = metric.len
     dist = metric.distribution
-    
+
     print(f"Positive: {dist.get('positive', 0) * 100:.1f}%")
     print(f"Negative: {dist.get('negative', 0) * 100:.1f}%")
     print(f"Neutral: {dist.get('neutral', 0) * 100:.1f}%")
-    
+
     # Ensure balanced distribution
     for sentiment in ['positive', 'negative', 'neutral']:
         rate = dist.get(sentiment, 0)
@@ -388,7 +388,7 @@ def sentiment_distribution():
 @merit.parametrize("text", test_texts)
 def merit_sentiment(text, classifier, sentiment_distribution: Metric):
     result = classifier.classify(text)
-    
+
     # Record categorical values
     sentiment_distribution.add_record(result)
 ```
@@ -402,23 +402,23 @@ from merit import Metric, metric, metrics
 def response_time():
     metric = Metric()
     yield metric
-    
+
     # SLA checks
     assert metric.p50 < 100, f"Median too high: {metric.p50}ms"
     assert metric.p95 < 500, f"P95 too high: {metric.p95}ms"
     assert metric.p99 < 1000, f"P99 too high: {metric.p99}ms"
-    
+
     # Final value for reporting
     yield metric.p95
 
 @merit.repeat(100)
 def merit_latency_test(api, response_time: Metric):
     import time
-    
+
     start = time.time()
     api.call()
     duration_ms = (time.time() - start) * 1000
-    
+
     response_time.add_record(duration_ms)
 ```
 
@@ -431,20 +431,20 @@ from merit import Metric, metric, metrics
 def success_rate():
     metric = Metric()
     yield metric
-    
+
     # Check confidence interval
     lower, upper = metric.ci_95
-    
+
     print(f"Success rate: {metric.mean:.2%}")
     print(f"95% CI: [{lower:.2%}, {upper:.2%}]")
-    
+
     # Lower bound must exceed threshold
     assert lower > 0.75, f"95% CI lower bound too low: {lower}"
 
 @merit.repeat(50, min_passes=40)
 def merit_reliability(llm, success_rate: Metric):
     response = llm.generate("Hello")
-    
+
     with metrics(success_rate):
         assert "hello" in response.lower()
 ```

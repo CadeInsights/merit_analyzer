@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://github.com/appMerit/merit/actions/workflows/test.yml/badge.svg)](https://github.com/appMerit/merit/actions/workflows/test.yml)
+[![Checks](https://github.com/appMerit/merit/actions/workflows/check.yml/badge.svg)](https://github.com/appMerit/merit/actions/workflows/check.yml)
 
 Merit is a Python testing framework for AI projects. It follows pytest syntax and culture while introducing components essential for testing AI software: metrics, typed datasets, semantic predicates (LLM-as-a-Judge), and OTEL traces.
 
@@ -68,17 +70,17 @@ cases = [
 @merit.iter_cases(cases)
 @merit.repeat(3)
 async def merit_chatbot_no_hallucinations(
-    case: Case[Refs], 
-    store_chatbot, 
-    accuracy: Metric, 
+    case: Case[Refs],
+    store_chatbot,
+    accuracy: Metric,
     trace_context):
     """AI agent relies on knowledge base and tool calls for transactional questions"""
     response = store_chatbot(**case.sut_input_values)
-    
+
     # Verify the answer don't have any unsupported facts
     with metrics(accuracy):
         assert not await has_unsupported_facts(response, case.references.kb)
-    
+
     # Verify tool was called when expected
     if expected_tool := case.references.expected_tool:
         spans = trace_context.get_sut_spans(store_chatbot)
@@ -128,7 +130,7 @@ Full documentation: **[docs.appmerit.com](https://docs.appmerit.com)**
 **API Reference:**
 - [Merit Definitions APIs](https://docs.appmerit.com/apis/testing) - Tune discovery and execution
 - [Merit Predicates APIs](https://docs.appmerit.com/apis/predicates) - Build your own semantic predicates
-- [Merit Metric APIs](https://docs.appmerit.com/apis/metrics) - Build complex metric systems 
+- [Merit Metric APIs](https://docs.appmerit.com/apis/metrics) - Build complex metric systems
 - [Merit Tracing APIs](https://docs.appmerit.com/apis/tracing) - OpenTelemetry integration
 
 ---

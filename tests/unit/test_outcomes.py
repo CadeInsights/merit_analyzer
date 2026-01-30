@@ -6,6 +6,7 @@ import pytest
 
 from merit.testing import TestStatus, fail, skip, xfail
 from merit.testing.models import MeritTestDefinition
+from merit.testing.outcomes import SkipTest, XFailTest
 from merit.testing.runner import Runner
 
 
@@ -57,7 +58,7 @@ class TestImperativeSkip:
         result = await runner.run(items=[item])
 
         assert result.result.skipped == 1
-        assert result.result.executions[0].result.error is None
+        assert isinstance(result.result.executions[0].result.error, SkipTest)
 
     @pytest.mark.asyncio
     async def test_skip_stops_execution(self):
@@ -162,7 +163,7 @@ class TestImperativeXFail:
         result = await runner.run(items=[item])
 
         assert result.result.xfailed == 1
-        assert result.result.executions[0].result.error is None
+        assert isinstance(result.result.executions[0].result.error, XFailTest)
 
     @pytest.mark.asyncio
     async def test_xfail_stops_execution(self):

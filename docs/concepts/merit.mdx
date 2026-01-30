@@ -32,7 +32,7 @@ def chatbot(prompt: str) -> str:
 async def merit_chatbot_no_hallucinations():
     context = "Our store hours are 9 AM to 6 PM Monday-Saturday."
     response = chatbot("When are you open?")
-    
+
     # Use semantic predicates to check output quality
     assert not await has_unsupported_facts(response, context)
 ```
@@ -92,13 +92,13 @@ Classes starting with `Merit` are discovered, and their `merit_*` methods become
 # merit_agents.py
 
 class MeritCustomerSupport:    # ✓ Class discovered
-    
+
     def merit_greeting(self):   # ✓ Method collected
         pass
-    
+
     def merit_farewell(self):   # ✓ Method collected
         pass
-    
+
     def helper(self):           # ✗ Not collected (no merit_ prefix)
         pass
 
@@ -128,12 +128,12 @@ def accuracy():
 # Merit function with injected dependencies
 def merit_chatbot_accuracy(chatbot, accuracy: Metric):
     # chatbot and accuracy automatically injected by name
-    
+
     test_cases = [
         ("What's 2+2?", "4"),
         ("Capital of France?", "Paris"),
     ]
-    
+
     for question, expected in test_cases:
         answer = chatbot.ask(question)
         with metrics(accuracy):
@@ -187,7 +187,7 @@ with open("merit_cases.json") as f:
 @merit.iter_cases(*cases)
 def merit_from_dataset(case: Case, classifier):
     result = classifier(**case.sut_input_values)
-    
+
     if case.references:
         expected = case.references["expected_label"]
         assert result == expected
@@ -210,7 +210,7 @@ def merit_sync_test(calculator):
 # Async merit function - automatically detected
 async def merit_async_test(chatbot):
     response = await chatbot.ask_async("Hello")
-    
+
     # Many predicates are async
     policy = "Agent is friendly and professional"
     assert await follows_policy(response, policy)
@@ -252,11 +252,11 @@ def merit_end_to_end_workflow(system):
 # Tag entire classes
 @merit.tag("customer-support")
 class MeritSupportBot:
-    
+
     @merit.tag("greeting")
     def merit_hello(self, support_bot):
         pass
-    
+
     @merit.tag("farewell")
     def merit_goodbye(self, support_bot):
         pass
@@ -376,7 +376,7 @@ async def main():
     # Default runner
     runner = Runner()
     result = await runner.run(path="tests/")
-    
+
     print(f"Passed: {result.result.passed}")
     print(f"Failed: {result.result.failed}")
     print(f"Total: {result.result.total}")
@@ -430,7 +430,7 @@ for execution in result.result.executions:
     print(f"{execution.item.full_name}: {execution.status.value}")
     if execution.result.error:
         print(f"  Error: {execution.result.error}")
-    
+
     # Assertion results
     for assertion in execution.result.assertion_results:
         print(f"  {assertion.predicate_name}: {assertion.outcome}")
@@ -547,11 +547,11 @@ def merit_support_farewell_formal():
 @merit.tag("customer-support")
 class MeritSupportGreetings:
     """Evaluate support bot greeting scenarios."""
-    
+
     @merit.tag("casual")
     def merit_greeting_casual(self, support_bot):
         pass
-    
+
     @merit.tag("formal")
     def merit_greeting_formal(self, support_bot):
         pass
@@ -559,11 +559,11 @@ class MeritSupportGreetings:
 @merit.tag("customer-support")
 class MeritSupportFarewells:
     """Evaluate support bot farewell scenarios."""
-    
+
     @merit.tag("casual")
     def merit_farewell_casual(self, support_bot):
         pass
-    
+
     @merit.tag("formal")
     def merit_farewell_formal(self, support_bot):
         pass
@@ -627,12 +627,12 @@ def hallucination_rate():
     """Track hallucination rate across all support responses."""
     metric = Metric()
     yield metric
-    
+
     # After all merits run, check aggregate quality
     false_count = metric.counter[False]  # Hallucinations
     total = metric.len
     rate = false_count / total if total > 0 else 0
-    
+
     assert rate < 0.05  # Less than 5% hallucination rate
 
 @merit.parametrize("question,context", [
@@ -642,16 +642,16 @@ def hallucination_rate():
     # ... 50 more cases
 ])
 async def merit_support_responses(
-    question: str, 
-    context: str, 
-    support_bot, 
+    question: str,
+    context: str,
+    support_bot,
     hallucination_rate: Metric
 ):
     response = support_bot.answer(question, context=context)
-    
+
     # Individual merit assertion
     hallucination_check = await has_unsupported_facts(response, context)
-    
+
     # Contribute to aggregate metric
     with metrics(hallucination_rate):
         assert not hallucination_check
@@ -674,7 +674,7 @@ from merit.predicates import has_facts
 
 def merit_content_coverage(content_generator):
     content = content_generator.create("AI safety")
-    
+
     # Won't work - has_facts is async
     assert has_facts(content, "alignment, interpretability")  # ❌ Error
 ```
@@ -686,7 +686,7 @@ from merit.predicates import has_facts
 # Async function for async operations
 async def merit_content_coverage(content_generator):
     content = content_generator.create("AI safety")
-    
+
     # Properly await async predicate
     assert await has_facts(content, "alignment, interpretability")  # ✓ Works
 ```

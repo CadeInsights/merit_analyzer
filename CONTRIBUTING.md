@@ -150,15 +150,15 @@ Merit follows these coding standards:
 ```python
 def has_facts(actual: str, reference: str, *, strict: bool = False) -> bool:
     """Check if actual text contains facts from reference.
-    
+
     Args:
         actual: The text to check for facts.
         reference: The reference text containing expected facts.
         strict: If True, requires explicit statements. Defaults to False.
-    
+
     Returns:
         True if all facts from reference are present in actual.
-    
+
     Example:
         >>> await has_facts("Paris is France's capital", "Paris is the capital of France")
         True
@@ -188,11 +188,11 @@ def test_resource_provides_dependency():
     @merit.resource
     def config():
         return {"url": "https://api.example.com"}
-    
+
     @merit.resource
     def client(config):
         return {"url": config["url"], "connected": True}
-    
+
     # Create a test function that receives the resource
     def merit_test_client(client):
         assert client["connected"] is True
@@ -365,4 +365,3 @@ Be respectful and constructive in all interactions. We're all here to make Merit
 ## License
 
 By contributing to Merit, you agree that your contributions will be licensed under the MIT License.
-

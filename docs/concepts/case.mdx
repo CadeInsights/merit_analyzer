@@ -79,7 +79,7 @@ def my_agent(prompt: str, context: str = "") -> str:
 
 # Only keep valid cases, discard malformed ones
 valid_cases = validate_cases_for_sut(
-    cases, 
+    cases,
     sut=my_agent,
     raise_on_invalid=False  # Skip invalid cases instead of failing
 )
@@ -87,7 +87,7 @@ valid_cases = validate_cases_for_sut(
 @merit.iter_cases(*valid_cases)
 def merit_agent_with_validated_cases(case: Case[AgentReference], my_agent):
     result = my_agent(**case.sut_input_values)
-    
+
     # Type-safe access to references with IDE autocomplete
     if case.references:
         assert len(result) >= case.references.min_response_length
@@ -111,22 +111,22 @@ class CalculationReference(BaseModel):
 # Create typed cases
 all_cases: list[Case[CalculationReference]] = [
     Case(
-        sut_input_values={"x": 1}, 
+        sut_input_values={"x": 1},
         references=CalculationReference(expected_result=2),
         tags={"smoke", "fast"}
     ),
     Case(
-        sut_input_values={"x": 2}, 
+        sut_input_values={"x": 2},
         references=CalculationReference(expected_result=4),
         tags={"regression"}
     ),
     Case(
-        sut_input_values={"x": 3}, 
+        sut_input_values={"x": 3},
         references=CalculationReference(expected_result=6),
         tags={"smoke"}
     ),
     Case(
-        sut_input_values={"x": 4}, 
+        sut_input_values={"x": 4},
         references=CalculationReference(expected_result=8, tolerance=0.1),
         metadata={"priority": "high"}
     ),
@@ -147,7 +147,7 @@ fast_smoke = [c for c in all_cases if "smoke" in c.tags and "fast" in c.tags]
 @merit.iter_cases(*smoke_cases)
 def merit_smoke_test(case: Case[CalculationReference], calculator):
     result = calculator(**case.sut_input_values)
-    
+
     # Type-safe access to reference data
     if case.references:
         assert abs(result - case.references.expected_result) <= case.references.tolerance
@@ -193,7 +193,7 @@ cases: list[Case[MathReference]] = [Case(**item) for item in json.load(open("cas
 @merit.iter_cases(*cases)
 def merit_from_file(case: Case[MathReference], add_one):
     result = add_one(**case.sut_input_values)
-    
+
     # Typed references provide validation and IDE support
     if case.references:
         assert result == case.references.expected_result
@@ -249,7 +249,7 @@ else:
 @merit.iter_cases(*test_cases)
 def merit_text_processor(case: Case[ProcessorReference], processor):
     result = processor(**case.sut_input_values)
-    
+
     # Type-safe assertions using references
     if case.references:
         assert len(result) >= case.references.min_output_length

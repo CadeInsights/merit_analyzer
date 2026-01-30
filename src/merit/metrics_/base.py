@@ -634,7 +634,7 @@ def metric(
         )
 
     msg = f"""
-        {fn.__name__} is not a generator or async generator and can't be wrapped as a Merit metric. 
+        {fn.__name__} is not a generator or async generator and can't be wrapped as a Merit metric.
         To fix: yield a Metric instance and optionally yield a final calculated value.
         """
     raise ValueError(msg)

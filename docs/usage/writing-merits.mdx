@@ -43,7 +43,7 @@ def helper_function():      # ✗ Not discovered
 class MeritCustomerSupport:     # ✓ Discovered
     def merit_greeting(self):    # ✓ Collected
         pass
-    
+
     def helper(self):            # ✗ Not collected
         pass
 ```
@@ -61,7 +61,7 @@ By default, Merit **continues running remaining assertions** even after one fail
 ```python
 def merit_multiple_checks(classifier):
     result = classifier("test input")
-    
+
     assert result.confidence > 0.8  # Fails
     assert result.label != ""        # Still runs
     assert result.valid              # Still runs
@@ -91,7 +91,7 @@ def accuracy():
 @merit.parametrize("input,expected", [("a", 1), ("b", 2), ("c", 3)])
 def merit_classifier(input, expected, classifier, accuracy: Metric):
     result = classifier(input)
-    
+
     # Assertions inside metrics() are recorded as 1 (pass) or 0 (fail)
     with metrics(accuracy):
         assert result == expected
@@ -250,7 +250,7 @@ def accuracy():
 @merit.parametrize("input,expected", [("a", 1), ("b", 2)])
 def merit_classifier(input, expected, classifier, accuracy: Metric):
     result = classifier(input)
-    
+
     # Assertions inside metrics() are recorded as True/False
     with metrics(accuracy):
         assert result == expected
@@ -271,7 +271,7 @@ def weather_agent(prompt: str):
 
 def merit_agent_uses_tools(weather_agent, trace_context):
     result = weather_agent("What's the weather?")
-    
+
     # Access trace spans for assertions
     spans = trace_context.get_sut_spans(weather_agent)
     tool_name = spans[1].attributes.get("llm.request.functions.0.name")
