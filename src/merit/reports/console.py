@@ -154,9 +154,7 @@ class ConsoleReporter(Reporter):
             return lines
         return self._format_error(result.error)
 
-    def _build_failure_panel(
-        self, title: str, lines: list[str] | Traceback, color: str
-    ) -> Panel:
+    def _build_failure_panel(self, title: str, lines: list[str] | Traceback, color: str) -> Panel:
         content: str | Traceback = (
             lines
             if isinstance(lines, Traceback)
@@ -312,11 +310,7 @@ class ConsoleReporter(Reporter):
             failure_result = failure.result
             color = self._status_color(failure_result.status)
 
-            sub_failures = [
-                sub
-                for sub in failure.sub_executions
-                if sub.result.status.is_failure
-            ]
+            sub_failures = [sub for sub in failure.sub_executions if sub.result.status.is_failure]
 
             if sub_failures:
                 nested_panels = []

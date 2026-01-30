@@ -20,8 +20,8 @@ def test_tag_decorator_records_metadata():
     assert data.xfail_strict is True
 
 
-def test_runner_handles_skip_and_xfail():
-    runner = Runner(reporters=[])
+def test_runner_handles_skip_and_xfail(null_reporter):
+    runner = Runner(reporters=[null_reporter])
 
     def merit_skip():
         raise AssertionError("should not run")

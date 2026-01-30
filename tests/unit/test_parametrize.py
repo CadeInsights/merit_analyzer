@@ -35,7 +35,7 @@ def test_parametrize_stacking_creates_multiple_modifiers():
     assert modifiers[1].parameter_sets[0].values == {"value": 1}
 
 
-def test_runner_applies_parameter_values():
+def test_runner_applies_parameter_values(null_reporter):
     recorded = {}
 
     def merit_sample(param_a, resource_b):
@@ -46,7 +46,7 @@ def test_runner_applies_parameter_values():
     def resource_b():
         return "from_resource"
 
-    runner = Runner(reporters=[])
+    runner = Runner(reporters=[null_reporter])
 
     # Create a parametrize modifier with one parameter set
     modifier = ParametrizeModifier(
@@ -77,13 +77,13 @@ def test_runner_applies_parameter_values():
     assert run_result.result.passed == 1
 
 
-def test_runner_runs_all_parameter_sets():
+def test_runner_runs_all_parameter_sets(null_reporter):
     results = []
 
     def merit_collect(x):
         results.append(x)
 
-    runner = Runner(reporters=[])
+    runner = Runner(reporters=[null_reporter])
 
     modifier = ParametrizeModifier(
         parameter_sets=(

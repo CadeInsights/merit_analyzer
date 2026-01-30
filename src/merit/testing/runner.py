@@ -19,7 +19,7 @@ from merit.predicates import (
     close_predicate_api_client,
     create_predicate_api_client,
 )
-from merit.reports import ConsoleReporter, Reporter
+from merit.reports.base import Reporter
 from merit.resources import ResourceResolver, get_registry
 from merit.storage import SQLiteStore
 from merit.testing.discovery import collect
@@ -38,22 +38,18 @@ from merit.tracing import clear_traces, get_span_collector, init_tracing
 class Runner:
     """Executes discovered tests with resource injection.
 
+    Args:
+        reporters: At least one reporter is required.
+
     Examples:
+        from merit.reports import ConsoleReporter
+
         # Sequential execution (default)
-        runner = Runner()
+        runner = Runner(reporters=[ConsoleReporter()])
         result = await runner.run(path="tests/")
 
         # Concurrent execution with 5 workers
-        runner = Runner(concurrency=5)
-        result = await runner.run(path="tests/")
-
-        # Unlimited concurrency (capped at 10)
-        runner = Runner(concurrency=0)
-        result = await runner.run(path="tests/")
-
-        # Custom reporters
-        from merit.reports import ConsoleReporter
-        runner = Runner(reporters=[ConsoleReporter()])
+        runner = Runner(reporters=[ConsoleReporter()], concurrency=5)
         result = await runner.run(path="tests/")
     """
 
@@ -62,7 +58,7 @@ class Runner:
     def __init__(
         self,
         *,
-        reporters: list[Reporter] | None = None,
+        reporters: list[Reporter],
         maxfail: int | None = None,
         fail_fast: bool = False,
         verbosity: int = 0,
@@ -74,9 +70,11 @@ class Runner:
         save_to_db: bool = True,
         db_path: Path | str | None = None,
     ) -> None:
-        self.reporters: list[Reporter] = (
-            reporters if reporters is not None else [ConsoleReporter(verbosity=verbosity)]
-        )
+        if not reporters:
+            msg = "At least one reporter is required"
+            raise ValueError(msg)
+
+        self.reporters = reporters
 
         self.maxfail = maxfail if maxfail and maxfail > 0 else None
         self.fail_fast = fail_fast
@@ -302,15 +300,3 @@ class Runner:
 
         if merit_run.result.stopped_early and self.maxfail:
             await self._notify_run_stopped_early(self.maxfail)
-
-
-def run(path: str | None = None) -> MeritRun:
-    """Run tests synchronously (convenience wrapper).
-
-    Args:
-        path: Path to discover tests from.
-
-    Returns:
-        MeritRun with all test outcomes.
-    """
-    return asyncio.run(Runner().run(path=path))

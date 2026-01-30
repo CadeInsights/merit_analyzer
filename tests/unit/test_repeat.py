@@ -39,8 +39,8 @@ def test_repeat_decorator_validation():
             pass
 
 
-def test_runner_handles_repeat_all_pass():
-    runner = Runner(reporters=[])
+def test_runner_handles_repeat_all_pass(null_reporter):
+    runner = Runner(reporters=[null_reporter])
 
     call_count = 0
 
@@ -70,8 +70,8 @@ def test_runner_handles_repeat_all_pass():
     )
 
 
-def test_runner_handles_repeat_partial_pass():
-    runner = Runner(reporters=[])
+def test_runner_handles_repeat_partial_pass(null_reporter):
+    runner = Runner(reporters=[null_reporter])
 
     call_count = 0
 
@@ -106,8 +106,8 @@ def test_runner_handles_repeat_partial_pass():
     assert passed == 3
 
 
-def test_runner_handles_repeat_insufficient_passes():
-    runner = Runner(reporters=[])
+def test_runner_handles_repeat_insufficient_passes(null_reporter):
+    runner = Runner(reporters=[null_reporter])
 
     call_count = 0
 

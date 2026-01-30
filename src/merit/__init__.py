@@ -3,6 +3,7 @@
 from .context import metrics
 from .metrics_ import Metric, metric
 from .predicates import Predicate, PredicateResult, predicate
+from .reports import Reporter, reporter
 from .testing import (
     Case,
     fail,
@@ -40,6 +41,9 @@ __all__ = [
     "Metric",
     "metric",
     "metrics",
+    # Reporters
+    "Reporter",
+    "reporter",
     # Tracing
     "init_tracing",
     "trace_step",
