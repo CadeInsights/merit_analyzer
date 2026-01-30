@@ -43,9 +43,9 @@ def database():
     # Setup: runs before tests
     conn = connect_to_db()
     conn.execute("BEGIN TRANSACTION")
-    
+
     yield conn  # Value injected into tests
-    
+
     # Teardown: runs after tests complete
     conn.execute("ROLLBACK")
     conn.close()
@@ -109,7 +109,7 @@ def merit_user_queries(user_id, isolated_db, shared_api_client, ml_model):
     # isolated_db: new instance for each of 5 cases
     # shared_api_client: same instance across all 5 cases in this file
     # ml_model: same instance across entire merit suite
-    
+
     user = isolated_db.get_user(user_id)
     enriched = shared_api_client.enrich(user)
     prediction = ml_model.predict(enriched)
@@ -319,7 +319,7 @@ def test_environment():
     api = APIClient(config.api_url)
     api.authenticate(config.api_key)
     cache = RedisCache(config.redis_url)
-    
+
     return {
         "db": db,
         "api": api,

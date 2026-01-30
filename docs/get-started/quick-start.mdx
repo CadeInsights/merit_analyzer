@@ -23,7 +23,7 @@ def store_chatbot(prompt: str) -> str:
 async def merit_chatbot_no_hallucinations(store_chatbot):
     context = "Store hours: 9 AM - 6 PM, Monday-Saturday. Closed Sundays."
     response = store_chatbot("When are you open?")
-    
+
     assert not await has_unsupported_facts(response, context)
     assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
 ```
@@ -50,7 +50,7 @@ cases = [
 @merit.iter_cases(*cases)
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot):
     response = store_chatbot(**case.sut_input_values)
-    
+
     assert not await has_unsupported_facts(response, case.references["context"])
     assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
 ```
@@ -83,7 +83,7 @@ cases = [
 @merit.iter_cases(*cases)
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric):
     response = store_chatbot(**case.sut_input_values)
-    
+
     with metrics(accuracy):
         assert not await has_unsupported_facts(response, case.references["context"])
         assert await follows_policy(response, "Agent provides prices only by calling an 'offer_product' tool")
@@ -117,10 +117,10 @@ cases = [
 @merit.iter_cases(*cases)
 async def merit_chatbot_no_hallucinations(case: Case, store_chatbot, accuracy: Metric, trace_context):
     response = store_chatbot(**case.sut_input_values)
-    
+
     with metrics(accuracy):
         assert not await has_unsupported_facts(response, case.references["context"])
-    
+
     # Verify tool was called when expected
     if expected_tool := case.references.get("expected_tool"):
         spans = trace_context.get_sut_spans(store_chatbot)

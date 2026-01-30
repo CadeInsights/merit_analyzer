@@ -20,8 +20,8 @@ from merit.predicates import (
 def simple_chatbot(text: str) -> str:
     if "France" in text:
         return """
-        France is a beautiful country located in Western Europe. 
-        Its capital city is Paris, which is known for the Eiffel 
+        France is a beautiful country located in Western Europe.
+        Its capital city is Paris, which is known for the Eiffel
         Tower and croissants.
         """
     if "Germany" in text:
@@ -33,27 +33,27 @@ def simple_chatbot(text: str) -> str:
             ## Capital
             Berlin is the capital of Germany.
             ## Famous for
-            Berlin is famous for its history, museums, and vibrant 
+            Berlin is famous for its history, museums, and vibrant
             cultural scene.
             ## Population
             Germany has a population of 83 million people.
             """
         return """
-            Germany, located in Central Europe, has Berlin as its capital. 
-            Berlin is famous for its history, museums, and vibrant 
+            Germany, located in Central Europe, has Berlin as its capital.
+            Berlin is famous for its history, museums, and vibrant
             cultural scene.
             """
     if "rock" in text:
         if "verbose" in text:
             return """
-            Metallica is the greatest rock band of all time. 
+            Metallica is the greatest rock band of all time.
             James Hetfield is the lead singer and rhythm guitarist.
             Lars Ulrich is the drummer.
             Kirk Hammett is the lead guitarist.
             Robert Trujillo is the bass guitarist.
             """
         return """
-            Metallica is the greatest rock band of all time. 
+            Metallica is the greatest rock band of all time.
             James Hetfield is the lead singer and rhythm guitarist.
             """
     return """
@@ -97,8 +97,8 @@ async def merit_predicates_conflicting_and_unsupported_facts():
     # check if any facts in the answer don't have evidence in the reference
     assert not await has_unsupported_facts(
         answer,
-        """James Alan Hetfield (born August 3, 1963) is an American musician. 
-        He is the lead vocalist, rhythm guitarist, co-founder, and a primary songwriter 
+        """James Alan Hetfield (born August 3, 1963) is an American musician.
+        He is the lead vocalist, rhythm guitarist, co-founder, and a primary songwriter
         of the heavy metal band Metallica. Metallica is the greatest rock band of all time.
         """,
     )
@@ -110,9 +110,9 @@ async def merit_predicates_facts_match():
     # check if answer has the same set of facts as the reference
     assert await matches_facts(
         answer,
-        """France is a country. 
-        Location - Western Europe. 
-        Capital - Paris. 
+        """France is a country.
+        Location - Western Europe.
+        Capital - Paris.
         Paris is famous for the Eiffel Tower and croissants.
         """,
     )
@@ -133,9 +133,9 @@ async def merit_predicates_style_match():
     # semantics of the text is ignored
     assert await matches_writing_style(
         answer,
-        """Metallica is an American heavy metal band. 
-        It was formed in Los Angeles in 1981 by vocalist/guitarist 
-        James Hetfield and drummer Lars Ulrich, and has been based 
+        """Metallica is an American heavy metal band.
+        It was formed in Los Angeles in 1981 by vocalist/guitarist
+        James Hetfield and drummer Lars Ulrich, and has been based
         in San Francisco for most of its career.""",
     )
 

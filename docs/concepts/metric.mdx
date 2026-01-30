@@ -23,14 +23,14 @@ from merit import Metric, metrics
 def accuracy():
     metric = Metric()
     yield metric
-    
+
     # After all tests run, assert on the calculated statistics
     assert metric.mean > 0.8  # 80% accuracy threshold
 
 @merit.parametrize("input,expected", [("a", 1), ("b", 2)])
 def merit_classifier_accuracy(my_classifier, input, expected, accuracy: Metric):
     result = my_classifier(input)
-    
+
     # Assertions inside metrics() are recorded as True/False
     with metrics(accuracy):
         assert result == expected
@@ -52,7 +52,7 @@ The `Metric` class provides statistical calculations on demand:
 def latency():
     metric = Metric()
     yield metric
-    
+
     # Access calculated properties after data collection
     print(f"Mean: {metric.mean}")
     print(f"Median: {metric.median}")
@@ -86,10 +86,10 @@ def merit_latency_test(response_time: Metric):
     start = time.time()
     result = call_api()
     elapsed = time.time() - start
-    
+
     # Manually record a value
     response_time.add_record(elapsed * 1000)  # milliseconds
-    
+
     assert result
 ```
 
@@ -103,7 +103,7 @@ Metrics can be scoped to different lifecycle levels. This enables tracking both 
 def average_hallucinations_per_case():
     metric = Metric()
     yield metric
-    
+
     # Assert on overall performance after all cases complete
     assert metric.mean < 2  # Average hallucinations should be less than 2
 
@@ -112,19 +112,19 @@ def average_hallucinations_per_case():
 def case_hallucinations_count(average_hallucinations_per_case: Metric):
     metric = Metric()
     yield metric
-    
+
     # Write case-level data to session-level metric
     hallucinations_for_case = metric.counter[False]
     average_hallucinations_per_case.add_record(hallucinations_for_case)
 
 @merit.parametrize("city,expected_state", [("Boston", "Massachusetts"), ("Miami", "Florida")])
 def merit_geography_bot(
-    city: str, 
+    city: str,
     expected_state: str,
     case_hallucinations_count: Metric
 ):
     result = geography_bot(city)
-    
+
     # Each case tracks its own hallucinations
     with metrics(case_hallucinations_count):
         assert expected_state in result
@@ -148,7 +148,7 @@ def accuracy():
     """Overall accuracy from both false positives and negatives"""
     metric = Metric()
     yield metric
-    
+
     # After child metrics write their data, check overall accuracy
     assert metric.distribution[True] >= 0.8  # 80% correct
 
@@ -157,10 +157,10 @@ def false_positives(accuracy: Metric):
     """Track false positives and contribute to overall accuracy"""
     metric = Metric()
     yield metric
-    
+
     # Propagate values to parent metric
     accuracy.add_record(metric.raw_values)
-    
+
     # Check this specific metric
     assert metric.counter[False] < 5  # Less than 5 false positives
 
@@ -169,10 +169,10 @@ def false_negatives(accuracy: Metric):
     """Track false negatives and contribute to overall accuracy"""
     metric = Metric()
     yield metric
-    
+
     # Propagate values to parent metric
     accuracy.add_record(metric.raw_values)
-    
+
     # Check this specific metric
     assert metric.counter[False] < 3  # Less than 3 false negatives
 
@@ -212,7 +212,7 @@ def accuracy():
 def merit_test(accuracy: Metric):
     result = classifier("input")
     is_correct = result == "expected"
-    
+
     # Manual tracking is error-prone and verbose
     accuracy.add_record(True if is_correct else False)
     assert is_correct
@@ -227,7 +227,7 @@ def accuracy():
 
 def merit_test(accuracy: Metric):
     result = classifier("input")
-    
+
     # Automatic tracking is cleaner and safer
     with metrics(accuracy):
         assert result == "expected"
@@ -243,7 +243,7 @@ Choose scope based on what you're measuring. Use case-level metrics for per-meri
 def case_latency():
     metric = Metric()
     yield metric
-    
+
     # Assert each case completes quickly
     assert metric.p95 < 1000  # Each case's p95 under 1 second
 
@@ -252,7 +252,7 @@ def case_latency():
 def overall_latency():
     metric = Metric()
     yield metric
-    
+
     # Assert on aggregate performance
     assert metric.mean < 500  # Average across all cases
 ```
@@ -295,12 +295,12 @@ After the metric completes, you can yield a final calculated value that will be 
 def error_rate():
     metric = Metric()
     yield metric
-    
+
     # Calculate final error rate
     if metric.len > 0:
         final_error_rate = metric.counter[False] / metric.len
         assert final_error_rate < 0.1
-        
+
         # Yield final value for reporting
         yield final_error_rate
     else:
@@ -316,10 +316,10 @@ Access `raw_values` to perform calculations beyond the built-in statistical prop
 def custom_analysis():
     metric = Metric()
     yield metric
-    
+
     # Custom calculations on raw data
     values = metric.raw_values
     outliers = [v for v in values if abs(v - metric.mean) > 3 * metric.std]
-    
+
     assert len(outliers) < len(values) * 0.01  # Less than 1% outliers
 ```

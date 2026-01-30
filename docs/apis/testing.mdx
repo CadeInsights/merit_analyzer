@@ -244,7 +244,7 @@ class MeritSupportBot:
     @merit.tag("greeting")
     def merit_hello(self, bot):
         pass
-    
+
     @merit.tag("farewell")
     def merit_goodbye(self, bot):
         pass
@@ -449,7 +449,7 @@ with open("test_cases.json") as f:
 @iter_cases(*cases)
 def merit_from_dataset(case: Case, classifier):
     result = classifier(**case.sut_input_values)
-    
+
     if case.references:
         expected = case.references["expected_label"]
         assert result == expected

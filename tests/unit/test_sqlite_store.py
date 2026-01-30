@@ -230,6 +230,4 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
     run_assertions = store.get_assertions_for_run(run.run_id)
     assert any(row["metric_id"] is not None for row in run_assertions)
     assert any(row["test_execution_id"] == str(execution_id) for row in run_assertions)
-    assert any(
-        json.loads(row["expression_repr"])["expr"] == "metric > 0" for row in run_assertions
-    )
+    assert any(json.loads(row["expression_repr"])["expr"] == "metric > 0" for row in run_assertions)

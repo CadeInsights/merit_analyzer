@@ -77,10 +77,10 @@ async def merit_customer_support(support_bot):
     knowledge_base = "Returns accepted within 30 days with receipt."
     policy = "Always offer to help with other questions"
     response = support_bot.answer("What's the return policy?")
-    
+
     # Assert the response doesn't hallucinate facts
     assert not await has_unsupported_facts(response, knowledge_base)
-    
+
     # Assert the response follows company guidelines
     assert await follows_policy(response, policy)
 ```
@@ -110,7 +110,7 @@ def hallucination_rate():
 @merit.iter_cases(*qa_dataset)
 async def merit_rag_accuracy(case: Case, rag_system, hallucination_rate: Metric):
     response = rag_system.query(**case.sut_input_values)
-    
+
     with metrics(hallucination_rate):
         assert not await has_unsupported_facts(response, case.references["context"])
 ```
@@ -153,7 +153,7 @@ A customer support chatbot that answers questions using a knowledge base:
 class SupportBot:
     def __init__(self, knowledge_base: str):
         self.knowledge_base = knowledge_base
-    
+
     def answer(self, question: str) -> str:
         # LLM-powered response using knowledge_base as context
         return llm_call(question, context=self.knowledge_base)
@@ -168,21 +168,21 @@ import pytest
 def test_returns_policy():
     bot = SupportBot("Returns accepted within 30 days.")
     response = bot.answer("What's your return policy?")
-    
+
     # Brittle: fails if wording changes
     assert "30 days" in response
 
 def test_shipping_info():
     bot = SupportBot("Free shipping on orders over $50.")
     response = bot.answer("Do you offer free shipping?")
-    
+
     # Brittle: what if it says "$50" vs "fifty dollars"?
     assert "50" in response
 
 def test_no_competitor_mentions():
     bot = SupportBot("We offer 24/7 support.")
     response = bot.answer("Are you better than CompetitorX?")
-    
+
     # How do you even check this reliably?
     assert "CompetitorX" not in response  # Too simple
     # What about "Competitor X" or "that other company"?
@@ -245,7 +245,7 @@ def hallucination_rate():
 cases = [
     Case(
         sut_input_values={"question": "What's your return policy?"},
-        references={"context": "Returns accepted within 30 days with receipt.", 
+        references={"context": "Returns accepted within 30 days with receipt.",
                     "required_facts": "30 days, receipt"}
     ),
     Case(
@@ -263,19 +263,19 @@ cases = [
 # Single merit function with semantic assertions
 @merit.iter_cases(*cases)
 async def merit_factual_accuracy(
-    case: Case, 
-    support_bot, 
+    case: Case,
+    support_bot,
     accuracy: Metric,
     hallucination_rate: Metric
 ):
     response = support_bot.answer(case.sut_input_values["question"])
     context = case.references["context"]
-    
+
     # Semantic assertion: no hallucinations
     hallucinated = await has_unsupported_facts(response, context)
     with metrics(hallucination_rate):
         assert not hallucinated
-    
+
     # Semantic assertion: contains required facts
     with metrics(accuracy):
         assert await has_facts(response, case.references["required_facts"])
@@ -284,7 +284,7 @@ async def merit_factual_accuracy(
 @merit.repeat(10, min_passes=9)  # 9/10 must pass
 async def merit_no_competitor_mentions(support_bot):
     response = support_bot.answer("Are you better than CompetitorX?")
-    
+
     policy = """
     - Never mention competitors by name
     - Don't compare to other companies
@@ -296,7 +296,7 @@ async def merit_no_competitor_mentions(support_bot):
 @merit.repeat(5)
 async def merit_consistent_tone(support_bot):
     response = support_bot.answer("I'm frustrated with my order!")
-    
+
     tone_policy = "Response is empathetic, apologetic, and offers help"
     assert await follows_policy(response, tone_policy)
 ```

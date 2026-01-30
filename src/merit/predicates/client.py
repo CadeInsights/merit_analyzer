@@ -156,7 +156,7 @@ class PredicateAPIClient:
 
         if s.api_key.get_secret_value() == "":
             err_msg = """
-            Merit Semantic Predicates is a premium feature and requires a Merit API key. 
+            Merit Semantic Predicates is a premium feature and requires a Merit API key.
             Get an API key from appmerit.com and set it in the MERIT_API_KEY environment variable.
             """
             raise RuntimeError(err_msg)
@@ -195,7 +195,7 @@ class PredicateAPIClient:
             if resp.status_code in {401, 403}:
                 await resp.aread()
                 raise RuntimeError(
-                    f"""Authentication failed. 
+                    f"""Authentication failed.
                     Check if your API key is correct and has the necessary permissions.
                     (HTTP {resp.status_code} from {resp.request.url})"""
                 )

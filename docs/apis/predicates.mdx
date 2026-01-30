@@ -79,15 +79,15 @@ async def merit_test():
         actual="Paris is the capital of France",
         reference="capital of France"
     )
-    
+
     print(result.value)         # True
     print(result.confidence)    # 0.95
     print(result.message)       # "All facts present"
-    
+
     # Use as boolean
     if result:
         print("Check passed!")
-    
+
     # Access stored inputs / config
     print(result.name)       # "has_facts"
     print(result.actual)     # "Paris is the capital of France"
@@ -130,10 +130,10 @@ from merit.predicates import has_conflicting_facts
 async def merit_no_contradictions(rag_system):
     source = "Acme Corp was founded in 2018 in Austin, Texas."
     answer = rag_system.query("Tell me about Acme Corp")
-    
+
     # Passes if answer doesn't contradict source
     assert not await has_conflicting_facts(answer, source)
-    
+
     # Would fail: "Acme Corp was founded in 2015..."
 ```
 
@@ -169,7 +169,7 @@ from merit.predicates import has_unsupported_facts
 async def merit_no_hallucinations(chatbot):
     knowledge = "Our store hours are 9 AM to 6 PM, Monday-Saturday."
     response = chatbot.answer("When are you open?", context=knowledge)
-    
+
     # Fails if response invents facts not in knowledge base
     assert not await has_unsupported_facts(response, knowledge)
 ```
@@ -206,7 +206,7 @@ from merit.predicates import has_facts
 async def merit_required_info(summarizer):
     notes = "Patient: 45M, chest pain for 2 hours, BP 150/95"
     summary = summarizer.summarize(notes)
-    
+
     # Must mention critical information
     required = "chest pain, elevated blood pressure"
     assert await has_facts(summary, required)
@@ -245,7 +245,7 @@ async def merit_translation(translator):
     original = "Q3 revenue was $4.2M with 23% margins."
     translated = translator.translate(original, target="spanish")
     back = translator.translate(translated, target="english")
-    
+
     # Should preserve meaning despite rewording
     assert await matches_facts(back, original)
 ```
@@ -281,7 +281,7 @@ from merit.predicates import has_topics
 
 async def merit_coverage(content_bot):
     response = content_bot.generate("Write about AI safety")
-    
+
     # Must cover these themes
     assert await has_topics(response, "alignment, interpretability, robustness")
 ```
@@ -317,13 +317,13 @@ from merit.predicates import follows_policy
 
 async def merit_compliance(support_bot):
     response = support_bot.chat("Is your product better than CompetitorX?")
-    
+
     policy = """
     - Never disparage competitors
     - Focus on our product's strengths
     - Redirect comparisons to our features
     """
-    
+
     assert await follows_policy(response, policy)
 ```
 
@@ -358,13 +358,13 @@ from merit.predicates import matches_writing_style
 
 async def merit_brand_voice(marketing_bot):
     description = marketing_bot.generate("Describe our shoes")
-    
+
     # Brand voice: punchy, confident, minimal
     brand_voice = """
     Built different. The UltraFrame bike handles like nothing else.
     Carbon fiber. Precision engineering. Pure speed.
     """
-    
+
     assert await matches_writing_style(description, brand_voice)
 ```
 
@@ -399,18 +399,18 @@ from merit.predicates import matches_writing_layout
 
 async def merit_report_structure(report_bot):
     report = report_bot.create_weekly_report(metrics)
-    
+
     template = """
     ## Weekly Summary
     [Overview paragraph]
-    
+
     ## Highlights
     - [Bullet points]
-    
+
     ## Action Items
     1. [Numbered list]
     """
-    
+
     assert await matches_writing_layout(report, template)
 ```
 
@@ -431,7 +431,7 @@ from merit.predicates import (
 async def merit_comprehensive_check(product_bot):
     product_data = "ThermoPro X500, $299, WiFi enabled, 2-year warranty"
     description = product_bot.generate(product_data)
-    
+
     # Layer multiple checks
     assert not await has_unsupported_facts(description, product_data)
     assert not await has_conflicting_facts(description, product_data)
@@ -447,10 +447,10 @@ from merit.predicates import has_facts
 async def merit_precision(report_bot):
     data = "Q3 revenue: $4.2M, margins: 23.5%"
     report = report_bot.summarize(data)
-    
+
     # Lenient: semantic matching OK
     assert await has_facts(report, "$4.2M revenue", strict=False)
-    
+
     # Strict: exact figures required
     assert await has_facts(report, "23.5%", strict=True)
 ```
@@ -462,12 +462,12 @@ from merit.predicates import has_facts
 
 async def merit_detailed_analysis(bot):
     result = await has_facts("Text", "Reference")
-    
+
     if not result.value:
         print(f"Check failed with confidence {result.confidence}")
         print(f"Reason: {result.message}")
         print(f"Predicate: {result.name}")
-    
+
     # Results automatically collected for reporting
     # No manual registration needed
 ```

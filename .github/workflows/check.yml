@@ -1,0 +1,32 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full history for setuptools_scm
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version-file: .python-version
+          enable-cache: true
+
+      - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files --verbose
+        env:
+          SKIP: no-commit-to-branch
+
+      - name: Smoke test
+        run: |
+          uv build
+          uv venv /tmp/test-env
+          uv pip install dist/*.whl --python /tmp/test-env/bin/python
+          /tmp/test-env/bin/python -c "import merit"

@@ -27,7 +27,7 @@ def merit_chatbot_works(chatbot):
 ```
 
 ## Basic Usage
-The most common use case for the `@merit.sut` decorator is accessing trace spans for assertions. 
+The most common use case for the `@merit.sut` decorator is accessing trace spans for assertions.
 
 <Steps>
 <Step title="Decorate the system under test">
@@ -78,7 +78,7 @@ def agent(prompt: str, domain: Literal["marketing", "coding"]) -> str:
     return f"Agent response: {prompt}"
 ```
 
-**Do this:** 
+**Do this:**
 ```python
 # merits/merit_agent.py
 import merit
@@ -97,7 +97,7 @@ def merit_marketing_agent_invokes(marketing_agent):
 
 ### 2. Pass using Dependency Injection; don't call directly
 
-The Merit engine tracks how `merit` items consume resources. Using dependency injection helps Merit build more accurate reports and provide better code suggestions. 
+The Merit engine tracks how `merit` items consume resources. Using dependency injection helps Merit build more accurate reports and provide better code suggestions.
 
 **Don't do this:**
 ```python
@@ -113,7 +113,7 @@ def merit_chatbot_runs():
     assert "Hello!" in out
 ```
 
-**Do this:** 
+**Do this:**
 ```python
 import merit
 

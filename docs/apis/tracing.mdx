@@ -93,11 +93,11 @@ from merit import trace_step
 async def merit_agent_pipeline(agent):
     with trace_step("retrieve_context", {"query": "user question"}):
         context = agent.retrieve("user question")
-    
+
     with trace_step("generate_response", {"context_length": len(context)}) as span:
         response = await agent.generate(context)
         span.set_attribute("response_length", len(response))
-    
+
     assert response
 ```
 
@@ -109,10 +109,10 @@ def complex_pipeline():
     with trace_step("pipeline"):
         with trace_step("stage_1"):
             result_1 = process_stage_1()
-        
+
         with trace_step("stage_2"):
             result_2 = process_stage_2(result_1)
-        
+
         with trace_step("stage_3"):
             return process_stage_3(result_2)
 ```
@@ -338,10 +338,10 @@ class RAGPipeline:
     def __call__(self, query: str) -> str:
         with trace_step("retrieve", {"query": query}):
             docs = self.retrieve(query)
-        
+
         with trace_step("rerank", {"doc_count": len(docs)}):
             top_docs = self.rerank(docs, query)
-        
+
         with trace_step("generate"):
             return self.generate(query, top_docs)
 
@@ -382,9 +382,9 @@ for trace in traces:
     name = trace.get("name")
     duration_ms = trace.get("duration_ms")
     attributes = trace.get("attributes", {})
-    
+
     print(f"{name}: {duration_ms}ms")
-    
+
     if "llm.model" in attributes:
         print(f"  Model: {attributes['llm.model']}")
         print(f"  Tokens: {attributes.get('llm.usage.total_tokens')}")
@@ -432,7 +432,7 @@ init_tracing(
 )
 
 # Run merit suite
-# ... 
+# ...
 
 # Upload traces to analysis platform
 # upload_traces(f"traces/run_{run_id}.jsonl")
