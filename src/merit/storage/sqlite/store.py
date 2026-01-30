@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import cast
 from uuid import UUID
 
-from merit.assertions.base import AssertionRepr, AssertionResult
+from merit.assertions.base import AssertionResult
 from merit.metrics_.base import CalculatedValue, MetricMetadata, MetricResult
 from merit.predicates.base import PredicateResult
 from merit.resources import Scope
 from merit.storage.base import Store
-from merit.storage.sqlite.schema import SCHEMA
+from merit.storage.sqlite.migrations import MigrationError, MigrationRunner
 from merit.testing.models.definition import MeritTestDefinition
 from merit.testing.models.result import TestExecution, TestResult, TestStatus
 from merit.testing.models.run import MeritRun, RunEnvironment, RunResult
@@ -22,7 +22,7 @@ from merit.tracing.lifecycle import InMemorySpanCollector
 
 
 DEFAULT_DB_NAME = ".merit/merit.db"
-SCHEMA_VERSION = 1
+MAX_STORED_RUNS = 5
 
 MAX_REPR_LENGTH = 2000  # Max length for repr of local variables
 
@@ -92,11 +92,23 @@ class SQLiteStore(Store):
         self._init_db()
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
-            current_version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if current_version < SCHEMA_VERSION:
-                conn.executescript(SCHEMA)
-                conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        runner = MigrationRunner(self.path)
+
+        if not self.path.exists():
+            runner.migrate()
+            return
+
+        if not runner.needs_migration():
+            return
+
+        if runner.can_migrate():
+            runner.migrate()
+        else:
+            raise MigrationError(
+                current_version=runner.get_current_version(),
+                target_version=runner.get_target_version(),
+                db_path=self.path,
+            )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
@@ -230,6 +242,21 @@ class SQLiteStore(Store):
 
             for execution in run.result.executions:
                 self._save_assertions_for_execution(conn, run.run_id, execution)
+
+            self._prune_old_runs(conn)
+
+    def _prune_old_runs(self, conn: sqlite3.Connection) -> None:
+        """Delete oldest runs exceeding MAX_STORED_RUNS limit."""
+        conn.execute(
+            """
+            DELETE FROM runs WHERE run_id IN (
+                SELECT run_id FROM runs
+                ORDER BY start_time DESC
+                LIMIT -1 OFFSET ?
+            )
+            """,
+            (MAX_STORED_RUNS,),
+        )
 
     def save_trace_spans(self, run: MeritRun, collector: InMemorySpanCollector) -> None:
         """Save trace spans for a run."""

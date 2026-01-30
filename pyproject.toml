@@ -60,8 +60,6 @@ packages = ["src/merit"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=merit --cov-report=term-missing --cov-report=xml"
-testpaths = ["tests/unit"]
 
 [tool.ruff]
 line-length = 100

@@ -8,6 +8,7 @@ from merit.metrics_.base import MetricMetadata, MetricResult
 from merit.predicates.base import PredicateResult
 from merit.resources import Scope
 from merit.storage.sqlite import SQLiteStore
+from merit.storage.sqlite.store import MAX_STORED_RUNS
 from merit.testing.models.definition import MeritTestDefinition
 from merit.testing.models.result import TestExecution, TestResult, TestStatus
 from merit.testing.models.run import MeritRun, RunEnvironment, RunResult
@@ -231,3 +232,31 @@ def test_sqlite_store_assertions_and_predicates(tmp_path: Path) -> None:
     assert any(row["metric_id"] is not None for row in run_assertions)
     assert any(row["test_execution_id"] == str(execution_id) for row in run_assertions)
     assert any(json.loads(row["expression_repr"])["expr"] == "metric > 0" for row in run_assertions)
+
+
+def test_sqlite_store_prunes_old_runs(tmp_path: Path) -> None:
+    """Store should keep only MAX_STORED_RUNS most recent runs."""
+    db_path = tmp_path / "merit.db"
+    store = SQLiteStore(db_path)
+
+    runs_to_create = MAX_STORED_RUNS + 3
+    created_run_ids = []
+
+    for i in range(runs_to_create):
+        run = MeritRun(
+            run_id=uuid4(),
+            start_time=datetime(2024, 1, i + 1, 10, 0, tzinfo=UTC),
+            end_time=datetime(2024, 1, i + 1, 10, 10, tzinfo=UTC),
+            environment=RunEnvironment(merit_version="1.0.0"),
+            result=RunResult(),
+        )
+        created_run_ids.append(run.run_id)
+        store.save_run(run)
+
+    stored_runs = store.list_runs(limit=100)
+
+    assert len(stored_runs) == MAX_STORED_RUNS
+
+    stored_run_ids = {r.run_id for r in stored_runs}
+    expected_run_ids = set(created_run_ids[-MAX_STORED_RUNS:])
+    assert stored_run_ids == expected_run_ids
