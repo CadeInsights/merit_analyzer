@@ -1,5 +1,6 @@
 import math
 import statistics
+import warnings
 from pathlib import Path
 
 import pytest
@@ -125,15 +126,21 @@ def test_metric_timestamps():
 
 def test_metric_empty_edge_cases_do_not_crash():
     m = Metric("empty")
-    assert math.isnan(m.pvariance)
-    assert math.isnan(m.pstd)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"Cannot compute .* - not enough values. Returning NaN.",
+            category=UserWarning,
+        )
+        assert math.isnan(m.pvariance)
+        assert math.isnan(m.pstd)
 
-    ci90 = m.ci_90
-    ci95 = m.ci_95
-    ci99 = m.ci_99
-    assert math.isnan(ci90[0]) and math.isnan(ci90[1])
-    assert math.isnan(ci95[0]) and math.isnan(ci95[1])
-    assert math.isnan(ci99[0]) and math.isnan(ci99[1])
+        ci90 = m.ci_90
+        ci95 = m.ci_95
+        ci99 = m.ci_99
+        assert math.isnan(ci90[0]) and math.isnan(ci90[1])
+        assert math.isnan(ci95[0]) and math.isnan(ci95[1])
+        assert math.isnan(ci99[0]) and math.isnan(ci99[1])
 
 
 def test_metric_percentiles_with_single_value_returns_nans():

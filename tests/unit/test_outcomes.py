@@ -25,43 +25,43 @@ def make_item(fn, name: str | None = None, is_async: bool = False) -> MeritTestD
 
 class TestImperativeSkip:
     @pytest.mark.asyncio
-    async def test_skip_marks_test_as_skipped(self):
+    async def test_skip_marks_test_as_skipped(self, null_reporter):
         def skipping_test():
             skip("not ready")
 
         item = make_item(skipping_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.skipped == 1
         assert result.result.executions[0].result.status == TestStatus.SKIPPED
 
     @pytest.mark.asyncio
-    async def test_skip_with_reason(self):
+    async def test_skip_with_reason(self, null_reporter):
         def skipping_test():
             skip("missing dependency")
 
         item = make_item(skipping_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.skipped == 1
         assert "missing dependency" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_skip_without_reason(self):
+    async def test_skip_without_reason(self, null_reporter):
         def skipping_test():
             skip()
 
         item = make_item(skipping_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.skipped == 1
         assert isinstance(result.result.executions[0].result.error, SkipTest)
 
     @pytest.mark.asyncio
-    async def test_skip_stops_execution(self):
+    async def test_skip_stops_execution(self, null_reporter):
         executed = []
 
         def skipping_test():
@@ -70,7 +70,7 @@ class TestImperativeSkip:
             executed.append("after")
 
         item = make_item(skipping_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         await runner.run(items=[item])
 
         assert executed == ["before"]
@@ -78,42 +78,42 @@ class TestImperativeSkip:
 
 class TestImperativeFail:
     @pytest.mark.asyncio
-    async def test_fail_marks_test_as_failed(self):
+    async def test_fail_marks_test_as_failed(self, null_reporter):
         def failing_test():
             fail("explicit failure")
 
         item = make_item(failing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.failed == 1
         assert result.result.executions[0].result.status == TestStatus.FAILED
 
     @pytest.mark.asyncio
-    async def test_fail_with_reason(self):
+    async def test_fail_with_reason(self, null_reporter):
         def failing_test():
             fail("something went wrong")
 
         item = make_item(failing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.failed == 1
         assert "something went wrong" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_fail_without_reason(self):
+    async def test_fail_without_reason(self, null_reporter):
         def failing_test():
             fail()
 
         item = make_item(failing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.failed == 1
 
     @pytest.mark.asyncio
-    async def test_fail_stops_execution(self):
+    async def test_fail_stops_execution(self, null_reporter):
         executed = []
 
         def failing_test():
@@ -122,7 +122,7 @@ class TestImperativeFail:
             executed.append("after")
 
         item = make_item(failing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         await runner.run(items=[item])
 
         assert executed == ["before"]
@@ -130,43 +130,43 @@ class TestImperativeFail:
 
 class TestImperativeXFail:
     @pytest.mark.asyncio
-    async def test_xfail_marks_test_as_xfailed(self):
+    async def test_xfail_marks_test_as_xfailed(self, null_reporter):
         def xfailing_test():
             xfail("known bug")
 
         item = make_item(xfailing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.xfailed == 1
         assert result.result.executions[0].result.status == TestStatus.XFAILED
 
     @pytest.mark.asyncio
-    async def test_xfail_with_reason(self):
+    async def test_xfail_with_reason(self, null_reporter):
         def xfailing_test():
             xfail("issue #123")
 
         item = make_item(xfailing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.xfailed == 1
         assert "issue #123" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_xfail_without_reason(self):
+    async def test_xfail_without_reason(self, null_reporter):
         def xfailing_test():
             xfail()
 
         item = make_item(xfailing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.xfailed == 1
         assert isinstance(result.result.executions[0].result.error, XFailTest)
 
     @pytest.mark.asyncio
-    async def test_xfail_stops_execution(self):
+    async def test_xfail_stops_execution(self, null_reporter):
         executed = []
 
         def xfailing_test():
@@ -175,7 +175,7 @@ class TestImperativeXFail:
             executed.append("after")
 
         item = make_item(xfailing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         await runner.run(items=[item])
 
         assert executed == ["before"]

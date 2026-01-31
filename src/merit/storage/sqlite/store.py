@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import cast
 from uuid import UUID
 
-from merit.assertions.base import AssertionRepr, AssertionResult
+from merit.assertions.base import AssertionResult
 from merit.metrics_.base import CalculatedValue, MetricMetadata, MetricResult
 from merit.predicates.base import PredicateResult
 from merit.resources import Scope

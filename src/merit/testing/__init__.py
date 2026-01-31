@@ -29,7 +29,7 @@ from merit.testing.models import (
     TestStatus,
 )
 from merit.testing.outcomes import FailTest, SkipTest, XFailTest, fail, skip, xfail
-from merit.testing.runner import Runner, run
+from merit.testing.runner import Runner
 
 
 # Backwards compatibility alias
@@ -70,7 +70,6 @@ __all__ = [
     "parametrize",
     "repeat",
     "resource",
-    "run",
     "skip",
     "tag",
     "validate_cases_for_sut",

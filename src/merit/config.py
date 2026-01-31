@@ -24,6 +24,8 @@ class MeritConfig:
     timeout: float | None
     db_path: str | None
     save_to_db: bool
+    reporters: list[str]
+    reporter_options: dict[str, dict[str, Any]]
 
 
 DEFAULT_CONFIG = MeritConfig(
@@ -38,6 +40,8 @@ DEFAULT_CONFIG = MeritConfig(
     timeout=None,
     db_path=None,
     save_to_db=True,
+    reporters=[],
+    reporter_options={},
 )
 
 
@@ -56,6 +60,8 @@ def load_config(start_path: str | Path | None = None) -> MeritConfig:
         timeout=DEFAULT_CONFIG.timeout,
         db_path=DEFAULT_CONFIG.db_path,
         save_to_db=DEFAULT_CONFIG.save_to_db,
+        reporters=list(DEFAULT_CONFIG.reporters),
+        reporter_options=dict(DEFAULT_CONFIG.reporter_options),
     )
 
     pyproject = _find_file(base, "pyproject.toml")
@@ -120,13 +126,20 @@ def _apply_section(config: MeritConfig, section: dict[str, Any]) -> None:
         "db_path": "db_path",
         "save-to-db": "save_to_db",
         "save_to_db": "save_to_db",
+        "reporters": "reporters",
     }
 
     for key, value in section.items():
         attr = mapping.get(key)
         if attr is None:
+            # Handle reporter_options as a nested dict
+            if key in {"reporter-options", "reporter_options"}:
+                if isinstance(value, dict):
+                    config.reporter_options = {
+                        k: dict(v) for k, v in value.items() if isinstance(v, dict)
+                    }
             continue
-        if attr in {"test_paths", "include_tags", "exclude_tags", "addopts"}:
+        if attr in {"test_paths", "include_tags", "exclude_tags", "addopts", "reporters"}:
             if isinstance(value, list):
                 setattr(config, attr, [str(v) for v in value])
         elif attr == "verbosity":

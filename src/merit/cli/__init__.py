@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from rich.console import Console
 
 from merit.config import MeritConfig, load_config
+from merit.reports import Reporter, resolve_reporters
 from merit.testing import MeritTestDefinition, collect
 from merit.testing.runner import Runner
 
@@ -97,6 +98,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable writing run data to SQLite",
     )
+    test_parser.add_argument(
+        "--reporter",
+        dest="reporters",
+        action="append",
+        help="Reporter to use (can be specified multiple times)",
+    )
 
     return parser
 
@@ -143,6 +150,34 @@ def _resolve_timeout(args: argparse.Namespace, config: MeritConfig) -> float | N
     return config.timeout
 
 
+def _resolve_reporters(
+    args: argparse.Namespace, config: MeritConfig, verbosity: int
+) -> list[Reporter]:
+    """Resolve reporters from CLI args and config.
+
+    Priority:
+    1. CLI --reporter flags (if provided, replaces config)
+    2. Config reporters list
+    3. Default ConsoleReporter
+    """
+    reporter_names: list[str] = []
+
+    if args.reporters:
+        reporter_names = args.reporters
+    elif config.reporters:
+        reporter_names = config.reporters
+
+    if not reporter_names:
+        reporter_names = ["ConsoleReporter"]
+
+    options = dict(config.reporter_options)
+    if "ConsoleReporter" in reporter_names:
+        console_opts = options.get("ConsoleReporter", {})
+        options["ConsoleReporter"] = {"verbosity": verbosity, **console_opts}
+
+    return resolve_reporters(reporter_names, options)
+
+
 def _collect_items(paths: Sequence[str]) -> list[TestItem]:
     items: list[TestItem] = []
     for path in paths:
@@ -186,6 +221,8 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
     if args.no_db:
         save_to_db = False
 
+    reporters = _resolve_reporters(args, config, verbosity)
+
     items = _collect_items(paths)
     try:
         items = _filter_items(items, include_tags, exclude_tags, keyword)
@@ -194,6 +231,7 @@ async def _run_tests(args: argparse.Namespace, config: MeritConfig) -> int:
         return 2
 
     runner = Runner(
+        reporters=reporters,
         maxfail=maxfail,
         verbosity=verbosity,
         concurrency=concurrency,

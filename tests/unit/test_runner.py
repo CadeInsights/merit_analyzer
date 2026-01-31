@@ -157,93 +157,93 @@ class TestRunner:
     """Tests for Runner class."""
 
     @pytest.mark.asyncio
-    async def test_runs_passing_test(self):
+    async def test_runs_passing_test(self, null_reporter):
         def passing_test():
             assert True
 
         item = make_item(passing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.passed == 1
         assert result.result.failed == 0
 
     @pytest.mark.asyncio
-    async def test_runs_failing_test(self):
+    async def test_runs_failing_test(self, null_reporter):
         def failing_test():
             assert False, "expected failure"
 
         item = make_item(failing_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.failed == 1
         assert "expected failure" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_runs_async_test(self):
+    async def test_runs_async_test(self, null_reporter):
         async def async_test():
             await asyncio.sleep(0.001)
             assert True
 
         item = make_item(async_test, is_async=True)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.passed == 1
 
     @pytest.mark.asyncio
-    async def test_handles_exception_as_error(self):
+    async def test_handles_exception_as_error(self, null_reporter):
         def error_test():
             raise RuntimeError("something broke")
 
         item = make_item(error_test)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.errors == 1
         assert isinstance(result.result.executions[0].result.error, RuntimeError)
 
     @pytest.mark.asyncio
-    async def test_skipped_test(self):
+    async def test_skipped_test(self, null_reporter):
         def skipped_test():
             pass
 
         item = make_item(skipped_test, skip_reason="not ready")
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.skipped == 1
 
     @pytest.mark.asyncio
-    async def test_xfail_test_fails_as_expected(self):
+    async def test_xfail_test_fails_as_expected(self, null_reporter):
         def xfail_test():
             assert False
 
         item = make_item(xfail_test, xfail_reason="known bug")
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.xfailed == 1
 
     @pytest.mark.asyncio
-    async def test_xfail_test_passes_unexpectedly(self):
+    async def test_xfail_test_passes_unexpectedly(self, null_reporter):
         def xpass_test():
             pass
 
         item = make_item(xpass_test, xfail_reason="expected to fail")
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.xpassed == 1
 
     @pytest.mark.asyncio
-    async def test_xfail_strict_fails_on_pass(self):
+    async def test_xfail_strict_fails_on_pass(self, null_reporter):
         def strict_xfail_test():
             pass
 
         item = make_item(strict_xfail_test, xfail_reason="must fail", xfail_strict=True)
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.failed == 1
@@ -253,7 +253,7 @@ class TestResourceInjection:
     """Tests for resource injection in runner."""
 
     @pytest.mark.asyncio
-    async def test_injects_resource(self):
+    async def test_injects_resource(self, null_reporter):
         @resource
         def injected():
             return "injected_value"
@@ -264,30 +264,30 @@ class TestResourceInjection:
             captured.append(injected)
 
         item = make_item(test_with_resource, params=["injected"])
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         await runner.run(items=[item])
 
         assert captured == ["injected_value"]
 
     @pytest.mark.asyncio
-    async def test_trace_context_requires_trace_flag(self):
+    async def test_trace_context_requires_trace_flag(self, null_reporter):
         def test_needs_trace(trace_context):
             pass
 
         item = make_item(test_needs_trace, params=["trace_context"])
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.errors == 1
         assert "Tracing is not enabled" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_ignores_unknown_params(self):
+    async def test_ignores_unknown_params(self, null_reporter):
         def test_unknown(unknown_param):
             pass
 
         item = make_item(test_unknown, params=["unknown_param"])
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         # Should error because unknown_param is not provided
@@ -298,7 +298,7 @@ class TestMaxfail:
     """Tests for maxfail functionality."""
 
     @pytest.mark.asyncio
-    async def test_stops_after_maxfail(self):
+    async def test_stops_after_maxfail(self, null_reporter):
         fail_count = 0
 
         def failing():
@@ -307,7 +307,7 @@ class TestMaxfail:
             assert False
 
         items = [make_item(failing, name=f"fail_{i}") for i in range(5)]
-        runner = Runner(reporters=[], maxfail=2)
+        runner = Runner(reporters=[null_reporter], maxfail=2)
         result = await runner.run(items=items)
 
         assert result.result.failed == 2
@@ -315,12 +315,12 @@ class TestMaxfail:
         assert fail_count == 2
 
     @pytest.mark.asyncio
-    async def test_maxfail_counts_errors_too(self):
+    async def test_maxfail_counts_errors_too(self, null_reporter):
         def error_test():
             raise RuntimeError
 
         items = [make_item(error_test, name=f"err_{i}") for i in range(5)]
-        runner = Runner(reporters=[], maxfail=1)
+        runner = Runner(reporters=[null_reporter], maxfail=1)
         result = await runner.run(items=items)
 
         assert result.result.errors == 1
@@ -331,7 +331,7 @@ class TestConcurrency:
     """Tests for concurrent test execution."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_execution(self):
+    async def test_concurrent_execution(self, null_reporter):
         start_times = []
 
         async def slow_test():
@@ -339,7 +339,7 @@ class TestConcurrency:
             await asyncio.sleep(0.1)
 
         items = [make_item(slow_test, name=f"slow_{i}", is_async=True) for i in range(3)]
-        runner = Runner(reporters=[], concurrency=3)
+        runner = Runner(reporters=[null_reporter], concurrency=3)
         result = await runner.run(items=items)
 
         assert result.result.passed == 3
@@ -347,7 +347,7 @@ class TestConcurrency:
         assert max(start_times) - min(start_times) < 0.05
 
     @pytest.mark.asyncio
-    async def test_sequential_execution(self):
+    async def test_sequential_execution(self, null_reporter):
         execution_order = []
 
         async def ordered_test(idx):
@@ -363,7 +363,7 @@ class TestConcurrency:
 
             items.append(make_item(test_fn, name=f"test_{i}", is_async=True))
 
-        runner = Runner(reporters=[], concurrency=1)
+        runner = Runner(reporters=[null_reporter], concurrency=1)
         result = await runner.run(items=items)
 
         assert result.result.passed == 3
@@ -371,12 +371,12 @@ class TestConcurrency:
         assert execution_order == [0, 1, 2]
 
     @pytest.mark.asyncio
-    async def test_concurrency_zero_caps_at_default(self):
-        runner = Runner(reporters=[], concurrency=0)
+    async def test_concurrency_zero_caps_at_default(self, null_reporter):
+        runner = Runner(reporters=[null_reporter], concurrency=0)
         assert runner.concurrency == Runner.DEFAULT_MAX_CONCURRENCY
 
     @pytest.mark.asyncio
-    async def test_concurrent_maxfail(self):
+    async def test_concurrent_maxfail(self, null_reporter):
         fail_count = 0
 
         async def failing():
@@ -386,7 +386,7 @@ class TestConcurrency:
             assert False
 
         items = [make_item(failing, name=f"fail_{i}", is_async=True) for i in range(10)]
-        runner = Runner(reporters=[], concurrency=5, maxfail=2)
+        runner = Runner(reporters=[null_reporter], concurrency=5, maxfail=2)
         result = await runner.run(items=items)
 
         assert result.result.stopped_early
@@ -398,7 +398,7 @@ class TestTimeout:
     """Tests for run-level timeout."""
 
     @pytest.mark.asyncio
-    async def test_timeout_stops_new_starts(self):
+    async def test_timeout_stops_new_starts(self, null_reporter):
         async def slow_test():
             await asyncio.sleep(0.1)
 
@@ -409,7 +409,7 @@ class TestTimeout:
             make_item(quick_test, name="quick", is_async=True),
             make_item(slow_test, name="slow", is_async=True),
         ]
-        runner = Runner(reporters=[], concurrency=1, timeout=0.05)
+        runner = Runner(reporters=[null_reporter], concurrency=1, timeout=0.05)
         result = await runner.run(items=items)
 
         assert result.result.stopped_early
@@ -418,12 +418,12 @@ class TestTimeout:
         assert result.result.total == 1
 
     @pytest.mark.asyncio
-    async def test_no_timeout_by_default(self):
+    async def test_no_timeout_by_default(self, null_reporter):
         async def quick_test():
             await asyncio.sleep(0.01)
 
         item = make_item(quick_test, is_async=True)
-        runner = Runner(reporters=[], concurrency=2)
+        runner = Runner(reporters=[null_reporter], concurrency=2)
         # timeout is None by default
         assert runner.timeout is None
 
@@ -435,7 +435,7 @@ class TestResultOrdering:
     """Tests for result ordering in concurrent execution."""
 
     @pytest.mark.asyncio
-    async def test_results_ordered_by_discovery(self):
+    async def test_results_ordered_by_discovery(self, null_reporter):
         async def varying_speed(delay):
             await asyncio.sleep(delay)
 
@@ -448,7 +448,7 @@ class TestResultOrdering:
 
             items.append(make_item(test_fn, name=f"test_{i}", is_async=True))
 
-        runner = Runner(reporters=[], concurrency=3)
+        runner = Runner(reporters=[null_reporter], concurrency=3)
         result = await runner.run(items=items)
 
         # Results should be in discovery order, not completion order
@@ -460,7 +460,7 @@ class TestResourceTeardown:
     """Tests for resource teardown during test runs."""
 
     @pytest.mark.asyncio
-    async def test_case_resources_torn_down_between_tests(self):
+    async def test_case_resources_torn_down_between_tests(self, null_reporter):
         teardown_count = 0
 
         @resource(scope="case")
@@ -477,14 +477,14 @@ class TestResourceTeardown:
             make_item(test_with_case, name="test_2", params=["case_res"]),
         ]
 
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=items)
 
         assert result.result.passed == 2
         assert teardown_count == 2
 
     @pytest.mark.asyncio
-    async def test_suite_resources_shared(self):
+    async def test_suite_resources_shared(self, null_reporter):
         create_count = 0
 
         @resource(scope="suite")
@@ -503,7 +503,7 @@ class TestResourceTeardown:
             make_item(test_suite, name="test_2", params=["suite_res"]),
         ]
 
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         await runner.run(items=items)
 
         assert create_count == 1
@@ -514,14 +514,14 @@ class TestResourceResolutionErrors:
     """Tests to ensure resource resolution errors are properly surfaced through the runner."""
 
     @pytest.mark.asyncio
-    async def test_unknown_resource_param_causes_error(self):
+    async def test_unknown_resource_param_causes_error(self, null_reporter):
         """Test that an unknown resource parameter results in an error."""
 
         def test_with_unknown(unknown_resource):
             pass
 
         item = make_item(test_with_unknown, params=["unknown_resource"])
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         assert result.result.errors == 1
@@ -530,7 +530,7 @@ class TestResourceResolutionErrors:
         assert "Unknown resource" in str(error) or "unknown_resource" in str(error)
 
     @pytest.mark.asyncio
-    async def test_resource_teardown_error_does_not_mask_test_error(self):
+    async def test_resource_teardown_error_does_not_mask_test_error(self, null_reporter):
         """Test that resource teardown errors are surfaced but don't mask test errors."""
 
         @resource
@@ -542,14 +542,14 @@ class TestResourceResolutionErrors:
             assert False, "Test assertion failed"
 
         item = make_item(test_that_fails, params=["resource_with_teardown_error"])
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=[item])
 
         # Test should fail due to assertion, not error
         assert result.result.failed == 1
 
     @pytest.mark.asyncio
-    async def test_resource_resolution_error_in_sequential_mode(self):
+    async def test_resource_resolution_error_in_sequential_mode(self, null_reporter):
         """Test that resource resolution errors are surfaced in sequential execution mode."""
 
         @resource
@@ -563,7 +563,7 @@ class TestResourceResolutionErrors:
             make_item(test_with_resource, name="test_1", params=["sequential_resource"]),
             make_item(lambda: None, name="test_2"),
         ]
-        runner = Runner(reporters=[], concurrency=1)
+        runner = Runner(reporters=[null_reporter], concurrency=1)
         result = await runner.run(items=items)
 
         assert result.result.errors == 1
@@ -571,7 +571,7 @@ class TestResourceResolutionErrors:
         assert "Sequential resource error" in str(result.result.executions[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_resource_resolution_error_in_concurrent_mode(self):
+    async def test_resource_resolution_error_in_concurrent_mode(self, null_reporter):
         """Test that resource resolution errors are surfaced in concurrent execution mode."""
 
         @resource
@@ -585,7 +585,7 @@ class TestResourceResolutionErrors:
             make_item(test_with_resource, name="test_1", params=["concurrent_resource"]),
             make_item(lambda: None, name="test_2"),
         ]
-        runner = Runner(reporters=[], concurrency=2)
+        runner = Runner(reporters=[null_reporter], concurrency=2)
         result = await runner.run(items=items)
 
         assert result.result.errors == 1
@@ -595,7 +595,7 @@ class TestResourceResolutionErrors:
         assert "Concurrent resource error" in str(errored[0].result.error)
 
     @pytest.mark.asyncio
-    async def test_suite_scope_resource_error_affects_subsequent_tests(self):
+    async def test_suite_scope_resource_error_affects_subsequent_tests(self, null_reporter):
         """Test that errors in suite-scope resources affect all subsequent tests."""
 
         @resource(scope="suite")
@@ -609,7 +609,7 @@ class TestResourceResolutionErrors:
             make_item(test_with_suite, name="test_1", params=["suite_resource"]),
             make_item(test_with_suite, name="test_2", params=["suite_resource"]),
         ]
-        runner = Runner(reporters=[])
+        runner = Runner(reporters=[null_reporter])
         result = await runner.run(items=items)
 
         # Both tests should error due to suite resource failure
